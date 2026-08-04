@@ -17,3 +17,5 @@ __pycache__/
 maestro-flow documentation/
 
 .claude/
+.graphifyignore
+graphify-out/
