@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from typing import List, Annotated, Optional, Dict
 from langchain_unstructured import UnstructuredLoader
 from langchain_core.tools import tool
+from langchain_tavily import TavilySearch
 
 load_dotenv()
 
@@ -79,3 +80,9 @@ def edit_document(
         f.writelines(lines)
         
     return f"Document edited and saved to: {file_to_use}"
+
+tavily_tool = TavilySearch(
+    name="tavily_search",
+    description="A tool that can search the web and extract relevant information.",
+    max_results=5
+)
