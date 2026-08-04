@@ -1,0 +1,27 @@
+{
+  "name": "bhai-to-bhai",
+  "version": "1.0.0",
+  "description": "An open-source, locally deployable orchestration platform that coordinates multiple *existing* coding agents (Claude Code, Codex, Gemini CLI, OpenCode/Aider, and other adapters) to complete software-engineering tasks end-to-end — from initial planning through final verification — instead of implementing its own coding agent.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DawoodShahzad61004/Bhai-To-Bhai.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DawoodShahzad61004/Bhai-To-Bhai/issues"
+  },
+  "homepage": "https://github.com/DawoodShahzad61004/Bhai-To-Bhai#readme",
+  "dependencies": {
+    "maestro-flow": "^0.5.61"
+  }
+}

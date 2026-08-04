@@ -1,0 +1,19 @@
+# Node — maestro-flow is installed repo-locally (see docs/Build-Guide.md, Stage 0)
+node_modules/
+
+# Maestro runtime state: search cache, embedding index, daemon lockfile.
+# Regenerated automatically; not shared between machines.
+.workflow/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment
+.env
+
+maestro-flow documentation/
+
+.claude/
