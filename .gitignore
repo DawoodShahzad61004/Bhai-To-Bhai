@@ -1,4 +1,4 @@
-# Node — maestro-flow is installed repo-locally (see docs/Build-Guide.md, Stage 0)
+# Node — maestro-flow is installed repo-locally (see Build-Guide.md, Stage 0)
 node_modules/
 
 # Maestro runtime state: search cache, embedding index, daemon lockfile.

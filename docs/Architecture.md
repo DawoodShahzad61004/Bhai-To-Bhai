@@ -1,6 +1,6 @@
 ## System Overview
 
-This project is an open-source orchestration platform that coordinates multiple *existing* coding agents (Claude Code, Codex, Gemini CLI, OpenCode/Aider, and other adapters) to complete software-engineering tasks end-to-end — planning, implementation, review, and fixing — instead of implementing its own coding agent. It dynamically selects and switches between agents mid-task based on task type, repository context, required capabilities, past performance, availability, cost, and configurable routing policies, following structured workflows such as planner → implementer → reviewer → fixer. A canonical, agent-agnostic task context is carried across every handoff, and deterministic checks (tests, lint, types, security scans) — not an agent's self-report — decide whether work is actually done. As of 2026-08-03, no code has been written yet; this document describes the target architecture the requirements checklist and tool survey (see `Research.md`, `Decisions.md`) are converging on.
+This project is an open-source orchestration platform that coordinates multiple *existing* coding agents (Claude Code, Codex, Gemini CLI, OpenCode/Aider, and other adapters) to complete software-engineering tasks end-to-end — planning, implementation, review, and fixing — instead of implementing its own coding agent. It dynamically selects and switches between agents mid-task based on task type, repository context, required capabilities, past performance, availability, cost, and configurable routing policies, following structured workflows such as planner → implementer → reviewer → fixer. A canonical, agent-agnostic task context is carried across every handoff, and deterministic checks (tests, lint, types, security scans) — not an agent's self-report — decide whether work is actually done. This document describes the **target** architecture the requirements checklist and tool survey (see `Research.md`, `Decisions.md`) converged on. As of 2026-08-04 the first code exists but none of the components below is implemented — see "Implementation Status" for what is actually built and how it maps onto this design.
 
 A framing that shapes everything below: this is structurally a job scheduler whose workers are unreliable, expensive, and non-deterministic. The hard problems are crash recovery, idempotency, resource accounting, and state reconciliation — not prompting.
 
@@ -82,11 +82,48 @@ Every component above emits normalized events (agent switches, check results, re
 ### Human Approval Gate
 Optional, policy-configurable checkpoint before a change is accepted, independent of which agents were involved.
 
+## Implementation Status
+
+The repository holds **two deliberately separate tracks**, which share no code and run on separate virtualenvs. Keeping them apart is the point of ADR-008; conflating them would let sandbox code drift into the orchestrator.
+
+```
+Bhai-To-Bhai/
+├── orchestrator/            # The real system. Build Guide staged work.
+│   └── preflight.py         # Stage 0 — the only orchestrator code that exists
+├── yt-tutorial/             # Disposable LangGraph sandbox (ADR-008). Not part of the orchestrator.
+│   ├── state.py             #   State + make_supervisor_node factory
+│   ├── search_node.py       #   Two create_agent workers + the research supervisor
+│   ├── research_builder.py  #   StateGraph assembly, compile, PNG render
+│   ├── tools.py             #   scrape/outline/read/write/edit + tavily_tool
+│   ├── llm_caller.py        #   Ported from RAG-work (ADR-009)
+│   ├── logger_config.py     #   Ported from RAG-work
+│   ├── llm_setup.py         #   Four ChatOpenAI clients on a custom endpoint
+│   └── config.py            #   Retry / backoff / timeout / cooldown constants
+├── docs/                    # The 5-file tracking system
+├── Build-Guide.md           # Phased build order + the v0 acceptance test (A1–A8)
+└── node_modules/            # maestro-flow 0.5.61, installed repo-locally (ADR-007)
+```
+
+**Orchestrator track.** `preflight.py` is the whole of it: it resolves each enabled agent binary from `cli-tools.json` (workspace entries overriding global), version-probes each one, pings MongoDB, and confirms `git worktree` support, exiting non-zero with a per-item report. It corresponds to Build Guide Stage 0 and to the Prevention note on `Bugs.md` #2. It currently fails two of its own checks (`Bugs.md` #3). None of the modules described above this section — Agent Router, Canonical Task Context Store, Session Registry, Handoff Builder, Shared Workspace, Check Runner, Event Log, Approval Gate — has any implementation.
+
+**Sandbox track.** A hierarchical supervisor graph that compiles and renders but has never been invoked; two defects are waiting on its first run (`Bugs.md` #5, #6). Its architectural value is the mapping it makes concrete, and the one place that mapping breaks:
+
+| Sandbox construct | Corresponds to | Where the correspondence fails |
+|---|---|---|
+| `make_supervisor_node` → routing decision | Agent Router | The sandbox supervisor routes on model output alone; the real router routes on ledger state, headroom, and switching cost (ADR-006) |
+| `Command(goto=..., update=...)` | Handoff Builder packet | An in-process handoff is *given* by a cooperating node; a real packet must be *reconstructed* after a hard kill (ADR-005) |
+| `State(MessagesState)` | Canonical Task Context Store | Graph state lives in process memory; canonical context must survive process death |
+| `create_agent` worker node | Agent adapter | Workers are LLM agents inside one process; agents here are external vendor CLI subprocesses |
+| `FINISH` → `END` | Deterministic check pass | The supervisor decides completion; here exit codes do, never an agent's claim |
+| `llm_caller.py` FIFO gate + 429 handling | Budget ledger reactive signal · workspace lock | Detects HTTP 429s with structured headers; the ledger must detect process exits with configurable message strings (`Research.md` topic 11) |
+
+The single decisive difference, and the reason the orchestrator cannot be a thin wrapper over a graph framework: in the sandbox the workers are constructed inside one Python process and hand control to each other cooperatively, whereas here they are separate vendor processes that can be killed mid-sentence by a rate limit. Everything ADR-005 exists to solve is what an in-process `Command` handoff never has to.
+
 ## Technology Stack
 
 | Component | Technology (provisional) | Notes |
 |---|---|---|
-| External-agent execution/session runtime | **Maestro** (maestro-flow) | Chosen 2026-08-03 — see ADR-004. `maestro delegate` provides background delegation to a different backend coding-agent CLI mid-task, which is the primitive the earlier 10-tool survey found missing everywhere. Supersedes the Claw Orchestrator / OpenHands Agent Canvas question left open by ADR-002 and ADR-003. Two constraints carry forward: its built-in decision gates are all post-execution, so a pre-execution plan-review checkpoint must be assembled manually; and its own completion signals stay subordinate to this project's deterministic checks. |
+| External-agent execution/session runtime | **Maestro** (maestro-flow) v0.5.61, **installed repo-locally** | Chosen 2026-08-03 — see ADR-004. `maestro delegate` provides background delegation to a different backend coding-agent CLI mid-task, which is the primitive the earlier 10-tool survey found missing everywhere. Supersedes the Claw Orchestrator / OpenHands Agent Canvas question left open by ADR-002 and ADR-003. Two constraints carry forward: its built-in decision gates are all post-execution, so a pre-execution plan-review checkpoint must be assembled manually; and its own completion signals stay subordinate to this project's deterministic checks. Since 2026-08-04 it is a repo-local npm dependency at `node_modules/.bin/maestro` and is **not on `PATH`** (ADR-007) — every invocation, from orchestrator code included, must resolve it explicitly. |
 | Routing / supervisor / workflow | *Deferred* — LangGraph, Temporal, or hand-rolled | Maestro supplies a run/step lifecycle, so whether a separate workflow engine is needed underneath it is open — see Research topic 7. Langflow is ruled out as a runtime (it is a visual builder over LangChain, not a durable state machine); if a visual surface is wanted it belongs on top as an authoring/monitoring UI. Whatever is chosen, nodes wrap CLI subprocess calls (`claude -p ...`, `codex exec ...`) exactly like LLM-calling nodes — see Research topic 4. |
 | Per-agent budget accounting | Ledger derived from recorded runs | Configured limits plus per-call usage as an estimate, with rate-limited process exits as the authoritative exhaustion signal — see ADR-006. No vendor exposes remaining allowance, and the four agents are not bounded by comparable quantities. |
 | Canonical task context, checkpoints, audit trail | MongoDB | Chosen for crash-safe persistence of task state, decisions, failures, and session IDs — reused from prior stack. |
@@ -111,5 +148,18 @@ The open execution-layer question closed and two load-bearing mechanics were pin
 * **Stack table amended**: Claw Orchestrator withdrawn; Langflow ruled out as a runtime; LangGraph downgraded from chosen to deferred, since Maestro brings its own run/step lifecycle (Research topic 7). MongoDB, Git worktrees, the deterministic check runner, and Phoenix/OpenTelemetry are unchanged.
 
 Also noted for implementation: the workspace lock (one active agent per worktree) and a per-step attempt cap that escalates to a different agent are not optional refinements — without them, concurrent worktree corruption and unbounded fix loops are the two failure modes that burn every agent budget at once.
+
+### 2026-08-04 — First code; build order recorded; Maestro rescoped to a repo-local dependency; a working multi-agent graph exists in a sandbox that is deliberately not this system
+
+The target architecture above is unchanged. What changed is that it now has a build order, a first artifact, a deployment constraint on one stack row, and — from a parallel learning track — a sharper account of what this project cannot borrow from graph frameworks.
+
+* **Build order and acceptance criteria recorded** in `Build-Guide.md`: Stages 0–8, and the v0 target decomposed into eight testable assertions. **A4** — a handoff packet built with the outgoing agent having written nothing on exit — is the assertion that actually tests the design; A1–A3 and A5–A8 can all pass in a system that still dies on a real rate limit. This is the operational form of ADR-005 and should be read as its acceptance test.
+* **Stage 0 exists**: `orchestrator/preflight.py`. This is the first code in the repository and the first component of "Implementation Status" above.
+* **Maestro is now a repo-local npm dependency** and is no longer on `PATH` (ADR-007). This is a deployment fact with an architectural consequence: **executable resolution is a shared concern, not a per-call-site detail.** The preflight broke on its own Maestro probe within hours of the migration (`Bugs.md` #3) because that one lookup was hardcoded while agent lookups were configurable. Before the Stage 4 adapter interface exists, resolution should be a single path with explicit precedence — config entry → project-local `node_modules/.bin` → `PATH` — or the same bug reappears once per vendor.
+* **v0 scope narrowed to Codex + Claude Code.** `gemini`, `opencode`, and `aider` are not installed on this machine, and `~/.maestro/cli-tools.json` enables only `codex`. The multi-adapter design is unaffected; the *demonstration* of it now needs two agents rather than four, which is sufficient for the failover assertion.
+* **Implementation Status section added** above, including the construct-by-construct mapping between the LangGraph sandbox (ADR-008) and this design. Every mapping holds at the level of shape; all of them break at the level of process boundaries. The supervisor pattern, `Command(goto=..., update=...)` handoffs, and shared graph state all presume workers that live inside one process and exit cooperatively. Here they are vendor CLIs that can be `SIGKILL`ed mid-sentence, which is the entire premise of ADR-005 and has no counterpart in the graph framework's handoff primitive.
+* **The supervisor's single-point-of-failure property carries over, and is worse here.** In the tutorial a dead supervisor stops the run. In this system the Agent Router holds the budget ledger and the workspace locks, so its own crash strands every in-flight worktree — which is the same argument ADR-005 makes for orphan reconciliation on restart, arriving from a different direction.
+* **ADR-006's reactive-detection half has a working reference implementation**, one layer down: `yt-tutorial/llm_caller.py` (ported per ADR-009) implements a FIFO gate, a shared token-reset deadline so a limit is waited out once rather than once per consumer, an adaptive cooldown, and an abort threshold. Three of those transfer to the budget ledger conceptually; the cooldown *formula* does not, because it presumes a readable remaining/limit pair that no coding-agent vendor exposes (`Research.md` topics 6, 11). The FIFO gate is the closer reuse candidate — for the workspace lock rather than the ledger.
+* **A silent-degradation failure mode observed in practice**, worth carrying into the ledger design: that module's cooldown floor quietly becomes `0.0` against a non-Groq endpoint and logs only at debug level (`Bugs.md` #6). A derived safety value defaulting to "no protection" without a visible signal is exactly the shape of bug the budget ledger is most exposed to. An unreadable consumption figure must surface as a **degraded** ledger state, never as an implicit zero.
 
 ---
