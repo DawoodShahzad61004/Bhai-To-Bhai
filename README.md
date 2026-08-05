@@ -28,9 +28,15 @@ Two deliberately separate tracks, sharing no code:
 | Track | Contents | State |
 |---|---|---|
 | `orchestrator/` | The real system. `preflight.py` — resolves agent binaries, pings MongoDB, checks `git worktree`. | Build Guide **Stage 0**. Currently fails two of its own checks ([`docs/Bugs.md`](docs/Bugs.md) #3). |
-| `yt-tutorial/` | A disposable LangGraph hierarchical-supervisor sandbox (ADR-008), built to learn the multi-agent primitives hands-on before Stage 1. | Graph compiles and renders; **never invoked**. Two defects waiting on first run (`Bugs.md` #5, #6). |
+| `yt-tutorial/` | A disposable LangGraph hierarchical-supervisor sandbox (ADR-008), built to learn the multi-agent primitives hands-on before Stage 1. | **Runs end to end** against a local TGI endpoint and terminates cleanly. Its purpose is served; it is due for deletion when Stage 1 begins. |
 
 None of the architecture's components — Agent Router, Canonical Task Context Store, Handoff Builder, Check Runner, Event Log — is implemented yet. Next up is Stage 1, the durable artifact layer, which ADR-005 identifies as load-bearing and the first thing to build.
+
+### What the sandbox returned
+
+Running it, rather than reading about it, produced nine defects (`Bugs.md` #7–#15), four decisions that carry into the orchestrator (ADR-010 through ADR-013), and four research topics (12–15). The most useful result is a failure that looks exactly like a success: a complete pipeline run that exited 0, raised nothing, decided `FINISH` in five steps, and **produced no document** — the top-level supervisor never routed to the team that would have written the file, and the guard added to bound an earlier infinite loop quietly ended the task instead. Every completion signal the system emits about itself agreed with the others, and all of them were wrong; only comparing the produced artefacts against the original request revealed it. That is the concrete case behind two of this project's standing commitments — completion is decided by deterministic exit-code checks and never by an agent's self-report, and any bound placed on an agent's work must record whether it stopped *because done* or *because bounded*.
+
+Three further findings transfer directly. "OpenAI-compatible" is a claim about requests, not a contract about responses, so vendor quirks must be normalized inside an adapter at the boundary and per-feature capability established by probe (ADR-010). Termination is structural rather than promptable — two prompt-level attempts to make an agent stop were tried and observed to fail (ADR-011). And an execution budget not explicitly allocated is inherited, so the level that exhausts it is not the level that misconfigured it, which is the miniature form of what the budget ledger exists to prevent (`Research.md` topic 15).
 
 The v0 target, restated because it is the clearest definition of done: give the system a real task in a real repo, set one agent's budget artificially low so it will be exhausted partway through, and have it plan, start implementing, detect the limit, fail over to a second agent mid-task, continue from the existing partial work rather than restarting, pass the deterministic check runner, and leave a complete audit trail. [`Build-Guide.md`](Build-Guide.md) breaks that into eight testable assertions.
 
