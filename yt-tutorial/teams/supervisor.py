@@ -13,8 +13,15 @@ from langgraph.graph import END
 from langgraph.types import Command
 from typing_extensions import TypedDict
 
-from config import MAX_WORKER_REPORTS, STRUCTURED_OUTPUT_METHOD, TOOL_CALL_RUN_LIMIT
-from llm.invoker import llm_invoke
+from config import (
+    MAX_WORKER_REPORTS,
+    STRUCTURED_OUTPUT_METHOD,
+    TOOL_CALL_RUN_LIMIT,
+    TOOL_RESULT_SALVAGE_CHARS,
+    WORKER_DEADLINE_SECONDS,
+    WORKER_ERROR_REPORT_CHARS,
+)
+from llm.invoker import DeadlineExceededError, llm_invoke, run_with_deadline
 from logging_config import get_logger
 from prompts import SUPERVISOR_BASE, SUPERVISOR_TERMINATION_RULES
 from teams.state import State
@@ -23,31 +30,141 @@ logger = get_logger(__name__)
 
 
 def tool_call_limit(run_limit: int = TOOL_CALL_RUN_LIMIT) -> ToolCallLimitMiddleware:
-    """Bound one worker's tool calls per invocation, then end its run."""
-    return ToolCallLimitMiddleware(run_limit=run_limit, exit_behavior="end")
+    """Bound one worker's tool calls per invocation, leaving it a turn to report.
+
+    exit_behavior="continue" blocks further tool calls but keeps the agent loop
+    alive, so the worker still gets a turn to write up what it found. "end" stops
+    the run the moment the budget is gone: a worker that spent every turn
+    searching is cut off before it ever reports, and the supervisor receives a
+    bookkeeping stub instead of the findings. Blocked calls still count towards
+    the budget, so a model that keeps hammering a blocked tool runs out anyway.
+    """
+    return ToolCallLimitMiddleware(run_limit=run_limit, exit_behavior="continue")
+
+
+def single_call_limit(tool_name: str) -> ToolCallLimitMiddleware:
+    """Allow exactly one call to `tool_name` per invocation.
+
+    write_document and create_outline replace the whole file, so a second call
+    destroys what the first one wrote -- and the last call is reliably the
+    thinnest. Instructing the model not to do it does not hold; this makes it
+    impossible. Other tools are unaffected, so reading and editing still work.
+    """
+    return ToolCallLimitMiddleware(
+        tool_name=tool_name, run_limit=1, exit_behavior="continue"
+    )
+
+
+def run_worker(agent, name: str, state: State) -> str:
+    """Invoke a worker and always come back with a report.
+
+    create_agent calls the model directly, so llm/invoker.py's error handling
+    never sees a worker's turns: one bad generation aborts the entire graph.
+    A small model on a constrained decoder produces those regularly -- it can
+    degenerate mid-argument and the server rejects the request -- and that used
+    to discard the work of every team that had already finished. A supervisor
+    can route around a worker that failed; it cannot route around a traceback.
+
+    The deadline is wall-clock and covers the whole turn. The client's timeout
+    cannot stand in for it: httpx counts idle time between reads, so a server
+    that keeps the socket open while it generates never trips it, however long
+    it thinks.
+    """
+    logger.info("--> worker '%s' starting", name)
+    try:
+        result = run_with_deadline(
+            agent.invoke,
+            state,
+            timeout=WORKER_DEADLINE_SECONDS,
+            name=f"worker-{name}",
+        )
+    except DeadlineExceededError:
+        logger.error(
+            "Worker '%s' passed its %ds deadline; abandoning the turn",
+            name,
+            WORKER_DEADLINE_SECONDS,
+        )
+        return (
+            f"Worker '{name}' ran past its {WORKER_DEADLINE_SECONDS}s deadline and "
+            "produced no report. Anything it saved before then is still on disk."
+        )
+    except Exception as e:
+        logger.exception("Worker '%s' failed: %s", name, type(e).__name__)
+        detail = str(e)[:WORKER_ERROR_REPORT_CHARS]
+        return (
+            f"Worker '{name}' failed with {type(e).__name__} and produced no report. "
+            f"Anything it saved before failing is still on disk. Detail: {detail}"
+        )
+    report = agent_report(result)
+    logger.info("<-- worker '%s' reported: %s", name, report[:200])
+    return report
 
 
 def agent_report(result: dict) -> str:
     """Describe what a worker actually did.
 
     When the tool-call limit ends a run, the final message is a bookkeeping stub
-    ("Tool call limit reached: ..."). Handing that to the supervisor reads as
-    unfinished work and it routes straight back, so report the tool calls
-    instead -- that is the part the supervisor can act on.
+    ("Tool call limit reached: ..."), but the worker's real answer is usually a
+    turn or two further back. Returning the stub reads to the supervisor as
+    unfinished work and it routes straight back, so search backwards for the
+    last thing the worker actually said.
+
+    The tool calls are appended because prose is only a claim -- a worker saying
+    it wrote a file and a write_document call in the transcript are different
+    kinds of evidence, and the supervisor is asked to distinguish them.
     """
     messages = result["messages"]
-    text = (messages[-1].content or "").strip()
-    if text and not text.startswith("Tool call limit reached"):
-        return text
+
+    text = ""
+    for message in reversed(messages):
+        if getattr(message, "type", None) != "ai":
+            continue
+        candidate = (message.content or "").strip()
+        if candidate and not candidate.startswith("Tool call limit reached"):
+            text = candidate
+            break
 
     actions = []
     for message in messages:
         for call in getattr(message, "tool_calls", None) or []:
             target = call["args"].get("file_name", "")
             actions.append(f"{call['name']}({target})" if target else call["name"])
-    if not actions:
-        return "No action taken."
-    return f"Finished. Tools executed: {', '.join(actions)}."
+
+    if text:
+        return f"{text}\n\nTools executed: {', '.join(actions)}." if actions else text
+
+    # No prose anywhere: the worker spent every turn on tools and never wrote up
+    # what it found. The tool results are then the only findings that exist, and
+    # reporting bare tool names throws the whole invocation's work away -- the
+    # next team is left with nothing to write about but the request itself.
+    salvaged = _tool_results(messages)
+    if salvaged:
+        return f"No written report -- raw tool results follow.\n\n{salvaged}"
+    if actions:
+        return f"Finished. Tools executed: {', '.join(actions)}."
+    return "No action taken."
+
+
+def _tool_results(messages: list) -> str:
+    """Tool output that carries findings, trimmed to keep a supervisor readable.
+
+    Skips the artificial error results the tool-call limit injects; those report
+    the budget, not the world.
+    """
+    parts, seen = [], set()
+    for message in messages:
+        if getattr(message, "type", None) != "tool":
+            continue
+        if getattr(message, "status", None) == "error":
+            continue
+        content = (message.content or "").strip()
+        if not content or content in seen:
+            continue
+        seen.add(content)
+        if len(content) > TOOL_RESULT_SALVAGE_CHARS:
+            content = content[:TOOL_RESULT_SALVAGE_CHARS] + " ...[truncated]"
+        parts.append(f"[{getattr(message, 'name', None) or 'tool'}] {content}")
+    return "\n\n".join(parts)
 
 
 def make_supervisor_node(

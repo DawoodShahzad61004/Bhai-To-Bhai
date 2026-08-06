@@ -33,34 +33,52 @@ teams_supervisor_node = make_supervisor_node(
 )
 
 
-def call_research_team(state: State) -> Command[Literal["supervisor"]]:
-    logger.info(">>> research_team starting (recursion_limit=%d)", TEAM_RECURSION_LIMIT)
-    result = research_graph.invoke({"messages": [state["messages"][-1]]}, TEAM_CONFIG)
-    logger.info("<<< research_team finished after %d message(s)", len(result["messages"]))
+def team_report(result: dict, sent: int) -> str:
+    """Everything a team produced this turn, not just its closing message.
+
+    A team's last message is whichever worker happened to report last, which
+    after a forced FINISH is often the thinnest one. Collapsing to it throws
+    away findings the team really did produce -- and those findings are the only
+    thing the next team has to work from.
+    """
+    parts, seen = [], set()
+    for message in result["messages"][sent:]:
+        text = (message.content or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        name = getattr(message, "name", None)
+        parts.append(f"[{name}] {text}" if name else text)
+    return "\n\n".join(parts) or "No output produced."
+
+
+def _call_team(graph, name: str, state: State) -> Command[Literal["supervisor"]]:
+    """Run a team over the whole conversation and fold back everything it added.
+
+    The full history goes in, not just the last message: a team invoked a second
+    time would otherwise be handed its own previous report and research itself,
+    and the writing team would never see the original request -- including the
+    file name it is supposed to produce.
+    """
+    logger.info(">>> %s starting (recursion_limit=%d)", name, TEAM_RECURSION_LIMIT)
+    sent = state["messages"]
+    result = graph.invoke({"messages": sent}, TEAM_CONFIG)
+    report = team_report(result, len(sent))
+    logger.info(
+        "<<< %s finished after %d new message(s)", name, len(result["messages"]) - len(sent)
+    )
     return Command(
-        update={
-            "messages": [
-                HumanMessage(
-                    content=result["messages"][-1].content, name="research_team"
-                )
-            ]
-        },
+        update={"messages": [HumanMessage(content=report, name=name)]},
         goto="supervisor",
     )
+
+
+def call_research_team(state: State) -> Command[Literal["supervisor"]]:
+    return _call_team(research_graph, "research_team", state)
 
 
 def call_writing_team(state: State) -> Command[Literal["supervisor"]]:
-    logger.info(">>> writing_team starting (recursion_limit=%d)", TEAM_RECURSION_LIMIT)
-    result = writing_graph.invoke({"messages": [state["messages"][-1]]}, TEAM_CONFIG)
-    logger.info("<<< writing_team finished after %d message(s)", len(result["messages"]))
-    return Command(
-        update={
-            "messages": [
-                HumanMessage(content=result["messages"][-1].content, name="writing_team")
-            ]
-        },
-        goto="supervisor",
-    )
+    return _call_team(writing_graph, "writing_team", state)
 
 
 def build_super_graph():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-import concurrent.futures
+import contextvars as _contextvars
 import queue as _queue
 import re
 import threading
@@ -189,6 +189,51 @@ class LLMResponseTimeoutError(Exception):
         super().__init__(f"LLM did not respond within {timeout:.0f}s.")
 
 
+class DeadlineExceededError(Exception):
+    """Raised by run_with_deadline when a call is abandoned. Never raised by a
+    provider, so catching it cannot swallow a real transport timeout."""
+    def __init__(self, name: str, timeout: float) -> None:
+        self.name = name
+        self.timeout = timeout
+        super().__init__(f"{name} exceeded its {timeout:.0f}s deadline.")
+
+
+def run_with_deadline(fn, *args, timeout: float, name: str, **kwargs):
+    """Run `fn` under a wall-clock deadline, abandoning it if it overruns.
+
+    A per-read socket timeout cannot bound this: a server that holds the
+    connection open while it generates never trips one, however long it thinks.
+
+    A daemon thread rather than a ThreadPoolExecutor, because the executor's
+    threads are non-daemon and concurrent.futures registers an atexit hook that
+    joins all of them. shutdown(wait=False) does not opt out of that -- an
+    abandoned call keeps the interpreter alive after the run is over, so the run
+    prints its summary and the process still never exits. Nothing in CPython can
+    cancel a thread blocked on a socket read, so the only question is whether it
+    outlives the process, and a daemon thread does not.
+
+    The context is copied so records logged from the thread keep the run's id.
+    """
+    outcome: dict[str, Any] = {}
+    context = _contextvars.copy_context()
+
+    def target() -> None:
+        try:
+            outcome["value"] = context.run(lambda: fn(*args, **kwargs))
+        except BaseException as exc:  # noqa: BLE001 -- re-raised in the caller
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=target, name=name, daemon=True)
+    thread.start()
+    thread.join(timeout)
+
+    if thread.is_alive():
+        raise DeadlineExceededError(name, timeout)
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
 # ── Error taxonomy ────────────────────────────────────────────────────────────
 
 class LLMErrorKind(Enum):
@@ -314,15 +359,20 @@ def _invoke_once(
     )
 
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _executor:
-            # config is passed explicitly (not relied on via ambient contextvar)
-            # because it crosses a thread boundary here, which does not inherit
-            # the LangGraph-set RunnableConfig context.
-            _future = _executor.submit(llm.invoke, messages, config=config, **kwargs)
-            try:
-                response = _future.result(timeout=LLM_RESPONSE_TIMEOUT_SECONDS)
-            except concurrent.futures.TimeoutError:
-                raise LLMResponseTimeoutError(LLM_RESPONSE_TIMEOUT_SECONDS)
+        # config is passed explicitly (not relied on via ambient contextvar)
+        # because it crosses a thread boundary here, which does not inherit
+        # the LangGraph-set RunnableConfig context.
+        try:
+            response = run_with_deadline(
+                llm.invoke,
+                messages,
+                timeout=LLM_RESPONSE_TIMEOUT_SECONDS,
+                name=f"llm-{caller_tag}",
+                config=config,
+                **kwargs,
+            )
+        except DeadlineExceededError:
+            raise LLMResponseTimeoutError(LLM_RESPONSE_TIMEOUT_SECONDS)
         content  = (getattr(response, "content", "") or "").strip()
         usage    = (getattr(response, "response_metadata", {}) or {}).get("token_usage", {})
         logger.debug(

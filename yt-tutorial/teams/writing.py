@@ -20,7 +20,12 @@ from prompts import (
     WRITING_TEAM_SCOPE,
 )
 from teams.state import State
-from teams.supervisor import agent_report, make_supervisor_node, tool_call_limit
+from teams.supervisor import (
+    make_supervisor_node,
+    run_worker,
+    single_call_limit,
+    tool_call_limit,
+)
 from teams.visualization import save_graph_image
 from tools import (
     create_outline,
@@ -37,15 +42,12 @@ doc_writer_agent = create_agent(
     tools=[write_document, edit_document, read_document],
     name="doc_writer_agent",
     system_prompt=DOC_WRITER_AGENT,
-    middleware=[tool_call_limit()],
+    middleware=[tool_call_limit(), single_call_limit("write_document")],
 )
 
 
 def doc_writing_node(state: State) -> Command[Literal["supervisor"]]:
-    logger.info("--> worker 'doc_writer' starting")
-    result = doc_writer_agent.invoke(state)
-    report = agent_report(result)
-    logger.info("<-- worker 'doc_writer' reported: %s", report[:200])
+    report = run_worker(doc_writer_agent, "doc_writer", state)
     return Command(
         update={
             "messages": [HumanMessage(content=report, name="doc_writer")]
@@ -59,15 +61,12 @@ note_taking_agent = create_agent(
     tools=[create_outline, read_document],
     name="note_taking_agent",
     system_prompt=NOTE_TAKER_AGENT,
-    middleware=[tool_call_limit()],
+    middleware=[tool_call_limit(), single_call_limit("create_outline")],
 )
 
 
 def note_taking_node(state: State) -> Command[Literal["supervisor"]]:
-    logger.info("--> worker 'note_taker' starting")
-    result = note_taking_agent.invoke(state)
-    report = agent_report(result)
-    logger.info("<-- worker 'note_taker' reported: %s", report[:200])
+    report = run_worker(note_taking_agent, "note_taker", state)
     return Command(
         update={
             "messages": [HumanMessage(content=report, name="note_taker")]
@@ -86,10 +85,7 @@ chart_generating_agent = create_agent(
 
 
 def chart_generating_node(state: State) -> Command[Literal["supervisor"]]:
-    logger.info("--> worker 'chart_generator' starting")
-    result = chart_generating_agent.invoke(state)
-    report = agent_report(result)
-    logger.info("<-- worker 'chart_generator' reported: %s", report[:200])
+    report = run_worker(chart_generating_agent, "chart_generator", state)
     return Command(
         update={
             "messages": [

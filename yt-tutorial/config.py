@@ -40,6 +40,13 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "custom")
 
 LLM_TEMPERATURE = 0.1
 LLM_MAX_TOKENS = 2048
+# Near-greedy decoding on a small model falls into repetition loops, and inside a
+# grammar-constrained tool argument the loop cannot end: it repeats the same URLs
+# with the escaping doubling each pass until max_tokens runs out mid-string, which
+# the server rejects as "EOF while parsing a string" after two minutes of work.
+# Penalising by token count is what breaks the loop; temperature stays low so
+# supervisor routing keeps its determinism.
+LLM_FREQUENCY_PENALTY = 0.4
 # 0 because invoker.py owns retry policy; the SDK retrying underneath would
 # hide the 429s its FIFO gate and adaptive cooldown are built to handle.
 LLM_MAX_RETRIES = 0
@@ -54,6 +61,10 @@ LLM_RATE_LIMIT_MAX_ATTEMPTS = 3
 LLM_RATE_LIMIT_BACKOFF_BASE_SECONDS = 1.0
 LLM_RATE_LIMIT_BACKOFF_MAX_SECONDS = 30.0
 LLM_RATE_LIMIT_MAX_DELAY_SECONDS = 1800.0
+# Applied twice, because there are two paths to the model: invoker.py enforces it
+# for supervisor calls, and it is handed to the client itself for worker calls,
+# which go through create_agent and never reach invoker.py. Without the second,
+# a stalled generation falls back to the OpenAI SDK default of 600s.
 LLM_RESPONSE_TIMEOUT_SECONDS = 150
 MIN_COOLDOWN_TIME = 0.0
 MAX_COOLDOWN_TIME = 30.0
@@ -63,10 +74,25 @@ MAX_COOLDOWN_TIME = 30.0
 # while tools are attached, so they never produce a final answer on their own.
 # These two caps are what actually guarantee termination.
 #
-# Tool calls one worker may make per invocation before its run is ended.
+# Tool calls one worker may make per invocation before further calls are blocked.
+# The worker keeps its turn to report after this, so leave room for the tools it
+# genuinely needs -- a worker that spends the whole budget searching still gets to
+# write up what it found.
 TOOL_CALL_RUN_LIMIT = 3
 # Times a supervisor may route to the same worker before forcing FINISH.
 MAX_WORKER_REPORTS = 2
+# When a worker never writes a report, its tool output is forwarded instead. Cap
+# per result, because a scraped page would otherwise bury the supervisor.
+TOOL_RESULT_SALVAGE_CHARS = 700
+# A failed worker reports the error to its supervisor instead of aborting the run.
+# Provider errors quote the whole rejected generation, so keep only the head.
+WORKER_ERROR_REPORT_CHARS = 300
+# Wall-clock ceiling on one worker turn, covering all of its model calls and tool
+# calls together. LLM_RESPONSE_TIMEOUT_SECONDS cannot do this job: it is a
+# per-read timeout, and a server that holds the socket open while it generates
+# never trips it -- one turn here ran 388s before the server answered at all.
+# Normal turns finish in under 40s, so this only catches the pathological ones.
+WORKER_DEADLINE_SECONDS = 180
 
 # ── Graph recursion budgets ───────────────────────────────────────────────────
 # Sub-graphs inherit the parent config unless given their own, so a team would

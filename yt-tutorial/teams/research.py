@@ -17,7 +17,7 @@ from llm.clients import llm
 from logging_config import get_logger
 from prompts import RESEARCH_TEAM_SCOPE, SEARCH_AGENT, WEB_SCRAPER_AGENT
 from teams.state import State
-from teams.supervisor import agent_report, make_supervisor_node, tool_call_limit
+from teams.supervisor import make_supervisor_node, run_worker, tool_call_limit
 from teams.visualization import save_graph_image
 from tools import scrape_webpages, tavily_tool
 
@@ -33,10 +33,7 @@ search_agent = create_agent(
 
 
 def search_node(state: State) -> Command[Literal["supervisor"]]:
-    logger.info("--> worker 'search' starting")
-    result = search_agent.invoke(state)
-    report = agent_report(result)
-    logger.info("<-- worker 'search' reported: %s", report[:200])
+    report = run_worker(search_agent, "search", state)
     return Command(
         update={"messages": [HumanMessage(content=report, name="search")]},
         goto="supervisor",
@@ -53,10 +50,7 @@ web_scraper_agent = create_agent(
 
 
 def web_scraper_node(state: State) -> Command[Literal["supervisor"]]:
-    logger.info("--> worker 'web_scraper' starting")
-    result = web_scraper_agent.invoke(state)
-    report = agent_report(result)
-    logger.info("<-- worker 'web_scraper' reported: %s", report[:200])
+    report = run_worker(web_scraper_agent, "web_scraper", state)
     return Command(
         update={
             "messages": [HumanMessage(content=report, name="web_scraper")]
