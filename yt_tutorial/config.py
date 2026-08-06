@@ -138,7 +138,7 @@ CLAUDE_CODE_SEND_CUSTOM_TOOLS = _flag("CLAUDE_CODE_SEND_CUSTOM_TOOLS", False)
 CLAUDE_CODE_BIN = os.getenv("CLAUDE_CODE_BIN", "claude")
 # The CLI's own default is Opus, which costs roughly ten times as much per
 # routing call as Sonnet and decides no differently on a two-option router.
-CLAUDE_CODE_MODEL = os.getenv("CLAUDE_CODE_MODEL", "sonnet")
+CLAUDE_CODE_MODEL = os.getenv("CLAUDE_CODE_MODEL", "haiku")
 # Claude Code prompts for permission on every tool call by default, and there is
 # no terminal here to answer it -- the process would sit until the deadline.
 CLAUDE_CODE_PERMISSION_MODE = os.getenv("CLAUDE_CODE_PERMISSION_MODE", "bypassPermissions")
@@ -149,3 +149,26 @@ CLAUDE_CODE_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_CODE_TIMEOUT_SECONDS", "300"
 CLAUDE_CODE_MAX_BUDGET_USD = float(os.getenv("CLAUDE_CODE_MAX_BUDGET_USD", "0"))
 # Name the MCP bridge registers under, so tools arrive as mcp__<name>__<tool>.
 CLAUDE_CODE_MCP_SERVER_NAME = "project"
+
+# ── temp_agents/ sandbox ──────────────────────────────────────────────────────
+# A standalone two-agent demo: a supervisor starts both agents at once, waits,
+# and checks what they wrote. Shares nothing with the graphs above -- its own
+# prompts, its own directory, its own runners.
+
+# Where the demo agents write, and where their CLIs are rooted.
+TEMP_AGENTS_DIR = BASE_DIR / "temp_agents"
+
+# Which CLI backs each agent: "claude" or "codex". They default to one each so
+# a first run exercises both paths.
+TEMP_AGENT_A_BACKEND = os.getenv("TEMP_AGENT_A_BACKEND", "claude")
+TEMP_AGENT_B_BACKEND = os.getenv("TEMP_AGENT_B_BACKEND", "codex")
+
+CODEX_BIN = os.getenv("CODEX_BIN", "codex")
+# Empty leaves codex on whatever its own config selects.
+# Empty leaves codex on whatever its own config selects, which is the only value
+# guaranteed to be one the account may use: naming "gpt-4o" here got every run
+# rejected with "not supported when using Codex with a ChatGPT account".
+CODEX_MODEL = os.getenv("CODEX_MODEL", "")
+
+# Wall-clock ceiling on one demo agent's CLI turn. Small: the task is one write.
+TEMP_AGENT_TIMEOUT_SECONDS = int(os.getenv("TEMP_AGENT_TIMEOUT_SECONDS", "180"))
