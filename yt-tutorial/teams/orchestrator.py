@@ -9,7 +9,8 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command
 
-from config import TEAM_RECURSION_LIMIT, TOP_LEVEL_TEAMS
+from claude_agents import make_claude_supervisor_node
+from config import TEAM_RECURSION_LIMIT, TOP_LEVEL_TEAMS, USE_CLAUDE_CODE_AGENTS
 from llm.clients import llm
 from logging_config import get_logger
 from prompts import TOP_LEVEL_SCOPE
@@ -26,10 +27,10 @@ logger = get_logger(__name__)
 # would starve the other.
 TEAM_CONFIG = {"recursion_limit": TEAM_RECURSION_LIMIT}
 
-teams_supervisor_node = make_supervisor_node(
-    llm,
-    TOP_LEVEL_TEAMS,
-    scope=TOP_LEVEL_SCOPE,
+teams_supervisor_node = (
+    make_claude_supervisor_node(TOP_LEVEL_TEAMS, scope=TOP_LEVEL_SCOPE)
+    if USE_CLAUDE_CODE_AGENTS
+    else make_supervisor_node(llm, TOP_LEVEL_TEAMS, scope=TOP_LEVEL_SCOPE)
 )
 
 

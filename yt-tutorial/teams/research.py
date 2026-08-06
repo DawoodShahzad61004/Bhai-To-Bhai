@@ -3,6 +3,10 @@
 Workers report back to their supervisor, which routes among them until the
 information is gathered. This team has no file tools -- producing documents is
 the writing team's job.
+
+config.USE_CLAUDE_CODE_AGENTS swaps the supervisor and the search worker for
+their Claude Code counterparts in claude_agents/. The graph below does not
+change either way; only what sits behind each node does.
 """
 
 from typing import Literal
@@ -12,7 +16,8 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command
 
-from config import RESEARCH_TEAM_MEMBERS
+from claude_agents import make_claude_supervisor_node, make_claude_worker_node
+from config import RESEARCH_TEAM_MEMBERS, USE_CLAUDE_CODE_AGENTS
 from llm.clients import llm
 from logging_config import get_logger
 from prompts import RESEARCH_TEAM_SCOPE, SEARCH_AGENT, WEB_SCRAPER_AGENT
@@ -32,12 +37,17 @@ search_agent = create_agent(
 )
 
 
-def search_node(state: State) -> Command[Literal["supervisor"]]:
+def langchain_search_node(state: State) -> Command[Literal["supervisor"]]:
     report = run_worker(search_agent, "search", state)
     return Command(
         update={"messages": [HumanMessage(content=report, name="search")]},
         goto="supervisor",
     )
+
+
+search_node = (
+    make_claude_worker_node("search") if USE_CLAUDE_CODE_AGENTS else langchain_search_node
+)
 
 
 web_scraper_agent = create_agent(
@@ -49,6 +59,9 @@ web_scraper_agent = create_agent(
 )
 
 
+# No Claude Code counterpart: claude_agents/ covers the router, search,
+# doc_writer, note_taker and chart_generator, so this worker runs on the
+# LangChain agent whichever way the flag is set.
 def web_scraper_node(state: State) -> Command[Literal["supervisor"]]:
     report = run_worker(web_scraper_agent, "web_scraper", state)
     return Command(
@@ -59,10 +72,10 @@ def web_scraper_node(state: State) -> Command[Literal["supervisor"]]:
     )
 
 
-research_supervisor_node = make_supervisor_node(
-    llm,
-    RESEARCH_TEAM_MEMBERS,
-    scope=RESEARCH_TEAM_SCOPE,
+research_supervisor_node = (
+    make_claude_supervisor_node(RESEARCH_TEAM_MEMBERS, scope=RESEARCH_TEAM_SCOPE)
+    if USE_CLAUDE_CODE_AGENTS
+    else make_supervisor_node(llm, RESEARCH_TEAM_MEMBERS, scope=RESEARCH_TEAM_SCOPE)
 )
 
 

@@ -1,6 +1,10 @@
 """Writing team: turns information already in the conversation into documents.
 
 This team has no web tools -- gathering information is the research team's job.
+
+config.USE_CLAUDE_CODE_AGENTS swaps the supervisor and all three workers for
+their Claude Code counterparts in claude_agents/. The graph below does not
+change either way; only what sits behind each node does.
 """
 
 from typing import Literal
@@ -10,7 +14,8 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command
 
-from config import WRITING_TEAM_MEMBERS
+from claude_agents import make_claude_supervisor_node, make_claude_worker_node
+from config import USE_CLAUDE_CODE_AGENTS, WRITING_TEAM_MEMBERS
 from llm.clients import llm
 from logging_config import get_logger
 from prompts import (
@@ -46,7 +51,7 @@ doc_writer_agent = create_agent(
 )
 
 
-def doc_writing_node(state: State) -> Command[Literal["supervisor"]]:
+def langchain_doc_writing_node(state: State) -> Command[Literal["supervisor"]]:
     report = run_worker(doc_writer_agent, "doc_writer", state)
     return Command(
         update={
@@ -54,6 +59,13 @@ def doc_writing_node(state: State) -> Command[Literal["supervisor"]]:
         },
         goto="supervisor",
     )
+
+
+doc_writing_node = (
+    make_claude_worker_node("doc_writer")
+    if USE_CLAUDE_CODE_AGENTS
+    else langchain_doc_writing_node
+)
 
 
 note_taking_agent = create_agent(
@@ -65,7 +77,7 @@ note_taking_agent = create_agent(
 )
 
 
-def note_taking_node(state: State) -> Command[Literal["supervisor"]]:
+def langchain_note_taking_node(state: State) -> Command[Literal["supervisor"]]:
     report = run_worker(note_taking_agent, "note_taker", state)
     return Command(
         update={
@@ -73,6 +85,13 @@ def note_taking_node(state: State) -> Command[Literal["supervisor"]]:
         },
         goto="supervisor",
     )
+
+
+note_taking_node = (
+    make_claude_worker_node("note_taker")
+    if USE_CLAUDE_CODE_AGENTS
+    else langchain_note_taking_node
+)
 
 
 chart_generating_agent = create_agent(
@@ -84,7 +103,7 @@ chart_generating_agent = create_agent(
 )
 
 
-def chart_generating_node(state: State) -> Command[Literal["supervisor"]]:
+def langchain_chart_generating_node(state: State) -> Command[Literal["supervisor"]]:
     report = run_worker(chart_generating_agent, "chart_generator", state)
     return Command(
         update={
@@ -96,10 +115,17 @@ def chart_generating_node(state: State) -> Command[Literal["supervisor"]]:
     )
 
 
-writing_supervisor_node = make_supervisor_node(
-    llm,
-    WRITING_TEAM_MEMBERS,
-    scope=WRITING_TEAM_SCOPE,
+chart_generating_node = (
+    make_claude_worker_node("chart_generator")
+    if USE_CLAUDE_CODE_AGENTS
+    else langchain_chart_generating_node
+)
+
+
+writing_supervisor_node = (
+    make_claude_supervisor_node(WRITING_TEAM_MEMBERS, scope=WRITING_TEAM_SCOPE)
+    if USE_CLAUDE_CODE_AGENTS
+    else make_supervisor_node(llm, WRITING_TEAM_MEMBERS, scope=WRITING_TEAM_SCOPE)
 )
 
 

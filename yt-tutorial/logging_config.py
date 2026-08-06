@@ -35,6 +35,15 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
+def current_log_file() -> Path | None:
+    """This run's debug log, or None before setup_logging() has run.
+
+    Lets a subprocess be pointed at the same file, so work it does on the run's
+    behalf is recorded in the run's own log rather than lost with the process.
+    """
+    return getattr(logging.getLogger(), _LOG_FILE_ATTR, None)
+
+
 class _RequestIdFilter(logging.Filter):
     """Inject the current request_id into every log record."""
 

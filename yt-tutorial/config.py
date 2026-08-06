@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _flag(name: str, default: bool) -> bool:
+    """Read a boolean switch from the environment."""
+    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 # Every document tool reads and writes inside this directory, and nowhere else.
@@ -107,3 +113,39 @@ TAVILY_MAX_RESULTS = 5
 RESEARCH_TEAM_MEMBERS = ["search", "web_scraper"]
 WRITING_TEAM_MEMBERS = ["doc_writer", "note_taker", "chart_generator"]
 TOP_LEVEL_TEAMS = ["research_team", "writing_team"]
+
+# ── Claude Code agents (claude_agents/) ───────────────────────────────────────
+# Every supervisor and worker has a second implementation that hands the SAME
+# prompt to the Claude Code CLI instead of running it through the LangChain
+# agent loop. The graphs, the state and the report format are unchanged, so the
+# two are interchangeable per run -- only who does the thinking differs.
+#
+# Off by default: the LangChain path needs no external process and no Claude
+# subscription, so it stays the one that works out of the box.
+USE_CLAUDE_CODE_AGENTS = _flag("USE_CLAUDE_CODE_AGENTS", True)
+
+# Which tools Claude Code works with.
+#   True  -- this project's own tools (tools/) are attached over MCP and Claude
+#            Code's built-in tools are switched off. Documents still land in
+#            WORKSPACE_DIR because those tools enforce it, and a run stays
+#            directly comparable to the LangChain path.
+#   False -- Claude Code uses its own Read/Write/Edit/WebSearch/Bash, with its
+#            working directory set to WORKSPACE_DIR. Fewer moving parts, but
+#            nothing is sandboxed by the document tools and no Tavily key is
+#            needed.
+CLAUDE_CODE_SEND_CUSTOM_TOOLS = _flag("CLAUDE_CODE_SEND_CUSTOM_TOOLS", False)
+
+CLAUDE_CODE_BIN = os.getenv("CLAUDE_CODE_BIN", "claude")
+# The CLI's own default is Opus, which costs roughly ten times as much per
+# routing call as Sonnet and decides no differently on a two-option router.
+CLAUDE_CODE_MODEL = os.getenv("CLAUDE_CODE_MODEL", "sonnet")
+# Claude Code prompts for permission on every tool call by default, and there is
+# no terminal here to answer it -- the process would sit until the deadline.
+CLAUDE_CODE_PERMISSION_MODE = os.getenv("CLAUDE_CODE_PERMISSION_MODE", "bypassPermissions")
+# Wall-clock ceiling on one CLI invocation, the equivalent of
+# WORKER_DEADLINE_SECONDS. Higher because a Claude Code turn does real tool work.
+CLAUDE_CODE_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_CODE_TIMEOUT_SECONDS", "300"))
+# Spend ceiling for one invocation, in dollars. 0 leaves it uncapped.
+CLAUDE_CODE_MAX_BUDGET_USD = float(os.getenv("CLAUDE_CODE_MAX_BUDGET_USD", "0"))
+# Name the MCP bridge registers under, so tools arrive as mcp__<name>__<tool>.
+CLAUDE_CODE_MCP_SERVER_NAME = "project"
