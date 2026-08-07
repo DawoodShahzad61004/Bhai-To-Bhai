@@ -1,0 +1,7 @@
+-r requirements.txt
+
+pytest==8.4.2
+
+# Renders the graph as ASCII for `main.py --dry-run`. Development only: without
+# it the dry run falls back to Mermaid text, which needs no package at all.
+grandalf==0.8

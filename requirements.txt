@@ -1,0 +1,16 @@
+# Orchestrator runtime dependencies.
+#
+# Deliberately small. Every agent in this pipeline is an external CLI subprocess,
+# so nothing here talks to a model API: there is no langchain-openai, no openai
+# SDK, and no model client. LangGraph supplies the state machine and the
+# checkpointer; everything else is standard library.
+#
+# Phase-scoped per Build-Guide Stage 0 — the Phoenix/OpenTelemetry stack belongs
+# to a later stage and is deliberately absent.
+
+langgraph==1.2.10
+langgraph-checkpoint-sqlite==3.1.1
+python-dotenv==1.2.2
+
+# Preflight's MongoDB probe (orchestrator/preflight.py). Not used by the graph.
+pymongo==4.16.0

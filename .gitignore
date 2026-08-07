@@ -20,6 +20,12 @@ temp/
 run_logs/
 graph_images/
 
+# Orchestrator run state: per-run artifacts, debug logs, and graph checkpoints.
+# Regenerated per run and specific to one machine's target repository.
+orchestrator/runs/
+orchestrator/run_logs/
+orchestrator/checkpoints/
+
 .claude/
 .graphifyignore
 graphify-out/
