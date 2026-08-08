@@ -1,4 +1,4 @@
-"""`maestro delegate` as the transport, per Agents Notes.md.
+"""`maestro delegate` as the transport, per docs/Research.md topic 19.
 
 Reaches the same vendor CLIs as the direct adapters, but through Maestro's
 Session/Run lifecycle (ADR-004). What that buys: a persistent execution record, a

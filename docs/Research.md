@@ -213,3 +213,64 @@
 | **Relevance to Project** | The parallel-agent case the orchestrator will have by construction once agents run in separate worktrees, reduced to its smallest form. Three properties transfer. Concurrency across vendor CLIs costs a thread each and nothing else, because the work is in the subprocesses — which makes fan-out cheap and puts the real constraint on **budget and workspace locking**, not on the dispatch mechanism (`Research.md` topic 11's FIFO gate is the candidate for the latter). A supervisor that verifies rather than trusts needs the workspace put into a known state first, which the Handoff Builder's reconstruction step must also do. And per-run correlation becomes necessary rather than nice the moment two agents log into one file, which ADR-013 already provides and this run exercised. |
 
 ---
+
+
+## 19. Maestro is a useful execution substrate, not the complete workflow controller
+
+| Field | Detail |
+|---|---|
+| **Topic** | Which parts of the six-agent production workflow should use Maestro and which require deterministic project-owned control |
+| **Date** | 2026-08-07 |
+| **Findings** | ChatGPT and Claude research found Maestro useful for knowledge search, CLI dispatch, resumable sessions, role-based review, artifact lifecycle, and learning capture. It did not remove the need for project-owned dependency scheduling, wave calculation, task-level worktrees, merge order, rollback, retry bounds, or transactional acceptance. Running `maestro delegate --async` under LangGraph would also create two schedulers, while Maestro's `--timeout` bounds stale output rather than total wall-clock duration. |
+| **Conclusion** | Use Maestro as an optional transport and lifecycle layer beneath the graph, not as the graph itself. Run delegation synchronously and retain a subprocess wall-clock deadline in the adapter. |
+| **Relevance to Project** | This defines the boundary between `adapters/maestro.py` and the deterministic controller in `graph.py`, `planner/waves.py`, `worktrees.py`, and `merger/`. It preserves Maestro's strengths without delegating correctness properties to a second scheduler. |
+
+---
+
+## 20. Six roles, two model tiers, and only judgment stages may route backward
+
+| Field | Detail |
+|---|---|
+| **Topic** | Role decomposition and model assignment extracted from the pipeline diagram and implementation notes |
+| **Date** | 2026-08-07 |
+| **Findings** | The stable sequence is requirements, planning, wave orchestration, merging, review, and supervision. Requirements transcription/clarification, dispatch, and clean merge are mainly mechanical; planning, coding, review, and final requirement audit require stronger judgment. The diagram's most important structural distinction is that the backward routes originate only at review and supervision. Review sends implementation back to the current wave; supervision sends a requirement-level failure back to planning. |
+| **Conclusion** | Keep responsibilities narrow and assign models by the kind of decision, not by box count. Smaller models move and normalize information; larger models make quality/correctness judgments. Mechanical nodes do not invent backward routes. |
+| **Relevance to Project** | `config.AGENTS` defaults requirements, wave orchestrator, and merger to Claude Haiku, and planner, reviewer, supervisor, and coding to Claude Sonnet. The roster remains configurable per stage and can use Codex. |
+
+---
+
+## 21. Parallel coding requires a common base, provisional integration, and retained continuity
+
+| Field | Detail |
+|---|---|
+| **Topic** | Worktree, branch, merge, rollback, and same-session requirements for a dependency-wave pipeline |
+| **Date** | 2026-08-07 |
+| **Findings** | Tasks are genuinely parallel only when every worktree starts from the same base SHA. The planner should emit dependency edges, not trusted wave numbers; deterministic code can reject cycles and derive the schedule. Merged work must remain provisional until review. On rejection, integration should rewind while task branches remain inspectable and agent session ids remain available so rework reaches the same coding context. Shared files written by every parallel worker, such as a common learnings file, create unnecessary conflicts and should instead be consolidated by the controller. |
+| **Conclusion** | Treat a wave as a Git transaction: fan out from one base, gather observable results, merge provisionally, review, then accept or reset. Preserve branches and session identifiers; centralize shared artifacts. |
+| **Relevance to Project** | Implemented by `planner/waves.py`, `wave_orchestrator/dispatch.py`, `worktrees.py`, and `merger/merge.py`. It is the basis of reviewer rework and supervisor replan semantics. |
+
+---
+
+## 22. Reports are claims; review requires task attribution and filesystem evidence
+
+| Field | Detail |
+|---|---|
+| **Topic** | Evidence design for task dispatch, merge conflict resolution, per-wave review, and final supervision |
+| **Date** | 2026-08-07 |
+| **Findings** | Prior runs produced fluent reports for files that did not exist, and model review could not see byte-level defects. A coding report therefore needs to be stored separately from Git-observed changed files. Reviewer findings should cite the task contract and evidence so rework returns to the responsible coding session; integration-wide findings should go to the merger/integration path. Conflict resolution must be verified both through Git's unmerged index and a disk scan for marker bytes. Final supervision should use a fresh independent session and map each original requirement to evidence, not return a bare satisfactory/unsatisfactory verdict. |
+| **Conclusion** | Acceptance is an evidence pipeline, not a sequence of self-reports. Agents supply judgments and explanations; deterministic observation establishes what happened. |
+| **Relevance to Project** | This shapes `TaskOutcome`, merge verification, reviewer notes, supervisor assessments, and the rule that a `done` agent response with no observed changes becomes `no_changes`. |
+
+---
+
+## 23. LangGraph interrupts require separating paid survey work from deterministic clarification persistence
+
+| Field | Detail |
+|---|---|
+| **Topic** | Requirements Q&A behavior under `interrupt()`, checkpoint resume, and explicit-choice recording |
+| **Date** | 2026-08-07 |
+| **Findings** | LangGraph resumes an interrupted node by executing it again from the first line. A combined survey-and-pause node therefore paid for the survey twice; one measured pause produced two survey calls. The pipeline itself knows which questions it asked and which answers the user gave, so asking a model to write `user_choices.md` adds an avoidable invention risk. Research also favored search-first questioning, one material decision per turn, and never asking for facts available in the repository. |
+| **Conclusion** | Split requirements into a paid survey node and a clarification node. Persist context before pausing, record answers verbatim in deterministic code, and resume the vendor session only for the follow-up interpretation. |
+| **Relevance to Project** | Implemented in `requirements/node.py` and checkpointed by `main.py`. It keeps `user_choices.md` restricted to explicit user statements, corrections, answers, and confirmed constraints. |
+
+---

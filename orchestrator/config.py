@@ -98,7 +98,7 @@ FILE_LOG_LEVEL = logging.DEBUG
 #   "direct"  -- subprocess straight to the vendor CLI. Proven on this machine;
 #                carries every fix in Bugs.md #21-#23 (stdin prompts, error read
 #                from the end of stderr, no hardcoded model, wall-clock deadline).
-#   "maestro" -- `maestro delegate`, per Agents Notes.md. Adds the Session/Run
+#   "maestro" -- `maestro delegate`, per docs/Research.md topic 19. Adds the Session/Run
 #                lifecycle and message injection, at the cost of a second process
 #                layer. Note that `--timeout` there is a STALE-STREAM timeout, so
 #                the wall-clock deadline below still applies on top of it.
@@ -148,7 +148,7 @@ class AgentSpec:
 
 # The drawing's organising idea, made concrete: every box that makes a quality or
 # correctness judgment gets the larger model, every box that moves data around
-# gets the smaller one. See orchestrator/Agent-Pipeline-Diagram.md section 3.
+# gets the smaller one. See docs/Research.md topic 20.
 #
 # The notes assign agents 1, 3 and 4 to the Gemini CLI. Gemini is not installed
 # on this machine and is disabled in ~/.maestro/cli-tools.json, so the tiers are
@@ -177,7 +177,7 @@ CODING_AGENT = AgentSpec(
 # ═══════════════════════════════════════════════════════════════════════════════
 # TERMINATION BOUNDS
 # ═══════════════════════════════════════════════════════════════════════════════
-# Agent-Pipeline-Diagram.md section 6 raises "no termination guard on either
+# docs/Decisions.md ADR-017 raises "no termination guard on either
 # loop" as an open question. These close it.
 #
 # The bounds are structural on purpose. A safety property cannot rest on the

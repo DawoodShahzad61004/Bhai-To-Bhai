@@ -16,7 +16,7 @@ edge maps below translate those into whichever nodes exist.
 
 **`Orchestrate -> Merge -> Review` is a loop, not a line.** The drawing shows it
 as a single pass; it runs once per wave, and the supervisor sits outside it
-(Agent-Pipeline-Diagram.md section 5). `advance_wave` is what closes it.
+(docs/Architecture.md, "High-Level Architecture"). `advance_wave` is what closes it.
 """
 
 from __future__ import annotations

@@ -117,7 +117,7 @@ class PipelineState(TypedDict):
     # ── Agent 1: requirements gathering ──────────────────────────────────────
     # `context.md` is the requirements themselves. `user_choices.md` is the
     # stricter record: explicit user decisions only, no assumptions and no
-    # inferences (Agents Notes.md, closing section).
+    # inferences (docs/Architecture.md, "Artifact and Repository Boundaries").
     context_path: NotRequired[str]
     user_choices_path: NotRequired[str]
     context: NotRequired[str]  # inlined, so downstream agents need no file read

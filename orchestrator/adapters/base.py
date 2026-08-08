@@ -68,7 +68,7 @@ class AgentResult:
     turns: int = 0
     duration_seconds: float = 0.0
     # The vendor's own resumable session id. Load-bearing for the reviewer's
-    # rework loop, which must reach the SAME coding subagent (Agents Notes.md,
+    # rework loop, which must reach the SAME coding subagent (docs/Decisions.md ADR-018,
     # agent 5), and free of charge as a Session Registry key.
     session_id: str = ""
     denials: list[Any] = field(default_factory=list)

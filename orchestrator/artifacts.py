@@ -1,6 +1,6 @@
 """The files the pipeline passes along its edges.
 
-Reconstructed from Agents Notes.md, the artifacts carried forward are:
+Recorded permanently in docs/Architecture.md, the artifacts carried forward are:
 
     requirements -> context.md, user_choices.md -> planner
     planner      -> plan.json, TASK-*.json      -> wave orchestrator

@@ -231,3 +231,60 @@
 | **Impact** | `DeadlineExceededError` is deliberately a new exception type rather than the builtin `TimeoutError`, documented as "never raised by a provider, so catching it cannot swallow a real transport timeout" — the distinction matters because this codebase now has two timeout meanings in play. `contextvars.copy_context()` carries the run's correlation id into the thread, without which tool logs from an abandoned turn lose their id exactly when it is most needed (ADR-013 status). Both timeout paths share the one helper, and `LLM_RESPONSE_TIMEOUT_SECONDS` is now applied on the client as well as in the invoker, since a limit enforced on one of two routes to a resource is not enforced. For the orchestrator this fixes three properties of the agent adapter contract. A limit must **name its unit** — `maestro delegate --timeout` is documented as a stale-stream timeout, i.e. the same blind spot in the tool this project delegates through, so a wall-clock deadline over the subprocess is required regardless. An adapter **returns a classified outcome and never raises past the router**, or one vendor's bad generation costs every worktree in flight. And a bound must say **what state it leaves behind**, because unlike an LLM call, an abandoned agent turn is not idempotent — which is ADR-005's premise arriving from the timeout side. `claude_agents/cli.py` already implements the same contract over a subprocess (`ClaudeResult` mirrors `LLMResult` and never raises), and a subprocess is the case where option (B)'s real kill becomes available again. |
 
 ---
+
+
+## ADR-017 · Implement the production workflow as a six-stage LangGraph with two bounded feedback loops
+
+| Field | Detail |
+|---|---|
+| **Decision** | Use LangGraph to run requirements → planner → wave orchestrator → merger → reviewer → supervisor. Repeat orchestrate → merge → review for each wave; allow reviewer rework to return to the same wave and supervisor replan to return to planning. Remove disabled reviewer/supervisor nodes from the graph rather than bypassing them. |
+| **Date** | 2026-08-07 |
+| **Context** | The temporary pipeline diagram and ChatGPT/Claude research converged on six responsibilities, but the drawing alone did not specify wave repetition, loop bounds, or how optional gates should affect topology. The implementation needed resumable state, interrupts for user clarification, and explicit backward routes without scattering configuration checks through every router. |
+| **Options Considered** | A straight single-pass script; Maestro as the entire controller; one large orchestration agent; a LangGraph state machine with explicit stages and semantic routes. |
+| **Chosen Solution** | Compile a LangGraph whose routers return semantic keys and whose edge maps translate those keys to the enabled topology. Bound review at two rework rounds per wave and supervision at one replan per run. Record guard exhaustion as `bounded`, not `completed`. |
+| **Rationale** | The graph makes pauses, resumes, loops, and terminal states inspectable. Semantic routes keep toggles in one place. Removing a disabled node means it cannot incur cost, appear in the log, or be reached accidentally. The two loops represent different judgments: reviewer findings concern implementation of a wave; supervisor findings may invalidate the plan itself. |
+| **Impact** | `orchestrator/graph.py`, `routes.py`, and `state.py` own topology and termination. Reviewer and supervisor are configurable quality gates. Only judgment stages can send the pipeline backward. |
+
+---
+
+## ADR-018 · Derive waves deterministically and treat each wave as reversible Git integration
+
+| Field | Detail |
+|---|---|
+| **Decision** | Let the planner define tasks and dependency edges, derive dependency waves in code, branch every same-wave task from one base SHA, merge successful task branches provisionally, and reset integration to that base when a wave is rejected. |
+| **Date** | 2026-08-07 |
+| **Context** | Research showed that asking a model to put independent tasks in the same wave produces plausible schedules whose errors are silent. Parallel tasks also cease to be independent if their worktrees start from different commits. Review must be able to reject integrated work without destroying task evidence or the coding sessions needed for rework. |
+| **Options Considered** | Model-generated wave numbers; serial execution in one checkout; permanent merge on first success; isolated worktrees with code-derived waves and reversible integration. |
+| **Chosen Solution** | Normalize planner dependencies, validate dangling references and cycles, derive waves with Kahn's algorithm, create a task worktree/branch for each task from the same integration SHA, merge sequentially into a provisional integration branch, and rewind on rework or replan while retaining task branches and session ids. |
+| **Rationale** | Task decomposition is judgment; topological scheduling is arithmetic. Git supplies the transaction boundary and observable evidence. Rewinding integration preserves correctness while retained branches and session ids preserve inspectability and continuity. |
+| **Impact** | Implemented in `planner/waves.py`, `wave_orchestrator/`, `worktrees.py`, and `merger/`. Same-wave tasks can run concurrently without seeing one another's partial work. Rework and replan have distinct reset points. |
+
+---
+
+## ADR-019 · Normalize every agent backend behind a closed, non-raising adapter contract
+
+| Field | Detail |
+|---|---|
+| **Decision** | Make direct Claude, direct Codex, Maestro delegation, and the scripted stub implement one request/result contract. Adapter calls return classified failures and never let a worker traceback escape into graph routing. |
+| **Date** | 2026-08-07 |
+| **Context** | The August 6 CLI experiments showed that vendor runtimes differ in prompt transport, final-answer channels, session telemetry, error placement, permissions, model entitlement, and timeout behavior. Maestro adds lifecycle features but its timeout is stale-stream based rather than a wall-clock bound. |
+| **Options Considered** | Vendor-specific calls inside each node; Maestro-only invocation; a common adapter interface with transport-specific normalization; exceptions as the common error path. |
+| **Chosen Solution** | Define `AgentRequest` and `AgentResult` in `adapters/base.py`, keep a closed error taxonomy, place wall-clock deadlines around subprocesses, preserve vendor telemetry when available, and select direct, Maestro, or stub transport through configuration. |
+| **Rationale** | A supervisor can route around a worker that failed; it cannot route around a traceback. A closed taxonomy lets routers match exhaustively without parsing prose. Keeping transport separate from vendor preserves direct control while allowing Maestro's lifecycle when desired. |
+| **Impact** | Nodes call one stable boundary. Claude can resume sessions and report cost; Codex uses a designated output file; Maestro resolves the repo-local executable and runs synchronously; tests use a first-class stub that fails when a step was not scripted. |
+
+---
+
+## ADR-020 · Make durable artifacts and observable repository state the source of continuity and acceptance
+
+| Field | Detail |
+|---|---|
+| **Decision** | Persist requirements, explicit user choices, plans, task contracts, events, learnings, reviews, checkpoints, and logs outside the target repository. Treat agent reports as claims and Git/filesystem observations as evidence. |
+| **Date** | 2026-08-07 |
+| **Context** | Earlier sandbox runs ended cleanly while producing nothing, agents reported files they could not write, and a merge reviewer approved bytes it could not see. Requirements clarification also needed to survive LangGraph interrupts without paying for the survey twice or asking a model to avoid inventing user choices. |
+| **Options Considered** | Conversation-only state; one model-written summary; artifacts inside the target checkout; orchestrator-owned artifacts plus SQLite checkpoints and repository evidence. |
+| **Chosen Solution** | Store one run under `orchestrator/runs/<run-id>/`, checkpoints under `orchestrator/checkpoints/`, and logs under `orchestrator/run_logs/`. Split requirements survey from clarification, record Q&A verbatim in `user_choices.md`, compare claimed files to Git diffs, and verify conflict resolution through both Git and marker scans. |
+| **Rationale** | Durable entry-time reconstruction survives agents, vendors, checkouts, and process restarts. Orchestrator-owned Q&A cannot add assumptions the user never made. Acceptance based on observable state closes the plausible-empty-result failure class. |
+| **Impact** | Runs are auditable and resumable by id. Artifact writes are immediate; events and learnings are append-only. Review and supervision receive both claims and evidence. |
+
+---

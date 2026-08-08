@@ -4,7 +4,7 @@
 
 Produces `context.md` and `user_choices.md`. Has no incoming feedback edge: once
 the user's requirements are captured the pipeline never re-asks for them, it only
-re-plans against them (Agent-Pipeline-Diagram.md section 2).
+re-plans against them (docs/Research.md topic 23).
 
 **Why this one box is two nodes.** LangGraph's `interrupt()` suspends the graph,
 and on resume it re-executes the node **from its first line** — the interrupted

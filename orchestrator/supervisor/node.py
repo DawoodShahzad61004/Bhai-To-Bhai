@@ -16,7 +16,7 @@ the plan was fine, the work was not. The supervisor rejects a *result*: the work
 may have been fine and the plan wrong or incomplete. Sending supervisor feedback
 to the coding agents would ask them to fix something they did correctly.
 
-**The open question this closes.** Agent-Pipeline-Diagram.md section 6 notes that
+**The open question this closes.** docs/Architecture.md, "Supervisor" notes that
 if the supervisor finds the requirements themselves were misunderstood, replanning
 against the same context.md reproduces the misunderstanding — and that whether
 that should escalate to the user is unspecified. It escalates: `MAX_REPLAN_ROUNDS`

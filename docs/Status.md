@@ -20,7 +20,7 @@
 
 ---
 
-### August 2026 — Settling the execution layer, specifying the mechanics that carry the failover feature, and writing the first code
+### August 2026 — From execution-layer research and sandbox failures to the complete production orchestrator
 
 - **Closed the execution-layer question:** evaluated OpenHands and Claw Orchestrator hands-on rather than from documentation, reviewed Temporal for the durable-workflow slot, then adopted Maestro after Maestro-flow and Flow-next surfaced — see `Research.md` topics 5, 7, 8 and ADR-004.
 - **Specified the two mechanics the headline feature depends on:** handoff-by-reconstruction (ADR-005) and the budget ledger with reactive limit detection (ADR-006).
@@ -107,5 +107,20 @@
 * **One discrepancy found while writing this up and left open:** `USE_CLAUDE_CODE_AGENTS` defaults to `True` while the comment directly above it says the flag is off by default so the LangChain path "stays the one that works out of the box" (#25). A fresh clone therefore runs the whole pipeline through the paid CLI, at a measured $1.05 per run, and fails outright without a subscription. Not changed here — which of the two is wrong is a call for the author.
 * No orchestrator-track code was written this session; `Bugs.md` #3 (the preflight's Maestro probe and the missing `requirements.txt`) remains open and untouched, and is now the only thing standing in `orchestrator/` while the sandbox holds the only working agent-CLI adapters in the repository.
 * Tracked in: `docs/Bugs.md` (#16–#25, follow-up on #15), `docs/Decisions.md` (ADR-014, ADR-015, ADR-016; status updates on ADR-006, ADR-008, ADR-011, ADR-013), `docs/Research.md` (topics 16–18), `docs/Architecture.md` (Implementation Status tree and mapping table extended, stack table amended, changelog entry), `README.md`, `graphify-out/`, and `yt_tutorial/` across commits `ef6b559`, `6417429`, and `0632e4a`.
+
+---
+
+
+#### 2026-08-07 — The production six-agent orchestrator designed, implemented, and covered by 189 tests
+
+* Planned the production workflow now implemented in `orchestrator/`: requirements → plan → orchestrate → merge → review → supervise, with clarification, per-wave rework, next-wave progression, and requirement-level replanning as explicit routes.
+* Researched the design with ChatGPT and Claude, then converted the results into two temporary implementation sources: a pipeline-diagram transcription and detailed six-agent notes. The durable conclusions are now recorded in `Architecture.md`, ADR-017 through ADR-020, and `Research.md` topics 19–23.
+* Implemented the complete controller: LangGraph topology and semantic routers; checkpointed state and reducers; requirements survey/clarification; deterministic dependency waves; concurrent coding dispatch in Git worktrees; reversible integration; merge conflict verification; per-wave review; final supervision; direct Claude/Codex, Maestro, and stub adapters; artifacts; logging; parsing; preflight; and CLI entry/resume behavior.
+* Kept judgment and mechanics separate. Models choose requirements interpretations, tasks, dependencies, code, review findings, and final verdicts; code derives waves, applies bounds, moves the cursor, observes Git, verifies merge state, persists artifacts, and distinguishes `bounded` from `completed`.
+* Added `requirements.txt`, `requirements-dev.txt`, and `pytest.ini`. The implementation commit is titled `Workflow implemented` and records 8,888 insertions across 53 files; Git's local timestamp crossed into August 8 even though the work and chat belong to the August 7 session.
+* Added 10 orchestrator test files with 189 tests. The final recorded full-suite result is `189 passed in 24.55s`. Paid live coverage remains deliberately narrower: one Claude adapter probe is captured in `orchestrator/run_logs/live_probe_20260807_194239.debug.log`; no paid six-agent end-to-end run has been claimed.
+* Found three latent production-code defects while documenting the implementation: incomplete merge-context propagation, duplicate requirements routers, and successful-run worktree leakage (`Bugs.md` #26–#28). They are recorded, not hidden behind the passing suite.
+* Retired `orchestrator/Agent-Pipeline-Diagram.md` and `orchestrator/Agents Notes.md` after incorporating their verified content into the five permanent project documents and README.
+* Tracked in: `docs/Architecture.md` (production rewrite), `docs/Bugs.md` (#26–#28 and #3 follow-up), `docs/Decisions.md` (ADR-017–ADR-020), `docs/Research.md` (topics 19–23), `docs/Status.md`, `README.md`, and `graphify-out/`.
 
 ---

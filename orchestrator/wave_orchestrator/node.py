@@ -7,7 +7,7 @@
 Reads the plan and runs one wave of coding subagents per invocation. The drawing
 shows `Orchestrate -> Merge -> Review` as a single pass; it is actually the
 pipeline's inner loop, executed once per wave, with the supervisor sitting
-outside it (Agent-Pipeline-Diagram.md section 5).
+outside it (docs/Architecture.md, "High-Level Architecture").
 
 This is the other re-entry point. The reviewer sends a wave back here when the
 implementation is unacceptable — the plan was fine, the work was not — and the
