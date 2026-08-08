@@ -288,3 +288,31 @@
 | **Impact** | Runs are auditable and resumable by id. Artifact writes are immediate; events and learnings are append-only. Review and supervision receive both claims and evidence. |
 
 ---
+
+## ADR-021 · Trade session-file persistence for actual vendor resume capability, on both the Codex and Claude adapters
+
+| Field | Detail |
+|---|---|
+| **Decision** | Stop suppressing vendor session persistence on cold-start turns for both Codex (`--ephemeral`) and Claude Code (`--no-session-persistence`), accepting one session file per dispatch under each vendor's own storage as the cost of the reviewer's rework loop being able to resume the agent that did the work. |
+| **Date** | 2026-08-08 |
+| **Context** | Both adapters carried a comment claiming vendor session resume didn't work for that CLI, but each was wrong for a different reason once tested empirically (`Bugs.md` #30, #31). Codex's `codex.py` believed `codex exec` reported no session id at all; it does, on the `--json` event stream, but `--ephemeral` — used to avoid leaving files behind — discards the rollout that `resume` needs, so the id it returned was never actually resumable. Claude's `claude.py` believed resume worked; `--no-session-persistence` made every cold-start turn's `session_id` look valid while being backed by nothing on disk, so `--resume` failed with "No conversation found with session ID" — not a cold start, a hard failure. |
+| **Options Considered** | (A) Leave both as-is and accept cold-starting (Codex) / failing (Claude) rework turns — costs nothing in disk but the rework loop cannot use the session it asks for, which defeats its purpose. · (B) Persist sessions for both vendors, unconditionally. · (C) Persist only when a rework loop is actually expected to follow (e.g., only after a reviewer rejection) — avoids the disk cost on tasks that never get reworked, at the cost of a second code path and a race between "decide to persist" and "the turn already ran ephemeral." |
+| **Chosen Solution** | (B). Drop `--ephemeral` from Codex's cold-start invocation; drop `--no-session-persistence` from Claude's. |
+| **Rationale** | The rework loop's entire value is that a fix attempt happens inside the same vendor session that produced the mistake — "here is what you got wrong" needs an agent that remembers doing it. Conditionally persisting (C) requires knowing in advance whether a given dispatch will need rework, which is not knowable at dispatch time, and would mean re-running the first turn under different flags after the fact, which is not possible once it has completed. Persisting unconditionally is a small, bounded cost paid once per dispatch, and the case it exists for is exactly the case that would otherwise fail (Claude) or silently under-deliver (Codex). |
+| **Impact** | Every dispatch on either vendor now leaves a session file — under `CODEX_HOME` for Codex, in the user's own Claude Code history for Claude — with no pruning mechanism yet in place. Verified end to end for both adapters through `adapters.run_agent()`: a cold turn given a codeword and a resumed turn asked to recall it return the same session identifier and the correct answer on both vendors. `cost_usd` remains unaffected and still 0.0 for Codex, since `--json` reports token counts but never a price (ADR-006's mixed-ledger state is unchanged). `adapters/maestro.py`'s own `--resume` construction was not audited for the same class of gap and may carry an equivalent defect; noted as unexamined rather than assumed correct. |
+
+---
+
+## ADR-022 · Scrub and normalize the subprocess environment once, in one place, for every vendor CLI
+
+| Field | Detail |
+|---|---|
+| **Decision** | Add `subprocess_env()` to `orchestrator/adapters/base.py`, building one scrubbed environment — `PYTHONHOME`/`PYTHONPATH` stripped, `PYTHONUTF8`/`PYTHONIOENCODING` forced to UTF-8, the project's local `node_modules/.bin` prepended to `PATH` — and use it for every vendor CLI subprocess (`claude.py`, `codex.py`, `maestro.py`), rather than fixing each Windows environment failure at the call site it happened to surface at. |
+| **Date** | 2026-08-08 |
+| **Context** | A requirements-stage tool failed with `ImportError: DLL load failed while importing _bz2` inside a Codex subprocess (`Bugs.md` #29), traced to Windows console-script launchers being able to inherit one Python installation's environment variables while running a different interpreter's binary — a mismatch invisible on pure-Python imports and fatal only on compiled stdlib extensions. The same subprocess boundary is crossed by three different adapters, so a fix scoped to the one call site that happened to hit it first would leave the other two exposed to the same class of failure under different triggering conditions. |
+| **Options Considered** | (A) Patch the one failing call site — smallest immediate change, but the inherited-environment problem is per-subprocess, not per-tool, so it would recur under `claude.py` or `maestro.py` the next time either shells out to something Python-based. · (B) Fix it at the calling shell/session level (e.g., document "clear `PYTHONHOME` before running the orchestrator") — pushes the fix onto the user and does not survive a differently-configured machine. · (C) One function building a scrubbed environment, called by every adapter's subprocess invocation. |
+| **Chosen Solution** | (C). |
+| **Rationale** | This is the same argument ADR-010 made for the TGI wire-format shim: the defect is at a boundary every consumer crosses, so the fix belongs at the boundary, once, rather than distributed across call sites that each independently rediscover it. Forcing UTF-8 encoding in the same function additionally closes a second, related class of Windows failure (encoding corruption in logged prompt/reply text) with no extra call site. |
+| **Impact** | Every vendor CLI subprocess this project spawns now runs with a known-clean environment regardless of what the parent orchestrator process happened to inherit. A new test asserts the scrubbing behavior directly. This does not change vendor selection, cost accounting, or session behavior (see ADR-021 for those) — it only removes one class of environment-dependent failure from the subprocess boundary all three adapters share. |
+
+---

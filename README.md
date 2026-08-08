@@ -19,18 +19,18 @@ An open-source orchestration controller that coordinates existing coding-agent C
 
 The real system is `orchestrator/`. It contains the complete six-stage controller, adapters, checkpointing, artifact persistence, worktree/branch management, routing, rollback, bounded feedback loops, and CLI entry/resume behavior. The implementation arrived in the `Workflow implemented` change with **8,888 insertions across 53 files**.
 
-The orchestrator has **189 tests across 10 test files**, recorded passing on 2026-08-07. The suite uses the first-class stub transport, so graph, state, worktree, merge, rework, replan, and failure behavior can be exercised deterministically without paid agent calls.
+The orchestrator has **193 tests across 10 test files**, recorded passing on 2026-08-08 (189 on 2026-08-07, plus adapter session-resume and environment-scrubbing tests added the following day). The suite uses the first-class stub transport, so graph, state, worktree, merge, rework, replan, and failure behavior can be exercised deterministically without paid agent calls.
 
-One real Claude adapter probe is preserved in `orchestrator/run_logs/live_probe_20260807_194239.debug.log`: structured output parsed successfully, a session id was captured, and the one-turn call cost `$0.067745`. There has not yet been a paid six-agent end-to-end run against a real target repository.
+One real Claude adapter probe is preserved in `orchestrator/run_logs/live_probe_20260807_194239.debug.log`: structured output parsed successfully, a session id was captured, and the one-turn call cost `$0.067745`. Two full live runs against real target repositories were diagnosed on 2026-08-08 (`docs/Research.md` topic 24): one failed at worktree setup against an uncommitted target repository (`docs/Bugs.md` #32), the other completed and was accepted by the supervisor but shipped a latent HTML rendering defect the pipeline's checks did not cover (`docs/Bugs.md` #33). There has not yet been a paid six-agent end-to-end run that is both live and defect-free.
 
 ### Repository tracks
 
 | Track | Purpose | State |
 |---|---|---|
-| `orchestrator/` | Production six-stage workflow and its tests. | Implemented; 189-test stub-backed suite passes. |
+| `orchestrator/` | Production six-stage workflow and its tests. | Implemented; 193-test stub-backed suite passes. |
 | `yt_tutorial/` | Simplified LangGraph, Claude Code, Codex, and multi-agent experiments used to learn the failure modes that shaped production. | Learning sandbox only; not imported by production. |
 
-Open production findings are recorded in `docs/Bugs.md` #26–#28: the merge agent receives incomplete “ours” context, requirements routing has a duplicate unwired implementation, and successful runs leave task worktrees on disk. The standalone preflight's bare Maestro lookup remains the open half of bug #3.
+Open production findings are recorded in `docs/Bugs.md` #26–#28 (the merge agent receives incomplete “ours” context, requirements routing has a duplicate unwired implementation, and successful runs leave task worktrees on disk) and #32–#33 (worktree setup assumes the target repository already has a commit on `master`, and a generated HTML deliverable can ship a latent rendering defect the reviewer's checks don't cover). Bug #3 (Maestro binary resolution) and the Windows subprocess-environment/session-resume defects (`Bugs.md` #29–#31) are closed as of 2026-08-08.
 
 ## Pipeline
 
@@ -54,6 +54,17 @@ pip install -r requirements-dev.txt
 npm install
 ```
 
+`requirements.txt` includes `python-dotenv`; without it, importing `orchestrator/config.py` fails even before a run starts.
+
+### Before you run it
+
+The orchestrator does not currently preflight these on its own — `orchestrator/preflight.py` checks them but is not called automatically by `main.py`, so run it by hand (`python orchestrator/preflight.py`) before a real target:
+
+- **The `--target` path must already exist and be a Git repository with at least one commit on its default branch.** A freshly `git init`-ed repository with no commits passes the "is a repo" check but fails later, mid-run, at worktree setup — `fatal: Needed a single revision` / `fatal: not a valid object name: 'master'` — only after requirements and planning have already run and spent agent budget (`docs/Bugs.md` #32). `git init && git commit --allow-empty -m "init"` is enough to satisfy it.
+- **Whichever agent CLI is selected in `config.AGENTS` (Claude Code and/or Codex) must be installed and resolvable from the environment the orchestrator's subprocesses run in**, not just from an interactive shell where `PATH` was fixed by hand. On Windows this means the `.cmd` shim specifically — `codex.cmd`, `claude.cmd`/`claude.exe` — since a name that resolves in one shell does not automatically resolve the same way inside a spawned subprocess.
+- **Maestro resolves repo-locally, not globally**: `node_modules/.bin/maestro.cmd` on Windows (`.bin/maestro` elsewhere) takes precedence over `PATH`, configurable via the `MAESTRO_BIN` env var. Run `npm install` first — without it, both the standalone preflight and any agent's own `maestro search` tool calls fail with `maestro: command not found`.
+- **MongoDB should be reachable** (`pymongo` is pinned in `requirements.txt` specifically for the preflight's connectivity check); the pipeline itself does not depend on it for state, which lives in SQLite checkpoints and the run's artifact directory instead.
+
 Inspect the effective topology and agent configuration without starting a run:
 
 ```bash
@@ -71,8 +82,6 @@ Resume a paused or interrupted run:
 ```bash
 python orchestrator/main.py --resume <run-id>
 ```
-
-Maestro is installed repo-locally under `node_modules/.bin/`; the Maestro adapter resolves that location before falling back to `PATH`.
 
 ## Documentation
 

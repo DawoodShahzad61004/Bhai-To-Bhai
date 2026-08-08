@@ -156,9 +156,9 @@ Supervisor replans are bounded by `MAX_REPLAN_ROUNDS`. Exhaustion records `bound
 
 | Module | Responsibility |
 |---|---|
-| `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult`, the closed error taxonomy, adapter selection, and the non-raising boundary used by every node. |
-| `orchestrator/adapters/claude.py` | Runs Claude Code through stdin with JSON output, tool/budget controls, wall-clock timeout, telemetry, and session resume. |
-| `orchestrator/adapters/codex.py` | Runs `codex exec` through stdin with workspace sandboxing and a dedicated final-answer file; reads errors from the end of stderr. |
+| `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult`, the closed error taxonomy, adapter selection, the non-raising boundary used by every node, and a scrubbed, UTF-8-forced subprocess environment (`subprocess_env()`) shared by every vendor CLI adapter. |
+| `orchestrator/adapters/claude.py` | Runs Claude Code through stdin with JSON output, tool/budget controls, wall-clock timeout, telemetry, and vendor session resume (sessions are persisted rather than suppressed on cold start, so `--resume` has something to resume). |
+| `orchestrator/adapters/codex.py` | Runs `codex exec` through stdin with workspace sandboxing and a dedicated final-answer file; reads errors from the end of stderr, and parses `--json` events for a resumable thread id. |
 | `orchestrator/adapters/maestro.py` | Runs synchronous `maestro delegate`, resolves the repo-local binary, and adds a wall-clock deadline above Maestro's stale-stream timeout. |
 | `orchestrator/adapters/stub.py` | Provides deterministic scripted replies for offline end-to-end tests and deliberately fails unscripted tags. |
 
@@ -172,7 +172,7 @@ Transport and vendor are separate choices. Supported invocation modes are direct
 | `orchestrator/artifacts.py` | Creates run directories and performs immediate atomic or append-only artifact writes. |
 | `orchestrator/parsing.py` | Extracts and validates structured JSON from agent replies, including fenced output. |
 | `orchestrator/logging_config.py` | Correlates console and persistent file logs by run id, including worker-thread context. |
-| `orchestrator/preflight.py` | Standalone environment probe for agent binaries, Maestro, MongoDB, and Git worktrees; it is not called by `main.py`. |
+| `orchestrator/preflight.py` | Standalone environment probe for agent binaries, Maestro (resolved through the same local-install precedence as `adapters/maestro.py`), MongoDB, and Git worktrees; it is not called by `main.py`. |
 
 ## Configuration and Model Tiers
 
@@ -206,11 +206,11 @@ Task claims are compared with Git diffs, conflict claims with index and marker s
 
 ## Testing and Operational Evidence
 
-The orchestrator has **189 tests across 10 test files**. They cover configuration, graph wiring/toggles, CLI behavior, requirements interrupts, deterministic waves, dispatch/worktrees/reverts, merging, reviewing, supervision, and terminal bounds. The full suite was recorded passing on 2026-08-07; workflow tests use the first-class stub transport so they are deterministic and incur no agent cost.
+The orchestrator has **193 tests across 10 test files**. They cover configuration, graph wiring/toggles, CLI behavior, requirements interrupts, deterministic waves, dispatch/worktrees/reverts, merging, reviewing, supervision, terminal bounds, subprocess environment scrubbing, and vendor session-id extraction. The full suite was recorded passing on 2026-08-07 (189 tests) and again on 2026-08-08 after the adapter session-resume fixes (193 tests); workflow tests use the first-class stub transport so they are deterministic and incur no agent cost.
 
-`orchestrator/run_logs/live_probe_20260807_194239.debug.log` records a real Claude adapter probe: one turn, structured output parsed, session id captured, approximately 4.8 seconds, and `$0.067745`. There has not yet been a paid six-agent end-to-end run; worktree merge, rework, replan, and recovery are validated by the stub-backed suite rather than a paid live target.
+`orchestrator/run_logs/live_probe_20260807_194239.debug.log` records a real Claude adapter probe: one turn, structured output parsed, session id captured, approximately 4.8 seconds, and `$0.067745`. Two full live runs against real target repositories were diagnosed read-only on 2026-08-08 (`Research.md` topic 24): one failed at worktree setup against an uncommitted target repository, the other completed and was accepted by the supervisor but contained a latent rendering defect the pipeline's checks did not cover. There has not yet been a paid six-agent end-to-end run that both succeeds and is defect-free; worktree merge, rework, replan, and recovery remain primarily validated by the stub-backed suite.
 
-Known open findings are tracked in `docs/Bugs.md` #26–#28: incomplete merge-context propagation, duplicate requirements routing logic, and successful-run worktree cleanup.
+Known open findings are tracked in `docs/Bugs.md` #26–#28 (incomplete merge-context propagation, duplicate requirements routing logic, and successful-run worktree cleanup) and #32–#33 (unborn-repository worktree setup, and a browser-rendered HTML defect from an unescaped comment marker).
 
 ## Technology Stack
 
@@ -222,7 +222,7 @@ Known open findings are tracked in `docs/Bugs.md` #26–#28: incomplete merge-co
 | Isolation and integration | Git branches and worktrees |
 | Persistence and audit | Markdown/JSON artifacts, JSONL events, per-run DEBUG logs |
 | Environment probe | Git, agent binaries, repo-local Maestro, MongoDB connectivity |
-| Tests | pytest, 189 tests |
+| Tests | pytest, 193 tests |
 
 The runtime dependency list is intentionally small. Agents are external subprocesses, so the project does not need model SDKs. `pymongo` exists for the standalone preflight probe, not for pipeline storage.
 
@@ -263,3 +263,9 @@ Claude Code and Codex were invoked directly and concurrently. The experiments es
 The design was researched with ChatGPT and Claude, specified in temporary pipeline notes, and implemented as the complete `orchestrator/` runtime: requirements, planner, wave orchestrator, merger, reviewer, supervisor, adapters, Git worktrees, artifacts, semantic routing, checkpoint/resume support, bounds, and audit logging.
 
 The implementation commit is recorded by Git as `Workflow implemented` with **8,888 insertions across 53 files**; its timestamp crossed midnight locally, while the work and chat history belong to the August 7 session. The project added `requirements.txt`, `requirements-dev.txt`, `pytest.ini`, 10 test files, and **189 passing tests**. The temporary architecture notes were retired after their decisions and rationale were incorporated into the permanent documentation.
+
+---
+
+### 2026-08-08 — Windows-adapter regressions and vendor session resume fixed; two live runs diagnosed
+
+Two Windows-specific defects in the adapter layer were fixed: Maestro binary resolution in `preflight.py` finally adopted the precedence `adapters/maestro.py` already used, and a new scrubbed subprocess environment (`adapters/base.py::subprocess_env()`) closed a `_bz2` import failure traced to inherited Python environment variables crossing a Windows console-script launcher boundary. Vendor session resume, previously non-functional on both Codex (a session id was captured but the session itself was discarded via `--ephemeral`) and Claude Code (`--no-session-persistence` returned a session id `--resume` then rejected outright), was proven broken empirically on both and fixed on both, so the reviewer's rework loop can now actually resume the agent that made a mistake rather than cold-starting or failing. Two real runs against external target repositories were separately diagnosed read-only, surfacing an unborn-repository worktree-setup failure and a browser-visible HTML defect the reviewer's checks did not cover. The test suite grew from 189 to 193 tests.
