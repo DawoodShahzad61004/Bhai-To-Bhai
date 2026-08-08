@@ -156,20 +156,20 @@ class AgentSpec:
 # `backend="codex"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="claude", model="haiku", deadline_seconds=300),
-    "wave_orchestrator": AgentSpec(backend="claude", model="haiku", deadline_seconds=900),
-    "merger": AgentSpec(backend="claude", model="haiku", deadline_seconds=600),
+    "requirements": AgentSpec(backend="codex", model="", deadline_seconds=300),
+    "wave_orchestrator": AgentSpec(backend="codex", model="", deadline_seconds=900),
+    "merger": AgentSpec(backend="codex", model="", deadline_seconds=600),
     # ── Larger model: judgment work ──────────────────────────────────────────
-    "planner": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600),
-    "reviewer": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600),
-    "supervisor": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600),
+    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
+    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600),
+    "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600),
 }
 
 # The coding subagents dispatched inside a wave. These are the only agents that
 # write to the target repository, and they are the reason the merger exists.
 CODING_AGENT = AgentSpec(
-    backend=os.getenv("CODING_AGENT_BACKEND", "claude"),
-    model=os.getenv("CODING_AGENT_MODEL", "sonnet"),
+    backend=os.getenv("CODING_AGENT_BACKEND", "codex"),
+    model=os.getenv("CODING_AGENT_MODEL", ""),
     deadline_seconds=_int("CODING_AGENT_DEADLINE_SECONDS", 900),
 )
 

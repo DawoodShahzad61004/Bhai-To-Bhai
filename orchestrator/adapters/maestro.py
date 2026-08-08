@@ -24,12 +24,13 @@ two schedulers in the same pipeline.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
-from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary
+from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary, subprocess_env
 import config
 from config import PROJECT_ROOT, AgentSpec
 from logging_config import get_logger
@@ -37,6 +38,16 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 _CONSOLE_EXCERPT = 200
+_DEBUG_BLOCK_LIMIT = 12000
+
+
+def _debug_block(text: str) -> str:
+    if len(text) <= _DEBUG_BLOCK_LIMIT:
+        return text
+    head = text[:4000]
+    tail = text[-4000:]
+    omitted = len(text) - len(head) - len(tail)
+    return f"{head}\n... [{omitted} chars omitted] ...\n{tail}"
 
 # Maestro's own vocabulary. A node says what it is doing; this maps that onto the
 # role Maestro understands, which selects its prompt protocol.
@@ -59,9 +70,16 @@ def _resolve_maestro() -> str:
     what broke when the dependency moved.
     """
     configured = Path(config.MAESTRO_BIN)
+    configured_cmd = configured.with_name(f"{configured.name}.cmd")
+    if os.name == "nt" and configured_cmd.is_file():
+        return str(configured_cmd)
     if configured.is_file():
         return str(configured)
+
     local = PROJECT_ROOT / "node_modules" / ".bin" / "maestro"
+    local_cmd = local.with_name(f"{local.name}.cmd")
+    if os.name == "nt" and local_cmd.is_file():
+        return str(local_cmd)
     if local.is_file():
         return str(local)
     return resolve_binary("maestro")
@@ -127,6 +145,7 @@ def run(
             errors="replace",
             timeout=spec.deadline_seconds,
             cwd=cwd,
+            env=subprocess_env(),
         )
     except FileNotFoundError:
         return AgentResult(
@@ -154,8 +173,8 @@ def run(
     stdout = (completed.stdout or "").strip()
     stderr = (completed.stderr or "").strip()
     if stderr:
-        logger.debug("[%s] stderr:\n%s", tag, stderr)
-    logger.debug("[%s] stdout:\n%s", tag, stdout)
+        logger.debug("[%s] stderr:\n%s", tag, _debug_block(stderr))
+    logger.debug("[%s] stdout:\n%s", tag, _debug_block(stdout))
 
     if completed.returncode != 0:
         # Read the failure from the END of stderr. Maestro prints its own banner

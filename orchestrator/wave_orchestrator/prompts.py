@@ -23,6 +23,10 @@ Ignore the conventions of the repository you are standing in unless this brief \
 tells you otherwise: do not read or follow CLAUDE.md, AGENTS.md, project skills, \
 or hooks, and do not start work beyond your task.
 
+Windows shell safety rules for this pipeline:
+- For paths with spaces, use PowerShell `-LiteralPath` or quote the complete   path; do not pass a split path such as `Marker-PDF Report.md` as two arguments.
+- If a patch/write helper cannot create a file after two attempts, switch to a   native PowerShell write. In Windows PowerShell 5.1, use `-Encoding UTF8` or   `[System.IO.File]::WriteAllText(..., [System.Text.UTF8Encoding]::new($false))`;   do not use `utf8NoBOM`, which only exists in newer PowerShell.
+
 When you are done, reply with a single JSON object and nothing else:
 {{
   "status": "done" | "blocked",

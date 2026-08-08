@@ -12,7 +12,7 @@ import subprocess
 import time
 from typing import Any
 
-from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary
+from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary, subprocess_env
 import config
 from config import AgentSpec
 from logging_config import get_logger
@@ -22,6 +22,16 @@ logger = get_logger(__name__)
 # How much of a reply reaches the console. The debug file keeps all of it; a
 # report is thousands of characters and would bury a run at INFO.
 _CONSOLE_EXCERPT = 200
+_DEBUG_BLOCK_LIMIT = 12000
+
+
+def _debug_block(text: str) -> str:
+    if len(text) <= _DEBUG_BLOCK_LIMIT:
+        return text
+    head = text[:4000]
+    tail = text[-4000:]
+    omitted = len(text) - len(head) - len(tail)
+    return f"{head}\n... [{omitted} chars omitted] ...\n{tail}"
 
 
 def _build_argv(
@@ -114,8 +124,8 @@ def run(
         resume_session=resume_session,
     )
     logger.debug("[%s] argv: %s", tag, argv)
-    logger.debug("[%s] system prompt:\n%s", tag, system_prompt)
-    logger.debug("[%s] prompt:\n%s", tag, prompt)
+    logger.debug("[%s] system prompt:\n%s", tag, _debug_block(system_prompt))
+    logger.debug("[%s] prompt:\n%s", tag, _debug_block(prompt))
 
     started = time.perf_counter()
     try:
@@ -128,6 +138,7 @@ def run(
             errors="replace",
             timeout=spec.deadline_seconds,
             cwd=cwd,
+            env=subprocess_env(),
         )
     except FileNotFoundError:
         return AgentResult(
@@ -154,7 +165,7 @@ def run(
     elapsed = time.perf_counter() - started
     stderr = (completed.stderr or "").strip()
     if stderr:
-        logger.debug("[%s] stderr:\n%s", tag, stderr)
+        logger.debug("[%s] stderr:\n%s", tag, _debug_block(stderr))
 
     envelope = _parse_envelope(completed.stdout or "")
     if envelope is None:
@@ -211,7 +222,7 @@ def run(
         result.session_id[:8] or "-",
     )
     logger.info("[%s] reply: %s", tag, result.text[:_CONSOLE_EXCERPT])
-    logger.debug("[%s] full reply:\n%s", tag, result.text)
+    logger.debug("[%s] full reply:\n%s", tag, _debug_block(result.text))
     return result
 
 

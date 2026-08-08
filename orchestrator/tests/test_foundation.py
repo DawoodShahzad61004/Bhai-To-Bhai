@@ -7,13 +7,15 @@ real git, because the behaviour under test *is* git's.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 import adapters
 import artifacts as art
 import worktrees as wt
-from adapters.base import AgentResult, _dispatch_key, classify_failure
+import config
+from adapters.base import AgentResult, _dispatch_key, classify_failure, subprocess_env
 from config import AgentSpec
 from state import event, initial_state
 
@@ -79,6 +81,21 @@ def test_rate_limits_are_classified_from_config_markers(message):
 def test_ordinary_failures_keep_their_default_class():
     assert classify_failure("segmentation fault") == "agent_error"
     assert classify_failure("nothing printed", default="no_output") == "no_output"
+
+
+def test_subprocess_env_removes_python_overrides(monkeypatch):
+    monkeypatch.setenv("PYTHONHOME", "C:/bad-python")
+    monkeypatch.setenv("PYTHONPATH", "C:/bad-python/site-packages")
+
+    env = subprocess_env()
+
+    local_bin = str(config.PROJECT_ROOT / "node_modules" / ".bin")
+
+    assert "PYTHONHOME" not in env
+    assert "PYTHONPATH" not in env
+    assert env["PYTHONUTF8"] == "1"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert env["PATH"].split(os.pathsep)[0] == local_bin
 
 
 def test_stub_records_calls_and_replays_scripted_replies(stub):

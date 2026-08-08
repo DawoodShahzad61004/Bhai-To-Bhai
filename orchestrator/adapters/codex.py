@@ -19,7 +19,7 @@ import tempfile
 import time
 from typing import Any
 
-from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary
+from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary, subprocess_env
 import config
 from config import AgentSpec
 from logging_config import get_logger
@@ -27,6 +27,16 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 _CONSOLE_EXCERPT = 200
+_DEBUG_BLOCK_LIMIT = 12000
+
+
+def _debug_block(text: str) -> str:
+    if len(text) <= _DEBUG_BLOCK_LIMIT:
+        return text
+    head = text[:4000]
+    tail = text[-4000:]
+    omitted = len(text) - len(head) - len(tail)
+    return f"{head}\n... [{omitted} chars omitted] ...\n{tail}"
 
 
 def _codex_error(stderr: str) -> str:
@@ -102,7 +112,7 @@ def run(
 
     full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
     logger.debug("[%s] argv: %s", tag, argv)
-    logger.debug("[%s] prompt:\n%s", tag, full_prompt)
+    logger.debug("[%s] prompt:\n%s", tag, _debug_block(full_prompt))
 
     started = time.perf_counter()
     try:
@@ -116,6 +126,7 @@ def run(
                 errors="replace",
                 timeout=spec.deadline_seconds,
                 cwd=cwd,
+                env=subprocess_env(),
             )
         except FileNotFoundError:
             return AgentResult(
@@ -141,8 +152,8 @@ def run(
         elapsed = time.perf_counter() - started
         stderr = (completed.stderr or "").strip()
         if stderr:
-            logger.debug("[%s] stderr:\n%s", tag, stderr)
-        logger.debug("[%s] stdout:\n%s", tag, (completed.stdout or "").strip())
+            logger.debug("[%s] stderr:\n%s", tag, _debug_block(stderr))
+        logger.debug("[%s] stdout:\n%s", tag, _debug_block((completed.stdout or "").strip()))
 
         try:
             with open(last_message, "r", encoding="utf-8") as handle_in:
@@ -171,7 +182,7 @@ def run(
 
         logger.info("[%s] codex done | %.1fs", tag, elapsed)
         logger.info("[%s] reply: %s", tag, text[:_CONSOLE_EXCERPT])
-        logger.debug("[%s] full reply:\n%s", tag, text)
+        logger.debug("[%s] full reply:\n%s", tag, _debug_block(text))
         # Codex has no session id in `exec` output, so the reviewer's rework loop
         # cold-starts against this vendor rather than resuming. Stated here
         # rather than discovered later.

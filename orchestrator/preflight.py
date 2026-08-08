@@ -137,6 +137,17 @@ def _first_output_line(process: subprocess.CompletedProcess[str]) -> str:
     return output.splitlines()[0] if output else "no version output"
 
 
+def _maestro_command(project_root: Path) -> str:
+    configured = os.environ.get("MAESTRO_BIN")
+    if configured:
+        return configured
+    suffix = ".cmd" if os.name == "nt" else ""
+    local = project_root / "node_modules" / ".bin" / f"maestro{suffix}"
+    if local.is_file():
+        return str(local)
+    return "maestro"
+
+
 def check_version(name: str, command: str, timeout: float) -> CheckResult:
     try:
         invocation, resolved = _resolve_executable(command)
@@ -216,7 +227,7 @@ def run_preflight(
     mongodb_uri: str,
     timeout: float,
 ) -> list[CheckResult]:
-    results = [check_version("Maestro", "maestro", timeout)]
+    results = [check_version("Maestro", _maestro_command(project_root), timeout)]
 
     try:
         loaded_path, config = _load_cli_tools(project_root, config_path)

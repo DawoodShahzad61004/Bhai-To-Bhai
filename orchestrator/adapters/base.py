@@ -19,6 +19,7 @@ them is this layer's problem.
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
@@ -155,6 +156,29 @@ def resolve_binary(name: str) -> str:
     FileNotFoundError from somewhere less informative.
     """
     return shutil.which(name) or name
+
+
+def subprocess_env() -> dict[str, str]:
+    """Environment passed to vendor CLIs.
+
+    Coding agents run project tools from inside their own subprocesses. If a
+    parent shell leaks Python path overrides, Windows console-script launchers
+    can mix one Python's site-packages with another Python's stdlib/DLLs; the
+    observed signature is `ImportError` while importing compiled stdlib modules
+    such as `_bz2`. Keep user-site packages available, but remove interpreter
+    overrides and force UTF-8 text boundaries.
+    """
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+
+    local_bin = str(config.PROJECT_ROOT / "node_modules" / ".bin")
+    path_parts = [part for part in env.get("PATH", "").split(os.pathsep) if part]
+    if local_bin not in path_parts:
+        env["PATH"] = os.pathsep.join([local_bin, *path_parts])
+    return env
 
 
 def run_agent(
