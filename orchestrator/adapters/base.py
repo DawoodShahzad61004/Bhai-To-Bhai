@@ -63,8 +63,9 @@ class AgentResult:
 
     # ── Always populated where the CLI reported it ───────────────────────────
     # Consumption, never remaining — no vendor exposes remaining allowance
-    # (Research.md topic 6). Claude Code reports all of this; Codex reports none
-    # of it, which is the mixed-measurement state ADR-006 argues for on principle.
+    # (Research.md topic 6). Claude Code reports all of this; Codex reports the
+    # session id but no cost at any price, which is the mixed-measurement state
+    # ADR-006 argues for on principle.
     cost_usd: float = 0.0
     turns: int = 0
     duration_seconds: float = 0.0

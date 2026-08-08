@@ -16,6 +16,7 @@ import artifacts as art
 import worktrees as wt
 import config
 from adapters.base import AgentResult, _dispatch_key, classify_failure, subprocess_env
+from adapters.codex import _thread_id
 from config import AgentSpec
 from state import event, initial_state
 
@@ -81,6 +82,38 @@ def test_rate_limits_are_classified_from_config_markers(message):
 def test_ordinary_failures_keep_their_default_class():
     assert classify_failure("segmentation fault") == "agent_error"
     assert classify_failure("nothing printed", default="no_output") == "no_output"
+
+
+def test_codex_session_id_comes_from_the_first_json_event():
+    """Codex reports its resumable id once, as event one of the --json stream."""
+    stdout = "\n".join(
+        [
+            '{"type":"thread.started","thread_id":"019fe1aa-9c61-7670-96b0-2339ef174b12"}',
+            '{"type":"turn.started"}',
+            '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OK"}}',
+            '{"type":"turn.completed","usage":{"input_tokens":21760}}',
+        ]
+    )
+    assert _thread_id(stdout) == "019fe1aa-9c61-7670-96b0-2339ef174b12"
+
+
+def test_codex_error_events_do_not_hide_the_session_id():
+    """`item.completed` errors are emitted on turns that succeed (feature
+    warnings), so the id must survive them and they must not be read as failures.
+    A BOM on line one is a Windows pipeline artefact and must not break parsing."""
+    stdout = "\n".join(
+        [
+            '﻿{"type":"thread.started","thread_id":"abc-123"}',
+            '{"type":"item.completed","item":{"type":"error","message":"under-development features enabled"}}',
+            "not json at all",
+        ]
+    )
+    assert _thread_id(stdout) == "abc-123"
+
+
+def test_codex_session_id_is_absent_rather_than_invented():
+    assert _thread_id("") == ""
+    assert _thread_id('{"type":"turn.completed"}') == ""
 
 
 def test_subprocess_env_removes_python_overrides(monkeypatch):

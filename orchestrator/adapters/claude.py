@@ -68,10 +68,14 @@ def _build_argv(
         # this, which is what makes "here is what you got wrong" refer to
         # anything the agent remembers doing.
         argv += ["--resume", resume_session]
-    else:
-        # One-shot turns: persisting them would leave a file per dispatch in the
-        # user's own Claude Code history.
-        argv += ["--no-session-persistence"]
+    # There is deliberately no --no-session-persistence on the cold-start branch.
+    # The flag's own help says sessions "will not be saved to disk and cannot be
+    # resumed", and a turn run under it still hands back a session_id — so the id
+    # looked resumable, was recorded as one, and --resume rejected it with "No
+    # conversation found with session ID". That is not a cold start, it is a
+    # failed turn: the rework loop asked for a session discarded at birth. The
+    # price of persistence is one session file per dispatch in the user's own
+    # Claude Code history, and that is what the rework loop costs.
     return argv
 
 

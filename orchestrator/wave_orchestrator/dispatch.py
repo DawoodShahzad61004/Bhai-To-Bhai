@@ -268,7 +268,7 @@ def run_wave(
     outcomes: list[TaskOutcome] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         # Every task is submitted before any result is collected. That is what
-        # makes them overlap; submitting and immediately waiting would serialise
+        # makes them overlap; submitting and immediately waiting would serialize
         # them for no reason.
         #
         # copy_context() carries the run's correlation id into each thread. A
