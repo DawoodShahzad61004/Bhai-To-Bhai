@@ -1,0 +1,103 @@
+$prompt = @'
+Build a normal responsive website in this empty target repository.
+
+Make it a clean static website for a small local service called 'Bhai Digital Studio'. It should have a homepage, basic navigation, an about/services section, a small portfolio/gallery section, and a contact section. Use simple, maintainable HTML, CSS, and JavaScript. Keep the site easy to open locally in a browser without requiring a backend.
+Divide the implementation in incremental format. First write the HTML and test it. In the next wave, write the css and test it. In the last, write the JavaScript and test it.
+
+Make the implementation complete enough that a reviewer can inspect the files, open the site, and see a polished working website.
+'@
+
+==========================================================================
+==========================================================================
+==========================================================================
+
+$prompt = @'
+Build a complete normal website for a small local business called 'Bhai Digital Studio' in this target repository.
+
+This run is intentionally a workflow stress test. The planner MUST decompose the implementation into multiple independent coding tasks that can run in parallel in the same wave. Use at least 3 independent first-wave coding tasks, and preferably 4, with each task assigned distinct files so the parallel coding agents do not need to edit the same file. Do not make these tasks depend on each other unless absolutely necessary.
+
+The target deliverable is a polished, responsive website with a small local backend integration. Use vanilla HTML, CSS, and JavaScript for the frontend. Add a lightweight local server only where needed for MongoDB-backed functionality.
+
+Use MongoDB running locally on this device. Create and use a new database named `temp_work_db`.
+
+Preferred project structure:
+- `index.html`
+- `styles.css`
+- `app.js`
+- `site-data.js` or `content.json`
+- `server.js`
+- `package.json`
+- `README.md` with local setup, MongoDB, server, and testing instructions
+- optional `tests/` folder for backend/API tests
+
+Required website functionality:
+- A responsive homepage for 'Bhai Digital Studio'
+- Header/navigation with links to sections
+- Hero section with business name, short value proposition, and call-to-action buttons
+- Services section with at least 4 services
+- Portfolio/gallery section with multiple project cards
+- Testimonials or client highlights section
+- Contact section with visible contact details and a contact form UI
+- Footer with business info
+- Mobile-friendly layout
+- Accessible semantic HTML
+- Keyboard-visible focus states
+- JavaScript enhancements such as mobile navigation, smooth scrolling, active section highlighting, gallery filtering, and form validation
+
+MongoDB/local server requirements:
+- Add a local Node.js/Express server.
+- Connect to local MongoDB at `mongodb://127.0.0.1:27017`.
+- Use database `temp_work_db`.
+- Add a contact form submission endpoint, for example `POST /api/contact`.
+- Store contact form submissions in a MongoDB collection such as `contacts`.
+- Add a health or diagnostics endpoint, for example `GET /api/health`, that verifies the server is running and MongoDB is reachable.
+- Add basic validation for contact submissions.
+- Return clear JSON responses from API endpoints.
+- Keep frontend behavior graceful if the backend is not running.
+
+Testing requirements:
+- Include a practical way to test the MongoDB integration locally.
+- Add at least one automated or scripted test that verifies:
+  - the server starts,
+  - MongoDB connection works,
+  - `temp_work_db` is used,
+  - a contact submission can be inserted,
+  - the inserted contact can be verified from MongoDB or via an API response.
+- Document the exact commands to run the tests.
+- If using a test script, keep it simple and runnable with `npm test` or `node <script>`.
+- Do not require a cloud database or external service.
+
+Architecture and task decomposition requirements:
+- Separate structure, styling, behavior, content, backend server, and tests where practical.
+- Ensure first-wave parallel tasks edit different files.
+- Example parallel task split:
+  1. HTML structure and page sections in `index.html`
+  2. Visual system and responsive layout in `styles.css`
+  3. Frontend interactions and contact form behavior in `app.js`
+  4. Content/data and documentation in `site-data.js`, `content.json`, and/or `README.md`
+  5. Local Express/MongoDB server in `server.js` and `package.json`
+  6. MongoDB/API tests in `tests/` or a test script
+- If a later integration task is needed, make it depend on the parallel tasks and use it only to connect files, fix references, verify frontend/backend integration, and run tests.
+
+Each parallel coding agent should record, in its own final JSON report, whether it could see those files and whether it believed it was reading the shared run artifact files or only copied prompt content. If the files are directly accessible and the pipeline instructions permit writing to them, each agent should append a unique short marker line to `learnings.md` using this format:
+
+`PARALLEL_ARTIFACT_TEST <task_id> <timestamp-or-unique-token>`
+
+Do not damage or overwrite any run artifact file. Append only. If writing outside the task worktree is forbidden by the workflow instructions, obey the workflow instruction and report that the write was not attempted or was blocked. This is an explicit test of whether parallel coding agents can share the same run markdown artifacts or only receive copied context.
+
+Resume/interruption check:
+Keep work incremental and evidence-friendly so that if the run is stopped mid-node or between nodes, itcan later be resumed with the orchestrator's resume command. Do not rely on hidden agent memory for correctness. Persist real file changes in the target repository worktree and report exact files changed.
+
+Acceptance criteria:
+- Opening `index.html` directly shows a complete polished website, even if backend features are limiteduntil the server is running.
+- Running the local server enables contact form submission to MongoDB.
+- The server connects to local MongoDB using database `temp_work_db`.
+- CSS and JS are linked correctly.
+- The layout works on desktop and mobile widths.
+- Navigation and JavaScript enhancements work.
+- The implementation uses separate files and clean organization.
+- MongoDB/API testing is implemented and documented.
+- The planner created multiple independent first-wave tasks so coding agents can execute in parallel.
+- Each parallel coding agent reports what happened with `context.md`, `learnings.md`, and `user_choices.md`.
+- The final result should be reviewable through filesystem evidence, test output, and MongoDB/API behavior, not only agent claims.
+'@
