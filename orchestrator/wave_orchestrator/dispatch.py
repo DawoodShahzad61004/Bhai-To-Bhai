@@ -136,6 +136,7 @@ def _parse_report(text: str, structured: dict | None) -> tuple[str, str, list[st
 def run_task(
     task: dict[str, Any],
     *,
+    agent: config.AgentSpec,
     target_repo: str,
     run_id: str,
     base: str,
@@ -174,7 +175,7 @@ def run_task(
             learnings=learnings,
             rework_comments=rework_comments,
         ),
-        spec=config.CODING_AGENT,
+        spec=agent,
         system_prompt=CODING_FRAME,
         cwd=str(workdir),
         tag=f"task-{task_id}",
@@ -237,6 +238,13 @@ def run_wave(
 ) -> list[TaskOutcome]:
     """Dispatch every task in a wave, up to MAX_PARALLEL_TASKS at a time.
 
+    Tasks alternate between config.CODING_AGENT_A and config.CODING_AGENT_B by
+    their position in `tasks`, so a wave of more than one task puts both to
+    work rather than cloning one CLI across every worker. The assignment is
+    keyed off the task's index in the wave's own task order — which is stable
+    across attempts, since it is derived from the plan — so a task's rework
+    lands on whichever of A/B did it the first time.
+
     `sessions` maps task_id to the vendor session that attempted it last time, so
     a rework reaches the same agent rather than briefing a fresh one — which is
     what makes "here is what you got wrong" refer to anything.
@@ -253,9 +261,11 @@ def run_wave(
         base,
     )
 
-    def _call(task: dict[str, Any]) -> TaskOutcome:
+    def _call(index: int, task: dict[str, Any]) -> TaskOutcome:
+        agent = config.CODING_AGENT_A if index % 2 == 0 else config.CODING_AGENT_B
         return run_task(
             task,
+            agent=agent,
             target_repo=target_repo,
             run_id=run_id,
             base=base,
@@ -276,7 +286,8 @@ def run_wave(
         # the logs from concurrent agents lose the id exactly when interleaving
         # makes it necessary (ADR-013).
         futures = [
-            pool.submit(contextvars.copy_context().run, _call, task) for task in tasks
+            pool.submit(contextvars.copy_context().run, _call, index, task)
+            for index, task in enumerate(tasks)
         ]
         for future in futures:
             outcomes.append(future.result())

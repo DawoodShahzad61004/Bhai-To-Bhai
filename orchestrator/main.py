@@ -117,9 +117,14 @@ def describe_config() -> str:
             f"deadline {spec.deadline_seconds}s"
         )
     lines.append(
-        f"  {'coding subagent':<18}{config.CODING_AGENT.backend}/"
-        f"{config.CODING_AGENT.model or '(cli default)':<16}"
-        f"deadline {config.CODING_AGENT.deadline_seconds}s"
+        f"  {'coding subagent A':<18}{config.CODING_AGENT_A.backend}/"
+        f"{config.CODING_AGENT_A.model or '(cli default)':<16}"
+        f"deadline {config.CODING_AGENT_A.deadline_seconds}s"
+    )
+    lines.append(
+        f"  {'coding subagent B':<18}{config.CODING_AGENT_B.backend}/"
+        f"{config.CODING_AGENT_B.model or '(cli default)':<16}"
+        f"deadline {config.CODING_AGENT_B.deadline_seconds}s"
     )
     return "\n".join(lines)
 

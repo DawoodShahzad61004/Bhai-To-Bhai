@@ -30,7 +30,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from adapters.base import AgentResult, classify_failure, register_backend, resolve_binary, subprocess_env
+from adapters.base import (
+    AgentResult,
+    classify_failure,
+    register_backend,
+    resolve_binary,
+    run_with_deadline,
+)
 import config
 from config import PROJECT_ROOT, AgentSpec
 from logging_config import get_logger
@@ -137,15 +143,11 @@ def run(
 
     started = time.perf_counter()
     try:
-        completed = subprocess.run(
+        completed = run_with_deadline(
             argv,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=spec.deadline_seconds,
+            input=None,
             cwd=cwd,
-            env=subprocess_env(),
+            timeout=spec.deadline_seconds,
         )
     except FileNotFoundError:
         return AgentResult(

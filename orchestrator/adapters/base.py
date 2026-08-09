@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -180,6 +181,58 @@ def subprocess_env() -> dict[str, str]:
     if local_bin not in path_parts:
         env["PATH"] = os.pathsep.join([local_bin, *path_parts])
     return env
+
+
+def run_with_deadline(
+    argv: list[str],
+    *,
+    input: str | None,
+    cwd: str,
+    timeout: float,
+) -> subprocess.CompletedProcess:
+    """`subprocess.run`, but a deadline that actually stops the process.
+
+    Every vendor CLI here is an npm-installed `.cmd` shim: Windows runs it as
+    `cmd.exe`, which spawns a `node.exe` grandchild that does the real work and
+    holds the inherited stdout/stderr pipes open. `subprocess.run(timeout=...)`
+    on a timeout calls `Popen.kill()`, which is `TerminateProcess()` on that one
+    immediate child — `cmd.exe` dies, `node.exe` does not — and then, on
+    Windows, the stdlib does a second, un-timed `communicate()` to drain the
+    pipes. That call blocks forever: the pipe's write end is still open in the
+    surviving grandchild, so EOF never arrives. The result is indistinguishable
+    from the deadline never firing at all, because `run_agent` never gets to log
+    anything — the call it is blocked inside is stdlib cleanup, not this
+    project's code.
+
+    `taskkill /T` kills the whole tree by PID rather than one process, which is
+    what actually closes those handles and lets the drain finish.
+    """
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    process = subprocess.Popen(
+        argv,
+        stdin=subprocess.PIPE if input is not None else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        env=subprocess_env(),
+        creationflags=creationflags,
+    )
+    try:
+        stdout, stderr = process.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+            )
+        else:
+            process.kill()
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(argv, timeout, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def run_agent(
