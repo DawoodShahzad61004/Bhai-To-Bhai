@@ -6,10 +6,10 @@ An open-source orchestration controller that coordinates existing coding-agent C
 
 - Runs a six-stage LangGraph pipeline: requirements → planner → wave orchestrator → merger → reviewer → supervisor.
 - Pauses for material clarification, persists explicit user answers, and resumes from SQLite checkpoints.
-- Converts planner dependencies into deterministic execution waves and runs independent coding tasks concurrently in isolated Git worktrees.
+- Converts planner dependencies into deterministic execution waves and runs independent coding tasks concurrently in isolated Git worktrees, alternating them between two independently configurable coding-agent slots.
 - Merges successful task branches into a provisional integration branch, verifies conflict resolutions, and rewinds rejected work for same-session rework.
 - Reviews every merged wave, then audits the completed result against the original requirements; bounded retries are never reported as completion.
-- Supports direct Claude Code and Codex execution, Maestro delegation, and a deterministic scripted stub through one non-raising adapter contract.
+- Supports direct Claude Code and Codex execution, Maestro delegation, and a deterministic scripted stub through one non-raising adapter contract; Windows deadlines terminate the complete npm CLI process tree rather than only its wrapper.
 - Stores plans, task contracts, events, learnings, reviews, logs, costs, and session references outside the target checkout.
 - Treats agent reports as claims and Git/filesystem observations as evidence.
 
@@ -19,18 +19,18 @@ An open-source orchestration controller that coordinates existing coding-agent C
 
 The real system is `orchestrator/`. It contains the complete six-stage controller, adapters, checkpointing, artifact persistence, worktree/branch management, routing, rollback, bounded feedback loops, and CLI entry/resume behavior. The implementation arrived in the `Workflow implemented` change with **8,888 insertions across 53 files**.
 
-The orchestrator has **193 tests across 10 test files**, recorded passing on 2026-08-08 (189 on 2026-08-07, plus adapter session-resume and environment-scrubbing tests added the following day). The suite uses the first-class stub transport, so graph, state, worktree, merge, rework, replan, and failure behavior can be exercised deterministically without paid agent calls.
+The orchestrator has **197 tests across 10 test files**, recorded passing after the 2026-08-09 process-tree deadline and dual coding-slot changes (189 on 2026-08-07; 193 after the 2026-08-08 session-resume/environment fixes). The complete 197-test suite was rerun while preparing the Aug 9 documentation. The suite uses the first-class stub transport, so graph, state, worktree, merge, rework, replan, and failure behavior can be exercised deterministically without paid agent calls.
 
-One real Claude adapter probe is preserved in `orchestrator/run_logs/live_probe_20260807_194239.debug.log`: structured output parsed successfully, a session id was captured, and the one-turn call cost `$0.067745`. Two full live runs against real target repositories were diagnosed on 2026-08-08 (`docs/Research.md` topic 24): one failed at worktree setup against an uncommitted target repository (`docs/Bugs.md` #32), the other completed and was accepted by the supervisor but shipped a latent HTML rendering defect the pipeline's checks did not cover (`docs/Bugs.md` #33). There has not yet been a paid six-agent end-to-end run that is both live and defect-free.
+One real Claude adapter probe is preserved in `orchestrator/run_logs/live_probe_20260807_194239.debug.log`: structured output parsed successfully, a session id was captured, and the one-turn call cost `$0.067745`. Two full live runs against real target repositories were diagnosed on 2026-08-08 (`docs/Research.md` topic 24): one failed at worktree setup against an uncommitted target repository (`docs/Bugs.md` #32), the other completed and was accepted by the supervisor but shipped a latent HTML rendering defect the pipeline's checks did not cover (`docs/Bugs.md` #33). On 2026-08-09, a multi-task website/API stress run proved real parallel task execution and exposed two continuity gaps: reviewer rework resets all of a wave's integrated work, and coding worktrees receive artifact contents only as prompt snapshots rather than direct shared access (`docs/Research.md` topic 28). There has not yet been a paid six-agent end-to-end run that is both live and defect-free.
 
 ### Repository tracks
 
 | Track | Purpose | State |
 |---|---|---|
-| `orchestrator/` | Production six-stage workflow and its tests. | Implemented; 193-test stub-backed suite passes. |
+| `orchestrator/` | Production six-stage workflow and its tests. | Implemented; 197-test stub-backed suite passes. |
 | `yt_tutorial/` | Simplified LangGraph, Claude Code, Codex, and multi-agent experiments used to learn the failure modes that shaped production. | Learning sandbox only; not imported by production. |
 
-Open production findings are recorded in `docs/Bugs.md` #26–#28 (the merge agent receives incomplete “ours” context, requirements routing has a duplicate unwired implementation, and successful runs leave task worktrees on disk) and #32–#33 (worktree setup assumes the target repository already has a commit on `master`, and a generated HTML deliverable can ship a latent rendering defect the reviewer's checks don't cover). Bug #3 (Maestro binary resolution) and the Windows subprocess-environment/session-resume defects (`Bugs.md` #29–#31) are closed as of 2026-08-08.
+Open production findings are recorded in `docs/Bugs.md` #26–#28 (incomplete merge context, duplicate requirements routing, and successful-run worktree leakage), #32–#33 (unborn-repository setup and an accepted HTML rendering defect), and #35–#36 (wave-wide rollback removes completed integrations, and run artifacts are prompt snapshots rather than project-scoped shared files during parallel work). Bug #34—the Windows npm-shim timeout that left `node.exe` alive and hung forever after a deadline—is fixed across all three vendor adapters. The selective-rework and project-scoped-context changes are planned only; they are not implemented yet.
 
 ## Pipeline
 
@@ -70,6 +70,8 @@ Inspect the effective topology and agent configuration without starting a run:
 ```bash
 python orchestrator/main.py --goal "Add an OAuth2 refresh flow" --target ../MyApp --dry-run
 ```
+
+The current default roster is mixed: Claude Haiku handles requirements, wave orchestration, and merge; Codex handles planning; Claude Sonnet handles review and supervision. Coding tasks alternate between slot A (Codex CLI default) and slot B (Claude Sonnet). Override the slots independently with `CODING_AGENT_A_BACKEND` / `CODING_AGENT_A_MODEL` and `CODING_AGENT_B_BACKEND` / `CODING_AGENT_B_MODEL`. The legacy shared `CODING_AGENT_BACKEND` / `CODING_AGENT_MODEL` variables remain valid fallbacks, so both slots can still be configured identically.
 
 Run against a different Git repository:
 

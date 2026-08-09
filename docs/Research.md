@@ -298,3 +298,39 @@
 | **Relevance to Project** | Directly the evidence behind `Bugs.md` #30, #31, and ADR-021. Establishes a verification pattern worth reusing for any future vendor-CLI capability claim in this project: probe with a codeword-style round trip (set distinguishing state in turn one, ask for it back in turn two under the mechanism being tested) rather than trusting a returned field's mere presence. Also leaves one adjacent surface unaudited: `adapters/maestro.py`'s own `--resume` construction was not tested against this same failure shape and should not be assumed correct until it is. |
 
 ---
+
+## 26. A Windows subprocess deadline can fire and still never return when an npm shim leaves its real child alive
+
+| Field | Detail |
+|---|---|
+| **Topic** | Why `subprocess.run(timeout=...)` did not bound Codex, Claude, or Maestro wall-clock time on Windows, and what a correct deadline must own |
+| **Date** | 2026-08-09 |
+| **Findings** | The final log record in two stalled requirements runs was the Codex dispatch, even though both had a 300-second configured deadline. CPython's Windows timeout path explains the silence exactly: `subprocess.run()` kills its immediate `cmd.exe` child, then calls an un-timed `communicate()`; the npm shim's `node.exe` grandchild survives with inherited pipe handles, so the drain never sees EOF. The deadline therefore fired internally but was observationally indistinguishable from no deadline because no result reached the adapter boundary. A direct reproduction using `cmd.exe` around a sleeping child confirmed the process topology. The shared replacement—`Popen`, a new process group, `communicate(timeout)`, then `taskkill /F /T /PID`—returned after about 2.3 seconds under a 2-second limit while preserving normal stdout on the happy path. |
+| **Conclusion** | Time bounding is a resource-ownership property, not merely a numeric argument. If descendants can retain pipes, locks, sockets, or files, a deadline that terminates only the immediate process does not bound the operation. |
+| **Relevance to Project** | Produced `Bugs.md` #34 and ADR-025, and applies to all three vendor adapters because the vulnerability belongs to the shared Windows npm-shim boundary rather than to Codex specifically. |
+
+---
+
+## 27. Two coding-agent slots add vendor/model diversity and stable rework ownership; they do not replace the concurrency cap
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the dual coding-slot change actually changes in wave execution |
+| **Date** | 2026-08-09 |
+| **Findings** | Before the change, `run_wave()` already submitted every task before collecting results, so up to `MAX_PARALLEL_TASKS` external subprocesses could run concurrently; however, each cloned one `CODING_AGENT` specification. `CODING_AGENT_A` and `CODING_AGENT_B` introduce two independent backend/model choices and alternate tasks by wave-local index. That mapping is deterministic across attempts, so a task's session id returns to the same vendor/model slot during rework. The per-slot environment variables fall back to the legacy shared variables, allowing identical slots without breaking existing configuration. The default A/B pair is Codex CLI default and Claude Sonnet, while the executor cap remains three. |
+| **Conclusion** | The new capability is heterogeneous parallel dispatch and stable slot ownership, not a higher thread count by itself. Throughput can improve when vendors have independent capacity or different strengths, but measured throughput still depends on task independence, `MAX_PARALLEL_TASKS`, vendor latency, and merge/review work. |
+| **Relevance to Project** | Directly informs ADR-024 and the Architecture wave-dispatch/configuration sections. It also establishes the right future measurement: compare wave duration, failure rate, and rework success by slot rather than claiming speedup from the existence of two names alone. |
+
+---
+
+## 28. The 2026-08-09 parallel stress run separated shared prompt context from shared durable memory and exposed wave-level rollback granularity
+
+| Field | Detail |
+|---|---|
+| **Topic** | Operational findings from the Bhai Digital Studio multi-task run (`run-20260809-153711`) and its saved repeatable prompts |
+| **Date** | 2026-08-09 |
+| **Findings** | The detailed prompt forced at least three independent first-wave tasks and added parallel MongoDB schema, connection, server, package, and test work. The planner produced nine first-wave tasks. Task logs such as T-004 and T-007 independently checked for `context.md`, `learnings.md`, and `user_choices.md`; all were absent from the task worktree, so no requested append marker could be written. Agents still received serialized context in their briefs and returned learning text in final JSON, proving the current mechanism is snapshot transfer plus post-turn collection rather than live shared memory. Mid-turn write-tool failures on `db/connection.js` and `package.json` were genuine retries that recovered inside the same agent turn and were followed by independent `node --check`, Git-status, and JSON-parse evidence before `done`, which distinguishes tool friction from false completion. When review rejected the wave, the integration branch was hard-reset to the wave base SHA; successful task branches survived, but their merged effects disappeared from integration and the next attempt reran the wave. Finally, the run artifacts are keyed by run id, so repeating the experiment against the same target does not automatically inherit earlier project context. The two prompts were later committed in `orchestrator/temp_prompts.txt`: a simple static build and this MongoDB/Express parallel stress case with `/api/contact` and `/api/health`. |
+| **Conclusion** | Isolation worked for source edits and evidence checks, but it also demonstrated two scope mismatches: artifact sharing is only prompt-time, while knowledge is desired at project scope; rework judgment is often task-specific, while rollback is currently wave-wide. Both are established findings whose remedies require state/ownership design and remain unimplemented. |
+| **Relevance to Project** | Produced `Bugs.md` #35–#36, updates the Architecture artifact and rollback boundaries, and provides a repeatable manual workload for validating future fixes without conflating them with the already-shipped dual-slot and process-tree changes. |
+
+---

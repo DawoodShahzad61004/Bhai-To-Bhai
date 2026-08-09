@@ -37,7 +37,7 @@ Supervisor -- replan --> Planner
 END
 ```
 
-`Orchestrate -> Merge -> Review` is the inner loop and runs once per dependency wave. The supervisor is outside that loop and evaluates the finished repository against the original requirements only after every wave is accepted. Reviewer rework resets the integration branch to the rejected wave's base and resumes the same coding sessions when the backend supports it. Supervisor replan resets integration to the run's original SHA and creates a new plan.
+`Orchestrate -> Merge -> Review` is the inner loop and runs once per dependency wave. The supervisor is outside that loop and evaluates the finished repository against the original requirements only after every wave is accepted. Reviewer rework currently resets the integration branch to the rejected wave's base and resumes the same coding sessions when the backend supports it. The reset is wave-wide: work from tasks that completed successfully in that attempt is removed from integration together with rejected work, although the task branches survive. Selectively retaining completed task results across attempts is planned but not implemented (`Bugs.md` #35). Supervisor replan resets integration to the run's original SHA and creates a new plan.
 
 Reviewer and supervisor are optional quality gates. `ENABLE_REVIEWER=False` or `ENABLE_SUPERVISOR=False` removes the node from the compiled graph rather than inserting a pass-through. Routers return semantic outcomes such as `rework`, `next_wave`, and `done`; `graph.py` maps those outcomes to the topology that actually exists.
 
@@ -81,6 +81,8 @@ orchestrator/
 
 Artifacts use absolute paths and are written immediately in UTF-8. They live outside the target repository so an agent checkout or reset cannot erase the controller's memory. `user_choices.md` is written by deterministic orchestrator code from the questions asked and answers received; model assumptions and code-derived conclusions are excluded.
 
+The current boundary also makes these artifacts invisible as files inside task worktrees. Coding briefs paste the current context, choices, and learnings into the prompt, and returned `learnings` are appended by the orchestrator after a task finishes; coding agents do not directly open or append the canonical files while they run. The artifacts are also scoped to one run rather than one target project. A 2026-08-09 parallel stress run confirmed both properties. Project-scoped shared context with concurrency-safe reads and writes is planned but not implemented; `user_choices.md` must retain its stricter orchestrator-owned provenance even if its project-level visibility changes (`Bugs.md` #36).
+
 ## Module Breakdown
 
 ### Entry Point and Graph Assembly
@@ -122,7 +124,7 @@ The model decides task boundaries and dependency edges because those require jud
 | `orchestrator/wave_orchestrator/prompts.py` | Builds first-attempt and same-session rework briefs. |
 | `orchestrator/worktrees.py` | Wraps Git/worktree operations in non-raising results and manages branches, resets, stale paths, and cleanup. |
 
-Every task in a wave branches from the same integration SHA. Threads are used because workers block in external subprocesses; concurrency happens in the child CLIs. A successful report with no Git-observed changes becomes `no_changes`. The filesystem, not the report, decides whether work occurred.
+Every task in a wave branches from the same integration SHA. Threads are used because workers block in external subprocesses; concurrency happens in the child CLIs. Tasks alternate by stable wave index between `CODING_AGENT_A` and `CODING_AGENT_B`; the same task therefore returns to the same slot on a later attempt, preserving the vendor-session continuity required by rework. The slots may name different vendors/models or the same one twice, while `MAX_PARALLEL_TASKS` remains the independent concurrency cap. A successful report with no Git-observed changes becomes `no_changes`. The filesystem, not the report, decides whether work occurred.
 
 ### Merger
 
@@ -156,7 +158,7 @@ Supervisor replans are bounded by `MAX_REPLAN_ROUNDS`. Exhaustion records `bound
 
 | Module | Responsibility |
 |---|---|
-| `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult`, the closed error taxonomy, adapter selection, the non-raising boundary used by every node, and a scrubbed, UTF-8-forced subprocess environment (`subprocess_env()`) shared by every vendor CLI adapter. |
+| `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult`, the closed error taxonomy, adapter selection, the non-raising boundary used by every node, a scrubbed UTF-8 subprocess environment (`subprocess_env()`), and `run_with_deadline()`, which terminates the complete Windows CLI process tree on timeout. |
 | `orchestrator/adapters/claude.py` | Runs Claude Code through stdin with JSON output, tool/budget controls, wall-clock timeout, telemetry, and vendor session resume (sessions are persisted rather than suppressed on cold start, so `--resume` has something to resume). |
 | `orchestrator/adapters/codex.py` | Runs `codex exec` through stdin with workspace sandboxing and a dedicated final-answer file; reads errors from the end of stderr, and parses `--json` events for a resumable thread id. |
 | `orchestrator/adapters/maestro.py` | Runs synchronous `maestro delegate`, resolves the repo-local binary, and adds a wall-clock deadline above Maestro's stale-stream timeout. |
@@ -187,10 +189,11 @@ Transport and vendor are separate choices. Supported invocation modes are direct
 | Replan rounds | 1 per run |
 | Wave cap | 20 |
 | Mechanical stages | Claude Haiku: requirements, wave orchestrator, merger |
-| Judgment stages | Claude Sonnet: planner, reviewer, supervisor |
-| Coding subagents | Claude Sonnet |
+| Planning stage | Codex CLI default: planner |
+| Judgment stages | Claude Sonnet: reviewer, supervisor |
+| Coding subagent A / B | Codex CLI default / Claude Sonnet |
 
-The roster is configurable per stage and may switch a stage to Codex. Gemini assignments in the design notes were translated to the installed Claude tiers because Gemini CLI was unavailable. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier.
+The roster is configurable per stage. The 2026-08-09 defaults are deliberately mixed after two rapid operational flips: requirements, wave orchestration, and merge use Claude Haiku; planning remains on Codex; review and supervision use Claude Sonnet. Coding slots have independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides and fall back to the legacy shared `CODING_AGENT_BACKEND` / `CODING_AGENT_MODEL` variables for backward compatibility. Gemini assignments in the design notes were translated to installed vendors because Gemini CLI was unavailable. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier.
 
 ## Persistence, Recovery, and Audit
 
@@ -206,11 +209,11 @@ Task claims are compared with Git diffs, conflict claims with index and marker s
 
 ## Testing and Operational Evidence
 
-The orchestrator has **193 tests across 10 test files**. They cover configuration, graph wiring/toggles, CLI behavior, requirements interrupts, deterministic waves, dispatch/worktrees/reverts, merging, reviewing, supervision, terminal bounds, subprocess environment scrubbing, and vendor session-id extraction. The full suite was recorded passing on 2026-08-07 (189 tests) and again on 2026-08-08 after the adapter session-resume fixes (193 tests); workflow tests use the first-class stub transport so they are deterministic and incur no agent cost.
+The orchestrator has **197 tests across 10 test files**. They cover configuration, graph wiring/toggles, CLI behavior, requirements interrupts, deterministic waves, dispatch/worktrees/reverts, merging, reviewing, supervision, terminal bounds, subprocess environment scrubbing, and vendor session-id extraction. The full suite was recorded passing on 2026-08-07 (189 tests), 2026-08-08 after the adapter session-resume fixes (193 tests), and 2026-08-09 after the process-tree deadline and dual coding-slot changes (197 tests). The 197-test suite was independently rerun while preparing this documentation. Workflow tests use the first-class stub transport so they are deterministic and incur no agent cost.
 
 `orchestrator/run_logs/live_probe_20260807_194239.debug.log` records a real Claude adapter probe: one turn, structured output parsed, session id captured, approximately 4.8 seconds, and `$0.067745`. Two full live runs against real target repositories were diagnosed read-only on 2026-08-08 (`Research.md` topic 24): one failed at worktree setup against an uncommitted target repository, the other completed and was accepted by the supervisor but contained a latent rendering defect the pipeline's checks did not cover. There has not yet been a paid six-agent end-to-end run that both succeeds and is defect-free; worktree merge, rework, replan, and recovery remain primarily validated by the stub-backed suite.
 
-Known open findings are tracked in `docs/Bugs.md` #26–#28 (incomplete merge-context propagation, duplicate requirements routing logic, and successful-run worktree cleanup) and #32–#33 (unborn-repository worktree setup, and a browser-rendered HTML defect from an unescaped comment marker).
+Known open findings are tracked in `docs/Bugs.md` #26–#28 (incomplete merge-context propagation, duplicate requirements routing logic, and successful-run worktree cleanup), #32–#33 (unborn-repository worktree setup and a browser-rendered HTML defect), and #35–#36 (wave-wide rework discarding completed integrations, and run-scoped artifacts being inaccessible as shared files during parallel coding).
 
 ## Technology Stack
 
@@ -222,7 +225,7 @@ Known open findings are tracked in `docs/Bugs.md` #26–#28 (incomplete merge-co
 | Isolation and integration | Git branches and worktrees |
 | Persistence and audit | Markdown/JSON artifacts, JSONL events, per-run DEBUG logs |
 | Environment probe | Git, agent binaries, repo-local Maestro, MongoDB connectivity |
-| Tests | pytest, 193 tests |
+| Tests | pytest, 197 tests |
 
 The runtime dependency list is intentionally small. Agents are external subprocesses, so the project does not need model SDKs. `pymongo` exists for the standalone preflight probe, not for pipeline storage.
 
@@ -269,3 +272,9 @@ The implementation commit is recorded by Git as `Workflow implemented` with **8,
 ### 2026-08-08 — Windows-adapter regressions and vendor session resume fixed; two live runs diagnosed
 
 Two Windows-specific defects in the adapter layer were fixed: Maestro binary resolution in `preflight.py` finally adopted the precedence `adapters/maestro.py` already used, and a new scrubbed subprocess environment (`adapters/base.py::subprocess_env()`) closed a `_bz2` import failure traced to inherited Python environment variables crossing a Windows console-script launcher boundary. Vendor session resume, previously non-functional on both Codex (a session id was captured but the session itself was discarded via `--ephemeral`) and Claude Code (`--no-session-persistence` returned a session id `--resume` then rejected outright), was proven broken empirically on both and fixed on both, so the reviewer's rework loop can now actually resume the agent that made a mistake rather than cold-starting or failing. Two real runs against external target repositories were separately diagnosed read-only, surfacing an unborn-repository worktree-setup failure and a browser-visible HTML defect the reviewer's checks did not cover. The test suite grew from 189 to 193 tests.
+
+---
+
+### 2026-08-09 — Dual coding slots added; Windows CLI deadlines made process-tree safe; parallel-run gaps recorded
+
+Commit `4a123eb` (`Implement double coding subagents`) added two independently configurable coding slots and stable A/B assignment by task index, rebalanced five of six orchestration roles from Codex back to Claude while leaving planning on Codex, and moved all three vendor adapters onto the shared `run_with_deadline()` helper. On Windows, the helper creates a new process group and uses `taskkill /F /T /PID` after a timeout so the npm `.cmd` wrapper and its `node.exe` descendants release inherited pipes; this closes the hang that left requirements runs permanently silent after their nominal 300-second deadline (`Bugs.md` #34). The full suite grew to 197 passing tests. A nine-task parallel stress run separately confirmed two open design gaps: a rejected attempt resets the whole wave's integrated work, and task worktrees cannot directly access the canonical run artifacts, which are pasted into prompts and remain run-scoped (`Bugs.md` #35–#36). Commit `28b3aa4` then stored two temporary Bhai Digital Studio prompts, including a MongoDB/Express parallel-dispatch stress case, for repeatable manual runs.

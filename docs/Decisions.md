@@ -316,3 +316,45 @@
 | **Impact** | Every vendor CLI subprocess this project spawns now runs with a known-clean environment regardless of what the parent orchestrator process happened to inherit. A new test asserts the scrubbing behavior directly. This does not change vendor selection, cost accounting, or session behavior (see ADR-021 for those) — it only removes one class of environment-dependent failure from the subprocess boundary all three adapters share. |
 
 ---
+
+## ADR-023 · Treat the default backend roster as operational tuning and use a mixed Claude/Codex assignment
+
+| Field | Detail |
+|---|---|
+| **Decision** | Set the default role roster to Claude Haiku for requirements, wave orchestration, and merge; Codex CLI default for planning; and Claude Sonnet for review and supervision. Keep each role independently configurable rather than making this roster an architectural dependency. |
+| **Date** | 2026-08-09 |
+| **Context** | The repository began August 4 with an all-Claude default, moved every production role to Codex on August 8 for live runs, and moved five of six roles back one day later. The all-Codex run proved routing worked but also exposed a requirements-stage hang in the Windows Codex subprocess and left quality stages dependent on one vendor's behavior. The rapid flips show that backend choice is an operational hypothesis informed by current reliability, cost, and role fit, not a stable system boundary. |
+| **Options Considered** | All Claude; all Codex; a fixed mixed roster; dynamic per-call routing; configurable mixed defaults. |
+| **Chosen Solution** | Configurable mixed defaults. Mechanical stages return to Claude Haiku, reviewer and supervisor return to Claude Sonnet, and planner stays on Codex. |
+| **Rationale** | The adapter contract already makes vendors interchangeable at the node boundary. A mixed roster avoids coupling every stage to one vendor's failure mode while preserving the observed usefulness of Codex for planning. Keeping selection in `config.py` makes another evidence-driven change local instead of architectural. |
+| **Impact** | Five of six orchestration roles changed backend/model without graph changes. Documentation and `--dry-run` must describe the effective roster rather than assume one vendor. This decision does not claim the current mix is permanently optimal; future flips should be accompanied by run evidence so configuration history remains explainable. |
+
+---
+
+## ADR-024 · Dispatch each wave through two stable, independently configurable coding slots
+
+| Field | Detail |
+|---|---|
+| **Decision** | Replace the single `CODING_AGENT` specification with `CODING_AGENT_A` and `CODING_AGENT_B`, and assign tasks alternately by their stable index in the wave's task order. |
+| **Date** | 2026-08-09 |
+| **Context** | Waves already submitted multiple task subprocesses concurrently, but every task cloned the same coding-agent specification. Live stress work with many independent tasks needed two actual configuration slots so different vendors/models could work in the same attempt, use separate capacity, and be compared without changing dispatch code. Rework also depends on resuming the same vendor session that produced a task's first attempt. |
+| **Options Considered** | Keep one cloned specification; choose a random slot on each dispatch; round-robin globally across the run; alternate by stable task index within each wave; build a dynamic load/cost router now. |
+| **Chosen Solution** | Alternate A/B by wave-local task index. Give each slot its own backend/model environment variables, falling back to the old shared variables for backward compatibility. |
+| **Rationale** | Wave-local index is deterministic across attempts, so task T returns to the same slot and its stored session id remains meaningful. Two slots permit Claude/Codex, same-vendor/different-model, or identical configurations without adding scheduler state. Dynamic routing would need measurements and failure policy the project does not yet have. |
+| **Impact** | `run_task()` receives an explicit `AgentSpec`; `run_wave()` chooses the slot before submitting the future; and `main.py --dry-run` prints both. Slot A defaults to Codex CLI default and slot B to Claude Sonnet, while legacy `CODING_AGENT_BACKEND` / `CODING_AGENT_MODEL` still configure both when per-slot variables are absent. The thread cap remains `MAX_PARALLEL_TASKS=3`: dual slots diversify/partition execution but do not themselves increase that cap. |
+
+---
+
+## ADR-025 · Enforce vendor deadlines at the process-tree boundary, not with `subprocess.run(timeout=...)`
+
+| Field | Detail |
+|---|---|
+| **Decision** | Route every direct vendor CLI invocation through one `run_with_deadline()` helper that owns process creation, timeout, complete-tree termination, pipe draining, and `TimeoutExpired` propagation. |
+| **Date** | 2026-08-09 |
+| **Context** | Two requirements runs remained hung after their 300-second deadline because Windows launched npm `.cmd` shims as `cmd.exe` parents of `node.exe`. Python killed only the immediate parent, then waited forever for EOF on pipes still held by the surviving grandchild (`Bugs.md` #34). Codex surfaced the defect, but Claude and Maestro cross the same wrapper boundary. |
+| **Options Considered** | Keep stdlib timeout handling; special-case Codex; use daemon threads around `subprocess.run`; create a process group and kill the full tree on timeout in a shared helper. |
+| **Chosen Solution** | Use `Popen(..., CREATE_NEW_PROCESS_GROUP)` on Windows, `communicate(timeout=...)`, and `taskkill /F /T /PID` after timeout; use `process.kill()` on non-Windows. Apply the helper to Claude, Codex, and Maestro. |
+| **Rationale** | The resource that prevents return is owned by a descendant, so the deadline implementation must own descendants as well. A wrapper thread would only move the hang, repeating the defect pattern already documented in sandbox timeout work. One boundary implementation prevents vendor adapters from diverging. |
+| **Impact** | Timeouts now return to the existing non-raising adapter classification path instead of wedging the graph. A live 15-second child reproduction returned in about 2.3 seconds under a 2-second deadline, the happy path retained stdout, and the final dual-slot suite passed all 197 tests. Windows now depends on the built-in `taskkill` command for forced tree termination. |
+
+---
