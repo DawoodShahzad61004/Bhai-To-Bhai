@@ -358,3 +358,31 @@
 | **Impact** | Timeouts now return to the existing non-raising adapter classification path instead of wedging the graph. A live 15-second child reproduction returned in about 2.3 seconds under a 2-second deadline, the happy path retained stdout, and the final dual-slot suite passed all 197 tests. Windows now depends on the built-in `taskkill` command for forced tree termination. |
 
 ---
+
+## ADR-026 - Pass artifact paths to agents and let coding agents append learnings directly
+
+| Field | Detail |
+|---|---|
+| **Decision** | Stop pasting full `context.md`, `user_choices.md`, and `learnings.md` contents into prompts where a file reference is enough. Pass absolute paths and grant the run directory through adapter `extra_dirs`; give coding agents a single `append-learning` CLI that writes to the run's shared `learnings.md` under an OS-level lock. |
+| **Date** | 2026-08-10 |
+| **Context** | The 2026-08-09 parallel stress run proved that prompt snapshots were not live shared memory (`Bugs.md` #36). The August 10 chat then mapped which stages read or wrote each artifact: planner and supervisor need `context.md` / `user_choices.md`; wave coding agents need `context.md` / `learnings.md`; merger and reviewer need `context.md`; all non-requirements judgment stages may append findings. The target design needed agents to read current files by path without putting run artifacts inside task worktrees or allowing agents to author `user_choices.md`. |
+| **Options Considered** | Keep full prompt injection; move artifacts into every task worktree; use Maestro knowledge search as the shared context channel; keep artifacts in `orchestrator/runs/<run-id>/` and expose them by path; create a bespoke server/API for artifact access. |
+| **Chosen Solution** | Keep the run artifacts outside the target checkout, pass path references in prompts, add `AgentRequest.extra_dirs`, wire `--add-dir` for Claude and Codex, accept `extra_dirs` as interface-only parity in Maestro, and expose `python orchestrator/artifacts.py append-learning <run_dir> <agent> <message>` for direct learning writes. |
+| **Rationale** | The run directory remains protected from Git resets, while agents can read the current artifact instead of a stale prompt copy. A CLI entry point works from any coding worktree and reuses the same writer as orchestrator-owned appends. A sidecar file lock keeps concurrent writers serialized without blocking ordinary reads. Maestro knowledge remains useful later, but making it the immediate dependency would have required unproven same-run promotion/search semantics and would not by itself solve direct file access. |
+| **Impact** | `artifacts.py` now owns `_exclusive_lock()`, append formatting, and the `append-learning` command. Planner, wave orchestrator, merger, reviewer, and supervisor prompts now refer to artifact paths; coding tasks no longer return a `learnings` JSON field for the orchestrator to relay after the turn. Claude/Codex runs include `--add-dir <run_dir>`. Tests prove the prompt wiring and that eight real OS processes can append concurrently with one header and no interleaving. `user_choices.md` stays orchestrator-owned. Project-scoped context remains unsolved. |
+
+---
+
+## ADR-027 - Let the planner size a validated coding-agent roster for each run
+
+| Field | Detail |
+|---|---|
+| **Decision** | Replace the fixed two-slot-only coding dispatch with a planner-provided `coding_agents` roster, validated against configured backend/model menus and capped by `MAX_CODING_AGENT_COUNT`; fall back to `CODING_AGENT_A` / `CODING_AGENT_B` when the planner supplies no valid roster. |
+| **Date** | 2026-08-10 |
+| **Context** | ADR-024 added two stable slots, but the next prompt asked for the planner to decide how many coding agents a run needed and which tiers fit the task. A smoke test with exactly three independent files should be able to request three cheap agents, while a pricing tool with edge cases should prefer expert slots for foundational tasks. The model can judge complexity and task ownership; code must still reject unsupported agent specifications. |
+| **Options Considered** | Keep exactly two fallback slots; let the planner choose arbitrary backend/model strings; define a static per-wave roster in config; let the planner choose from explicit small/medium and expert menus and normalize in code. |
+| **Chosen Solution** | Add configured menus (`SMALL_MEDIUM_MODELS`, `EXPERT_MODELS`) and `MAX_CODING_AGENT_COUNT`; include those menus in the planner brief; parse `coding_agents` from the planner JSON; normalize with `normalise_coding_agents()`; persist the result in `plan.json` and `PipelineState`; and have the wave orchestrator round-robin through that roster. |
+| **Rationale** | This keeps judgment where it belongs without trusting the model with raw process names. The planner can trade cost, capacity, and task difficulty, while deterministic code filters malformed, duplicate, over-cap, or off-menu entries. Fallback preserves backward compatibility with older planner outputs and existing environment variables. Advancing the roster offset across prior waves keeps roster order meaningful beyond wave 0. |
+| **Impact** | `run-20260810-162135` validated the happy path: the planner chose three Claude Haiku agents for three independent smoke-test files, all dispatched in one wave. `run-20260810-164949` exposed that validation against a configured menu is not the same as live availability when the menu still contained `sonnet-5` (`Bugs.md` #37). `run-20260810-171145` exposed the next boundary: a valid `sonnet` alias can still be unusable under live quota exhaustion (`Bugs.md` #38). |
+
+---

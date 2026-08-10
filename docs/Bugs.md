@@ -492,7 +492,34 @@ _Update through 2026-08-09: #3 is fixed, not open. Entries #29–#31 are fixed W
 | **Date** | 2026-08-09 (confirmed in live task output, including T-004 and T-007 of `run-20260809-153711`) |
 | **Environment** | Canonical files under `orchestrator/runs/<run-id>/`; task execution under sibling `.bhai-worktrees/<run>-<task>/`; `wave_orchestrator/prompts.py` serializes artifact contents into the brief; returned learning text is appended by orchestrator code only after the task turn ends. |
 | **Diagnosis** | **Established.** The separation protects control-plane state from Git resets and agent edits, but there is no mounted/shared artifact path or artifact API in a task worktree. Prompt injection is a start-of-turn snapshot, not shared memory: concurrent agents cannot read one another's new findings, and their own mid-turn learning is not durable until their final JSON is parsed. Run identity is also the storage key, so project knowledge fragments across repeated runs. Making the files simply writable by every process would introduce lost-update/corruption risks, and allowing agents to author `user_choices.md` would violate ADR-020's provenance rule that it contain only explicit user statements. |
-| **Resolution** | **Open; planned, not implemented.** The intended direction is a project-scoped context store made available during parallel execution through concurrency-safe operations: shared reads; atomic/append-only learning writes with task attribution; and controlled context updates. `user_choices.md` should be readable project context but remain orchestrator-owned unless an explicit user interaction supplies the write. Migration, project identity, locking/serialization, and the relationship between per-run audit records and project-level accumulated knowledge still need design. |
+| **Resolution** | **Partially fixed on 2026-08-10; still open at project scope.** Run-local sharing now works for direct Claude/Codex: prompts pass absolute artifact paths, adapters grant the run directory with `extra_dirs` / `--add-dir`, and coding agents append to `learnings.md` through the locked `append-learning` CLI. The remaining open part is cross-run/project-scoped continuity and controlled project context. `user_choices.md` remains orchestrator-owned unless explicit user interaction supplies the write. Migration, project identity, and the relationship between per-run audit records and project-level accumulated knowledge still need design. |
 | **Prevention** | "Included in the prompt" is not the same property as "shared and current," and "outside the worktree" is not the same property as "durable across runs." Context architecture must state scope (turn, run, or project), ownership, visibility timing, and write semantics separately; otherwise isolation silently becomes staleness. |
+
+---
+
+
+## 37. A configured but unavailable Claude model alias let the planner choose `sonnet-5`, causing an immediate coding-agent failure
+
+| Field | Detail |
+|---|---|
+| **Symptom** | In `run-20260810-164949`, the planner produced a dynamic coding roster containing `{"backend":"claude","model":"sonnet-5"}` for task T-001. Dispatch failed immediately with `agent_error: There's an issue with the selected model (sonnet-5). It may not exist or you may not have access to it. Run --model to pick a different model.` The parallel Codex task T-002 still ran far enough to append to `learnings.md`, leaving the run in a partial state. |
+| **Date** | 2026-08-10 (found in the pricing-tool test run after dynamic roster support landed; fixed the same day) |
+| **Environment** | `orchestrator/config.py` model menus, `planner/prompts.py` roster-selection brief, `planner/waves.py::normalise_coding_agents`, and direct Claude Code dispatch in `adapters/claude.py`. |
+| **Diagnosis** | **Established.** `normalise_coding_agents()` correctly validated the planner's entry against the configured menu, but the configured menu itself contained an alias the installed/account-authenticated Claude CLI could not use. The normalizer is a syntax/menu guard, not a live entitlement probe; it can only reject what config says is invalid. |
+| **Resolution** | **Fixed.** The menu was corrected to live aliases verified in the environment: Claude `haiku`, Claude `sonnet`, and Codex default. Future failures of this shape should be treated as configuration drift, not planner misconduct. |
+| **Prevention** | Any model name placed in `SMALL_MEDIUM_MODELS` or `EXPERT_MODELS` must be verified with the same CLI/account path the orchestrator will use before the planner sees it. Static roster validation prevents malformed or off-menu output; it does not prove the menu reflects current vendor entitlement. |
+
+---
+
+## 38. Dynamic roster validation does not account for live quota exhaustion, so a valid single-agent plan can produce no usable wave output
+
+| Field | Detail |
+|---|---|
+| **Symptom** | In `run-20260810-171145`, after the model aliases were corrected, the planner chose one valid expert coding agent (`claude` / `sonnet`) for a two-wave pricing-tool plan. Wave 0 dispatched T-001, but Claude returned `rate_limit: You've hit your weekly limit - resets Aug 12, 2pm (Asia/Karachi)`. The wave produced no usable task result, no `learnings.md`, and stopped with `wave 0 produced nothing usable`. |
+| **Date** | 2026-08-10 (confirmed from the run log and run artifacts) |
+| **Environment** | Dynamic planner roster, direct Claude adapter, user-account weekly Claude limit, and `wave_orchestrator.node` handling of an all-failed wave. |
+| **Diagnosis** | **Established.** The roster was valid by static configuration and the alias was accepted by the CLI, but the account had no remaining weekly capacity for that model at dispatch time. The current planner/normalizer has no live budget or cooldown signal, so it cannot prefer Codex or another tier before the dispatch fails. Once every task in a wave fails, the wave orchestrator correctly records that nothing usable was produced. |
+| **Resolution** | **Open.** This is the runtime side of ADR-006 still missing from production: a budget/cooldown ledger should mark a vendor/model exhausted after a rate-limit failure and route future coding tasks away from it when alternatives exist. The planner's static roster should remain bounded by configuration, but dispatch needs live availability feedback. |
+| **Prevention** | Treat model-menu validity, vendor entitlement, and current quota as three separate checks. The first is handled by `normalise_coding_agents()`; the second should be covered by preflight/probes; the third needs a per-agent runtime ledger and failover policy. |
 
 ---

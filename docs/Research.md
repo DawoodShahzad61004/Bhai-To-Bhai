@@ -334,3 +334,39 @@
 | **Relevance to Project** | Produced `Bugs.md` #35–#36, updates the Architecture artifact and rollback boundaries, and provides a repeatable manual workload for validating future fixes without conflating them with the already-shipped dual-slot and process-tree changes. |
 
 ---
+
+## 29. Path-reference prompts are enough for run-local shared artifacts when adapters grant the run directory
+
+| Field | Detail |
+|---|---|
+| **Topic** | Whether the orchestrator needs a new transport or Maestro-backed knowledge store before agents can stop receiving full artifact contents in prompts |
+| **Date** | 2026-08-10 |
+| **Findings** | The August 10 chat first mapped artifact usage stage by stage: planner reads `context.md` and `user_choices.md`; wave orchestration reads `context.md` and `learnings.md`; coding agents previously received those contents only as prompt text; merger, reviewer, and supervisor read context/plan/choices as needed. Both Claude and Codex expose `--add-dir`, which lets direct CLI runs access the run artifact directory even when their working directory is an isolated target worktree. `maestro delegate` has no equivalent `--add-dir`, so the Maestro adapter accepts `extra_dirs` only for interface parity and cannot provide the same file-access guarantee by itself. |
+| **Conclusion** | No adapter replacement is required for direct Claude/Codex: path references plus `extra_dirs` solve run-local artifact visibility while keeping artifacts outside target Git operations. This is not yet project-scoped memory; the run id remains the storage boundary. |
+| **Relevance to Project** | Directly produced ADR-026 and the prompt changes in planner, wave orchestrator, merger, reviewer, and supervisor. It partially resolves `Bugs.md` #36: live shared reads and direct learning appends now work within one run, but cross-run/project-scoped continuity remains open. |
+
+---
+
+## 30. Direct `learnings.md` appends need an OS-level writer lock, not a Python-only convention
+
+| Field | Detail |
+|---|---|
+| **Topic** | How multiple coding-agent subprocesses can append to one run's `learnings.md` without corrupting it |
+| **Date** | 2026-08-10 |
+| **Findings** | Coding agents run as separate OS processes from separate task worktrees. A process-local lock would not coordinate them, and a plain read should not block behind a writer because the file is meant to be shared context. The implemented helper locks a sidecar `<name>.lock` file with `msvcrt.locking` on Windows and `fcntl.flock` on POSIX, writes through one formatting function, and exposes the exact same writer through `python orchestrator/artifacts.py append-learning <run_dir> <agent> <message>`. A direct stress test launched eight real parallel processes; the resulting `learnings.md` had exactly one header and all eight entries intact. The paid smoke run `run-20260810-162135` then showed real coding agents using the command and reviewer/supervisor agents appending their own findings afterward. |
+| **Conclusion** | The live-learning mechanism is now evidence-backed for run-local use. The important boundary is "all writers go through one command," not "all writers are in one Python process." |
+| **Relevance to Project** | This is the implementation evidence behind ADR-026, the `artifacts.py` CLI, and the new tests in `test_foundation.py` and `test_wave_orchestrator.py`. It also updates the Architecture artifact boundary: coding agents can now write learnings directly rather than returning a JSON `learnings` field for later relay. |
+
+---
+
+## 31. August 10 live runs validated dynamic rosters but exposed static availability limits
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the August 10 run artifacts and debug logs show about planner-sized coding-agent rosters |
+| **Date** | 2026-08-10 |
+| **Findings** | `run-20260810-162135` is the cleanest positive case: the planner returned three independent tasks and a three-agent roster of Claude Haiku entries for a simple smoke test. The wave dispatched all three tasks in parallel, all three used path-reference prompts and `append-learning`, reviewer attempt 0 correctly rejected `data.js` for exceeding the line cap despite the agent's self-report, attempt 1 fixed it, and the supervisor accepted the run with total cost about `$2.3511`. `run-20260810-164949` showed a static validation gap: the planner's roster included `{"backend":"claude","model":"sonnet-5"}`, which passed the configured menu at the time but failed immediately at dispatch because the account/CLI could not use that model alias; another task still appended to `learnings.md`, leaving partial evidence. The menu was then corrected to live aliases (`haiku`, `sonnet`, and Codex default). `run-20260810-171145` showed the next limit: even a valid `sonnet` alias can be unavailable under weekly quota exhaustion, producing `rate_limit` and "wave 0 produced nothing usable." |
+| **Conclusion** | The dynamic roster design works when the menu reflects live models and quota exists, but `normalise_coding_agents()` deliberately validates against static configuration, not live entitlement or remaining allowance. Runtime availability still belongs to the budget/cooldown router promised by ADR-006, not to the roster normalizer. |
+| **Relevance to Project** | Validates ADR-027's core path, produces `Bugs.md` #37 and #38, and sharpens future testing: check roster choice, dispatch order, model alias validity, and live quota/failover as separate properties. |
+
+---
