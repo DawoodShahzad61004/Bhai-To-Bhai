@@ -47,6 +47,7 @@ def _build_argv(
     tools: tuple[str, ...],
     json_schema: dict[str, Any] | None,
     resume_session: str,
+    extra_dirs: tuple[str, ...],
 ) -> list[str]:
     argv = [
         resolve_binary(config.CLAUDE_BIN),
@@ -65,6 +66,11 @@ def _build_argv(
         argv += ["--append-system-prompt", system_prompt]
     if tools:
         argv += ["--tools", ",".join(tools)]
+    if extra_dirs:
+        # Grants tool access outside cwd — a run's artifacts (context.md,
+        # learnings.md, ...) live in run_dir, deliberately outside the target
+        # repository, so an agent told only a path there needs this to reach it.
+        argv += ["--add-dir", *extra_dirs]
     if json_schema is not None:
         argv += ["--json-schema", json.dumps(json_schema)]
     if spec.max_budget_usd > 0:
@@ -114,6 +120,7 @@ def run(
     tools: tuple[str, ...],
     json_schema: dict[str, Any] | None,
     resume_session: str,
+    extra_dirs: tuple[str, ...] = (),
 ) -> AgentResult:
     """One Claude Code turn. Returns a result; never raises.
 
@@ -132,6 +139,7 @@ def run(
         tools=tools,
         json_schema=json_schema,
         resume_session=resume_session,
+        extra_dirs=extra_dirs,
     )
     logger.debug("[%s] argv: %s", tag, argv)
     logger.debug("[%s] system prompt:\n%s", tag, _debug_block(system_prompt))

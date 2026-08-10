@@ -184,6 +184,20 @@ CODING_AGENT_B = AgentSpec(
     deadline_seconds=_int("CODING_AGENT_DEADLINE_SECONDS", 900),
 )
 
+MAX_CODING_AGENT_COUNT = 5
+
+# Bare aliases only ("haiku"/"sonnet"), never a versioned string like
+# "sonnet-5" or "sonnet-4-6" — Claude Code's --model only accepts a bare alias
+# (resolves to that family's latest) or a full model name (e.g.
+# "claude-sonnet-5"); a bare-looking-but-invalid string like "sonnet-5" is
+# neither and is rejected outright. Verified against this account directly
+# (`claude auth status`: Pro plan): "haiku" -> claude-haiku-4-5-20251001,
+# "sonnet" -> claude-sonnet-5, both reachable. Codex is logged in via ChatGPT,
+# which rejects a named --model (codex.py's own comment), so "" (CLI default)
+# is the only safe entry for that backend, not a specific model string.
+SMALL_MEDIUM_MODELS = [("haiku", "claude")]
+EXPERT_MODELS = [("sonnet", "claude"), ("", "codex")]
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TERMINATION BOUNDS
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -12,6 +12,7 @@ import json
 import pytest
 
 import artifacts as art
+import config
 import worktrees as wt
 from adapters.base import AgentResult
 from state import initial_state
@@ -56,7 +57,7 @@ def wave_state(git_repo, tmp_path):
     return state
 
 
-def writing_agent(filename: str, *, learnings: str = "", status: str = "done"):
+def writing_agent(filename: str, *, status: str = "done"):
     """A stub agent that actually writes a file into its worktree.
 
     The write is the point: this pipeline judges a task by what git saw change,
@@ -78,7 +79,6 @@ def writing_agent(filename: str, *, learnings: str = "", status: str = "done"):
                     "status": status,
                     "summary": f"Created {filename}",
                     "files_changed": [filename],
-                    "learnings": learnings,
                 }
             ),
             session_id=f"sess-{filename}",
@@ -157,10 +157,62 @@ def test_costs_and_sessions_are_carried(wave_state, stub):
     assert sessions["T-001"] == "sess-app/health.py"
 
 
-def test_subagent_findings_reach_the_shared_learnings_file(wave_state, stub):
-    stub.set_reply(
-        "task-T-001", writing_agent("app/health.py", learnings="Blueprints register in __init__.")
-    )
+def test_the_brief_tells_agents_how_to_record_a_finding_directly(wave_state, stub):
+    """Coding agents append to learnings.md themselves now, not through a JSON
+    field the orchestrator relays afterwards — the brief has to name the exact
+    command, since nothing here parses a reply to do it for them."""
+    stub.set_reply("task-T-001", writing_agent("app/health.py"))
+    stub.set_reply("task-T-002", writing_agent("NOTES.md"))
+
+    wave_orchestrator_node(wave_state)
+
+    artifacts = art.prepare(wave_state["run_dir"])
+    call = stub.calls[0]
+    assert str(artifacts.learnings) in call["prompt"]
+    assert "append-learning" in call["prompt"]
+    assert wave_state["run_dir"] in call["prompt"]
+    assert wave_state["run_dir"] in call["extra_dirs"]
+
+
+def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_state, stub):
+    """End to end: actually run the command the brief tells agents to run, and
+    confirm it lands in the run's shared learnings.md."""
+    import subprocess
+    import sys
+
+    script = str(__import__("pathlib").Path(art.__file__).resolve())
+
+    def reply(prompt: str) -> AgentResult:
+        marker = "## Working directory\n\n"
+        start = prompt.index(marker) + len(marker)
+        workdir = __import__("pathlib").Path(prompt[start:].splitlines()[0].strip())
+        (workdir / "app/health.py").parent.mkdir(parents=True, exist_ok=True)
+        (workdir / "app/health.py").write_text("written\n", encoding="utf-8")
+        subprocess.run(
+            [
+                sys.executable,
+                script,
+                "append-learning",
+                wave_state["run_dir"],
+                "task-T-001",
+                "Blueprints register in __init__.",
+            ],
+            check=True,
+        )
+        return AgentResult(
+            ok=True,
+            text=json.dumps(
+                {
+                    "status": "done",
+                    "summary": "Created app/health.py",
+                    "files_changed": ["app/health.py"],
+                }
+            ),
+            session_id="sess-app/health.py",
+            cost_usd=0.12,
+        )
+
+    stub.set_reply("task-T-001", reply)
     stub.set_reply("task-T-002", writing_agent("NOTES.md"))
 
     wave_orchestrator_node(wave_state)
@@ -367,3 +419,89 @@ def test_shared_workspace_mode_runs_in_the_target_repo(wave_state, stub, git_rep
 
     assert all(t["worktree"] == str(git_repo) for t in result["active_worktrees"])
     assert (git_repo / "out.txt").exists()
+
+
+# ── Coding-agent roster ──────────────────────────────────────────────────────
+
+
+def test_the_default_pair_is_used_when_the_plan_named_no_roster(wave_state, stub):
+    stub.set_reply("task-*", writing_agent("out.txt"))
+
+    wave_orchestrator_node(wave_state)
+
+    calls = {call["tag"]: call for call in stub.calls}
+    # T-001 is index 0 in wave_state["tasks"], T-002 is index 1 — round-robin is
+    # keyed off that stable index, not off completion order under the thread pool.
+    assert calls["task-T-001"]["spec"].backend == config.CODING_AGENT_A.backend
+    assert calls["task-T-002"]["spec"].backend == config.CODING_AGENT_B.backend
+
+
+def test_the_planners_roster_is_used_when_present(wave_state, stub):
+    stub.set_reply("task-*", writing_agent("out.txt"))
+    roster = [{"backend": "claude", "model": "haiku"}, {"backend": "codex", "model": ""}]
+
+    wave_orchestrator_node({**wave_state, "coding_agents": roster})
+
+    calls = {call["tag"]: call for call in stub.calls}
+    assert calls["task-T-001"]["spec"].backend == "claude"
+    assert calls["task-T-001"]["spec"].model == "haiku"
+    assert calls["task-T-002"]["spec"].backend == "codex"
+    assert calls["task-T-002"]["spec"].model == ""
+
+
+def test_a_roster_of_one_puts_every_task_on_the_same_agent(wave_state, stub):
+    stub.set_reply("task-*", writing_agent("out.txt"))
+
+    wave_orchestrator_node({**wave_state, "coding_agents": [{"backend": "codex", "model": ""}]})
+
+    assert all(call["spec"].backend == "codex" for call in stub.calls)
+
+
+def test_the_roster_offset_advances_across_waves_instead_of_resetting(git_repo, tmp_path, stub):
+    """A bare per-wave index would let wave 2 land back on wave 1's slots.
+
+    A 5-slot roster with 2 expert-tier entries first and 3 small/medium after
+    should give wave 0 (2 tasks) the two expert entries and wave 1 (3 tasks) the
+    three small/medium entries that follow — not the first three entries
+    overall, which would repeat the two experts.
+    """
+    run_dir = art.prepare(tmp_path / "offset-run")
+    art.write_text(run_dir.context, "# Context\nRoster offset test.")
+
+    state = initial_state(
+        run_id="r2",
+        goal="roster offset test",
+        target_repo=str(git_repo),
+        run_dir=str(run_dir.run_dir),
+    )
+    state["tasks"] = [
+        {**TASKS[0], "task_id": "T-001", "wave": 0},
+        {**TASKS[0], "task_id": "T-002", "wave": 0},
+        {**TASKS[0], "task_id": "T-003", "wave": 1},
+        {**TASKS[0], "task_id": "T-004", "wave": 1},
+        {**TASKS[0], "task_id": "T-005", "wave": 1},
+    ]
+    state["waves"] = [["T-001", "T-002"], ["T-003", "T-004", "T-005"]]
+    state["context"] = "# Context\nRoster offset test."
+    state["coding_agents"] = [
+        {"backend": "claude", "model": "sonnet"},
+        {"backend": "codex", "model": ""},
+        {"backend": "claude", "model": "haiku"},
+        {"backend": "claude", "model": "haiku"},
+        {"backend": "claude", "model": "haiku"},
+    ]
+
+    stub.set_reply("task-*", writing_agent("out.txt"))
+    first = wave_orchestrator_node(state)
+
+    calls = {call["tag"]: call for call in stub.calls}
+    assert calls["task-T-001"]["spec"].model == "sonnet"
+    assert calls["task-T-002"]["spec"].backend == "codex"
+
+    stub.calls.clear()
+    wave_orchestrator_node({**state, **first, "current_wave": 1})
+
+    calls = {call["tag"]: call for call in stub.calls}
+    assert calls["task-T-003"]["spec"].model == "haiku"
+    assert calls["task-T-004"]["spec"].model == "haiku"
+    assert calls["task-T-005"]["spec"].model == "haiku"

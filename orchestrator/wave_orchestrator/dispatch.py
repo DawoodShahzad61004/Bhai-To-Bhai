@@ -26,17 +26,23 @@ no tool to write; the filesystem is what caught it, and the same check is here.
 from __future__ import annotations
 
 import contextvars
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import artifacts as art
 import config
 import parsing
 import worktrees as wt
 from adapters import run_agent
 from logging_config import get_logger
 from wave_orchestrator.prompts import CODING_FRAME, coding_prompt
+
+# Absolute path to artifacts.py, so a coding subagent's Bash tool can invoke
+# its append-learning CLI from inside its own worktree regardless of cwd.
+_ARTIFACTS_SCRIPT = str(Path(art.__file__).resolve())
 
 logger = get_logger(__name__)
 
@@ -55,7 +61,6 @@ class TaskOutcome:
     status: str = ""  # "done" | "blocked" | "" when unreadable
     report: str = ""
     claimed_files: list[str] = field(default_factory=list)
-    learnings: str = ""
     # What actually happened.
     branch: str = ""
     worktree: str = ""
@@ -108,8 +113,8 @@ def _changed_files(worktree: Path, base: str) -> list[str]:
     return sorted(set(committed) | set(uncommitted))
 
 
-def _parse_report(text: str, structured: dict | None) -> tuple[str, str, list[str], str]:
-    """(status, summary, files, learnings) from a subagent's reply.
+def _parse_report(text: str, structured: dict | None) -> tuple[str, str, list[str]]:
+    """(status, summary, files) from a subagent's reply.
 
     Falls back to the raw text as the summary when the reply is not JSON. A
     coding agent that did real work and then described it in prose has still done
@@ -117,7 +122,7 @@ def _parse_report(text: str, structured: dict | None) -> tuple[str, str, list[st
     """
     parsed = parsing.extract_json(text, structured)
     if not parsed.ok or not parsed.value:
-        return "", (text or "").strip()[:2000], [], ""
+        return "", (text or "").strip()[:2000], []
 
     payload = parsed.value
     status = parsing.one_of(payload, "status", ("done", "blocked")) or ""
@@ -129,7 +134,6 @@ def _parse_report(text: str, structured: dict | None) -> tuple[str, str, list[st
         status,
         summary or (text or "").strip()[:2000],
         parsing.string_list(payload, "files_changed"),
-        parsing.require_str(payload, "learnings", allow_empty=True) or "",
     )
 
 
@@ -140,8 +144,7 @@ def run_task(
     target_repo: str,
     run_id: str,
     base: str,
-    context: str,
-    learnings: str,
+    run_dir: str,
     rework_comments: str,
     resume_session: str,
 ) -> TaskOutcome:
@@ -167,12 +170,16 @@ def run_task(
         outcome.worktree = str(workdir)
         outcome.branch = base
 
+    artifacts = art.prepare(run_dir)
     result = run_agent(
         coding_prompt(
             task=task,
             worktree=str(workdir),
-            context=context,
-            learnings=learnings,
+            context_path=str(artifacts.context),
+            learnings_path=str(artifacts.learnings),
+            run_dir=run_dir,
+            python_exe=sys.executable,
+            script_path=_ARTIFACTS_SCRIPT,
             rework_comments=rework_comments,
         ),
         spec=agent,
@@ -181,6 +188,10 @@ def run_task(
         tag=f"task-{task_id}",
         tools=CODING_TOOLS,
         resume_session=resume_session,
+        # run_dir sits outside the worktree by design (config.py, "PATHS"); this
+        # is what lets the agent read context.md and append to learnings.md
+        # there despite its sandbox otherwise confining it to the worktree.
+        extra_dirs=(run_dir,),
     )
 
     outcome.session_id = result.session_id
@@ -203,11 +214,10 @@ def run_task(
         )
         return outcome
 
-    status, summary, claimed, learning = _parse_report(result.text, result.structured)
+    status, summary, claimed = _parse_report(result.text, result.structured)
     outcome.status = status
     outcome.report = summary
     outcome.claimed_files = claimed
-    outcome.learnings = learning
     outcome.ok = status != "blocked"
 
     if outcome.ok and not outcome.changed_files:
@@ -231,19 +241,32 @@ def run_wave(
     target_repo: str,
     run_id: str,
     base: str,
-    context: str,
-    learnings: str,
+    run_dir: str,
+    coding_agents: list[config.AgentSpec],
+    agent_offset: int = 0,
     rework_comments: str = "",
     sessions: dict[str, str] | None = None,
 ) -> list[TaskOutcome]:
     """Dispatch every task in a wave, up to MAX_PARALLEL_TASKS at a time.
 
-    Tasks alternate between config.CODING_AGENT_A and config.CODING_AGENT_B by
-    their position in `tasks`, so a wave of more than one task puts both to
-    work rather than cloning one CLI across every worker. The assignment is
-    keyed off the task's index in the wave's own task order — which is stable
-    across attempts, since it is derived from the plan — so a task's rework
-    lands on whichever of A/B did it the first time.
+    Tasks rotate through `coding_agents` — sized and cast by the planner, see
+    planner/waves.normalise_coding_agents, capped at
+    config.MAX_CODING_AGENT_COUNT. The assignment is `(agent_offset + index) %
+    len(coding_agents)`, not a bare `index % len(coding_agents)`: this function
+    is called once per wave and always sees that wave's own tasks starting at
+    index 0, so a bare index would restart at slot 0 on every wave and could
+    never honour a roster the planner deliberately ordered — e.g. the expert
+    tier first for a judgment-heavy wave 0, small/medium after for a mechanical
+    wave 1 — since wave 1 would then reuse wave 0's slots by coincidence of
+    position rather than continue past them. `agent_offset` is the count of
+    tasks dispatched in every wave before this one (wave_orchestrator_node
+    computes it from `state["waves"]`), so the slot index keeps advancing
+    across the whole run instead of resetting.
+
+    Both `agent_offset` and each task's position in `tasks` are stable across
+    attempts — a wave's own task order is derived from the plan and does not
+    change on rework — so a task's rework still lands on whichever slot did it
+    the first time.
 
     `sessions` maps task_id to the vendor session that attempted it last time, so
     a rework reaches the same agent rather than briefing a fresh one — which is
@@ -252,25 +275,27 @@ def run_wave(
     sessions = sessions or {}
     if not tasks:
         return []
+    if not coding_agents:
+        raise ValueError("run_wave() needs at least one coding agent")
 
     workers = max(1, min(config.MAX_PARALLEL_TASKS, len(tasks)))
     logger.info(
-        "wave dispatch | %d task(s) | %d at a time | base=%s",
+        "wave dispatch | %d task(s) | %d at a time | %d coding agent(s) | base=%s",
         len(tasks),
         workers,
+        len(coding_agents),
         base,
     )
 
     def _call(index: int, task: dict[str, Any]) -> TaskOutcome:
-        agent = config.CODING_AGENT_A if index % 2 == 0 else config.CODING_AGENT_B
+        agent = coding_agents[(agent_offset + index) % len(coding_agents)]
         return run_task(
             task,
             agent=agent,
             target_repo=target_repo,
             run_id=run_id,
             base=base,
-            context=context,
-            learnings=learnings,
+            run_dir=run_dir,
             rework_comments=rework_comments,
             resume_session=sessions.get(task["task_id"], ""),
         )

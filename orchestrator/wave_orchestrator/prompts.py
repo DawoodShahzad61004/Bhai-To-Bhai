@@ -32,7 +32,6 @@ When you are done, reply with a single JSON object and nothing else:
   "status": "done" | "blocked",
   "summary": "<what you actually changed, file by file>",
   "files_changed": ["<path>"],
-  "learnings": "<a finding worth carrying to other agents, or an empty string>",
   "blocked_reason": "<only when status is blocked: what stopped you>"
 }}
 
@@ -64,17 +63,30 @@ other location you have been told about.
 
 ## What the pipeline is building overall
 
-{context}
+The full requirements this run is working from are written to `{context_path}` \
+— read that file for the context behind your task.
 """
 
 LEARNINGS_SECTION = """\
 
-## Findings from earlier agents on this run
+## Shared findings from this run
 
-Other agents recorded these while working on this same codebase. They may save \
-you time or stop you repeating a dead end.
+Other coding agents are working on other tasks in parallel, in their own \
+worktrees, right now — this is the one file all of you share. Read \
+`{learnings_path}` at any time to see what they have found; reading is always \
+safe and never waits on anything.
 
-{learnings}
+If you learn something the others should know — a gotcha, a convention this \
+codebase actually follows, a dead end — record it the moment you find it, do \
+not wait until you finish, by running this from a shell (adjust the finding, \
+keep the rest exactly as shown):
+
+    "{python_exe}" "{script_path}" append-learning "{run_dir}" "{task_id}" "<your finding, one paragraph>"
+
+This is safe to run at any time, including at the same moment another agent \
+runs it too — writes are queued automatically, so nothing is lost. Only call it \
+for something genuinely worth another agent's attention; do not narrate routine \
+progress.
 """
 
 REWORK_SECTION = """\
@@ -98,8 +110,11 @@ def coding_prompt(
     *,
     task: dict,
     worktree: str,
-    context: str,
-    learnings: str = "",
+    context_path: str,
+    learnings_path: str,
+    run_dir: str,
+    python_exe: str,
+    script_path: str,
     rework_comments: str = "",
 ) -> str:
     files = task.get("files") or []
@@ -111,10 +126,15 @@ def coding_prompt(
         files=files_block,
         acceptance=task.get("acceptance") or "(no explicit acceptance criteria given)",
         worktree=worktree,
-        context=context.strip() or "(no context supplied)",
+        context_path=context_path,
     )
-    if learnings.strip():
-        prompt += LEARNINGS_SECTION.format(learnings=learnings.strip())
+    prompt += LEARNINGS_SECTION.format(
+        learnings_path=learnings_path,
+        python_exe=python_exe,
+        script_path=script_path,
+        run_dir=run_dir,
+        task_id=task["task_id"],
+    )
     if rework_comments.strip():
         prompt += REWORK_SECTION.format(comments=rework_comments.strip())
     return prompt

@@ -140,6 +140,12 @@ class PipelineState(TypedDict):
     # Which wave the pipeline is on. The inner Orchestrate -> Merge -> Review
     # loop advances this; the drawing shows the loop as a single pass.
     current_wave: NotRequired[int]
+    # The coding-agent roster the planner sized for this plan: 1..
+    # config.MAX_CODING_AGENT_COUNT entries, each {"backend", "model"}. A wave
+    # of more than one task round-robins across these. Absent or empty falls
+    # back to config.CODING_AGENT_A/B, which is what a pre-existing checkpoint
+    # resumes into.
+    coding_agents: NotRequired[list[dict[str, str]]]
 
     # ── Agent 3: wave orchestrator ───────────────────────────────────────────
     # Live worktrees for the wave in flight, so a crash leaves something to

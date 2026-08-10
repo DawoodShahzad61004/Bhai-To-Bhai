@@ -21,8 +21,12 @@ eventually write (Bugs.md #11).
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
+import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,11 +150,63 @@ def read_json(path: Path, default: Any = None) -> Any:
         return default
 
 
+@contextlib.contextmanager
+def _exclusive_lock(path: Path):
+    """An OS-level mutex so concurrent writers to `path` serialise.
+
+    Writers only. A reader — a coding subagent's own Read tool, or `read_text`
+    below — never takes this lock and is never made to wait on it; the
+    requirement is "a writer excludes other writers", not "a writer excludes
+    readers". A sidecar `<name>.lock` file rather than the artifact itself, so
+    the lock's own open/close never competes with a plain read of it.
+
+    Every appender to learnings.md goes through here, whether it is this
+    process (the other five agents, via append_learning) or a coding
+    subagent's own OS process invoking this module's CLI directly — the lock
+    has to be OS-level, a Python-only mutex would not reach across processes.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    handle = open(lock_path, "a+b")
+    try:
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            deadline = time.monotonic() + 30
+            while True:
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() > deadline:
+                        raise TimeoutError(f"could not lock {lock_path} within 30s") from None
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
 def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
     """Add one finding to the shared learnings file.
 
-    Append-only and timestamped. Four of the six agents write here, so an
-    overwrite would lose whichever of them ran first.
+    Append-only and timestamped. Every agent writes here, some from this
+    process and some — the parallel coding subagents — from their own OS
+    process (see the CLI at the bottom of this module), so an overwrite or an
+    interleaved write would lose whichever writer lost the race. `_exclusive_lock`
+    is what prevents that; the write itself is one `write()` call so a
+    concurrent reader never observes a header with no entry after it.
     """
     finding = finding.strip()
     if not finding:
@@ -159,10 +215,14 @@ def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
     entry = f"\n## {stamp} — {agent}\n\n{finding}\n"
     path = artifacts.learnings
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as handle:
-        if path.stat().st_size == 0:
-            handle.write("# Learnings\n\nFindings reported by agents during this run.\n")
-        handle.write(entry)
+    with _exclusive_lock(path):
+        header = (
+            ""
+            if path.exists() and path.stat().st_size
+            else "# Learnings\n\nFindings reported by agents during this run.\n"
+        )
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(header + entry)
     logger.debug("learnings += %s (%d chars)", agent, len(finding))
 
 
@@ -196,3 +256,44 @@ def load_tasks(artifacts: RunArtifacts) -> list[dict[str, Any]]:
         if isinstance(task, dict):
             tasks.append(task)
     return tasks
+
+
+def _cli(argv: list[str] | None = None) -> int:
+    """`python artifacts.py append-learning <run_dir> <agent> [message]`.
+
+    The coding subagents' own entry point for writing directly to the shared
+    learnings.md from inside their worktree — invoked over Bash, not imported,
+    since they run as a separate OS process from this one. Reuses
+    append_learning rather than reimplementing it, so there is exactly one
+    place that knows the file's format and its locking.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="artifacts.py",
+        description="Append one finding to a run's shared learnings.md.",
+    )
+    subcommands = parser.add_subparsers(dest="command", required=True)
+    append = subcommands.add_parser(
+        "append-learning", help="Append a finding, excluding other concurrent writers."
+    )
+    append.add_argument("run_dir", help="This run's artifact directory (absolute path).")
+    append.add_argument("agent", help='Who is reporting this, e.g. "task-T-001".')
+    append.add_argument(
+        "message", nargs="?", help="The finding to record. Omit to read it from stdin."
+    )
+
+    args = parser.parse_args(argv)
+    message = args.message if args.message is not None else sys.stdin.read()
+    if not message.strip():
+        print("error: no message given (pass it as an argument or on stdin)", file=sys.stderr)
+        return 1
+
+    run_artifacts = prepare(args.run_dir)
+    append_learning(run_artifacts, args.agent, message)
+    print(f"appended to {run_artifacts.learnings}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

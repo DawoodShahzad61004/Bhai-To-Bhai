@@ -108,8 +108,13 @@ def run(
     tools: tuple[str, ...],
     json_schema: dict[str, Any] | None,
     resume_session: str,
+    extra_dirs: tuple[str, ...] = (),
 ) -> AgentResult:
-    """One delegated turn. Returns a result; never raises."""
+    """One delegated turn. Returns a result; never raises.
+
+    `extra_dirs` is accepted for interface parity with the direct adapters and
+    deliberately unused: `maestro delegate` has no equivalent of `--add-dir`.
+    """
     argv = [
         _resolve_maestro(),
         "delegate",

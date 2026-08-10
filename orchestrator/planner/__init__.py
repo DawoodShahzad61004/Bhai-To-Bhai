@@ -5,6 +5,12 @@ TASK-*.json. Re-entered by the supervisor's replan edge.
 """
 
 from planner.node import planner_node
-from planner.waves import Schedule, assign_waves, normalise_tasks
+from planner.waves import Schedule, assign_waves, normalise_coding_agents, normalise_tasks
 
-__all__ = ["Schedule", "assign_waves", "normalise_tasks", "planner_node"]
+__all__ = [
+    "Schedule",
+    "assign_waves",
+    "normalise_coding_agents",
+    "normalise_tasks",
+    "planner_node",
+]

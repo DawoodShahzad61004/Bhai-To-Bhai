@@ -114,6 +114,7 @@ def run(
     tools: tuple[str, ...],
     json_schema: dict[str, Any] | None,
     resume_session: str,
+    extra_dirs: tuple[str, ...] = (),
 ) -> AgentResult:
     """One Codex turn. Returns a result; never raises.
 
@@ -121,6 +122,12 @@ def run(
     user prompt instead. It also has no tool allowlist of the kind Claude Code
     exposes — `tools` is accepted for interface parity and deliberately unused;
     the sandbox mode is what bounds it.
+
+    `extra_dirs` is not cosmetic here: `--sandbox workspace-write` confines
+    writes to `--cd`'s tree (verified against the installed `codex exec --help`),
+    so an agent whose worktree is one directory and whose artifacts live in
+    another (run_dir, per config.py's "PATHS") cannot write to the second
+    without `--add-dir` naming it explicitly.
     """
     handle, last_message = tempfile.mkstemp(prefix="codex-", suffix=".txt")
     os.close(handle)
@@ -140,6 +147,10 @@ def run(
         # Events as JSONL on stdout, which is where the session id comes from.
         # This does not disturb --output-last-message; both are populated.
         "--json",
+    ]
+    for extra_dir in extra_dirs:
+        argv += ["--add-dir", extra_dir]
+    argv += [
         # The final answer is collected from this file rather than parsed out of
         # stdout: `codex exec` streams its reasoning there with no marker around
         # the answer, so there is nothing to find.

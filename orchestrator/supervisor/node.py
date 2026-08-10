@@ -114,8 +114,8 @@ def supervisor_node(state: PipelineState) -> dict:
         supervisor_prompt(
             waves=len(waves),
             branch=state.get("integration_branch") or "the integration branch",
-            context=state.get("context") or art.read_text(artifacts.context),
-            user_choices=art.read_text(artifacts.user_choices),
+            context_path=str(artifacts.context),
+            user_choices_path=str(artifacts.user_choices),
             plan_summary=plan.get("summary", ""),
             waves_summary=_waves_summary(state),
         ),
@@ -124,6 +124,7 @@ def supervisor_node(state: PipelineState) -> dict:
         cwd=state["target_repo"],
         tag=AGENT,
         tools=SUPERVISOR_TOOLS,
+        extra_dirs=(state["run_dir"],),
     )
     cost = result.cost_usd
     running_cost = state.get("total_cost_usd", 0.0) + cost

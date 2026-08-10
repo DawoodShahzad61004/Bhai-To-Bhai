@@ -52,16 +52,16 @@ because the plan that produced those tasks was incomplete or aimed at the wrong 
 thing. That case is what you are here to catch, and it is why your feedback goes \
 back to the planner rather than to the coding agents.
 
-## The requirements (context.md)
+## The requirements
 
-{context}
+The full requirements this run is working from are written to `{context_path}` \
+— read that file before assessing whether the finished result satisfies them.
 
-## The user's explicit choices (user_choices.md)
+## The user's explicit choices
 
-These came from the user directly. A finished result that contradicts one of \
-these is not acceptable, whatever else it does well.
-
-{user_choices}
+The user's own explicit decisions are written to `{user_choices_path}`. A \
+finished result that contradicts one of these is not acceptable, whatever else \
+it does well — read it before assessing.
 
 ## What was built
 
@@ -89,16 +89,16 @@ def supervisor_prompt(
     *,
     waves: int,
     branch: str,
-    context: str,
-    user_choices: str,
+    context_path: str,
+    user_choices_path: str,
     plan_summary: str,
     waves_summary: list[str],
 ) -> str:
     return SUPERVISOR_BRIEF.format(
         waves=waves,
         branch=branch,
-        context=context.strip() or "(no context supplied)",
-        user_choices=user_choices.strip() or "(none recorded)",
+        context_path=context_path,
+        user_choices_path=user_choices_path,
         plan_summary=plan_summary.strip() or "(no plan summary available)",
         waves_summary="\n".join(waves_summary) or "(no wave records available)",
     )

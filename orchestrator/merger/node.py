@@ -55,7 +55,8 @@ def merger_node(state: PipelineState) -> dict:
         target_repo=target,
         into=into,
         tasks=latest.get("tasks", []),
-        context=state.get("context") or art.read_text(artifacts.context),
+        context_path=str(artifacts.context),
+        run_dir=state["run_dir"],
     )
 
     for learning in report.learnings:

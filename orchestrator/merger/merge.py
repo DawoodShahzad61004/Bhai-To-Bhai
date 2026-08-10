@@ -83,7 +83,8 @@ def _resolve_conflict(
     task: dict[str, Any],
     files: list[str],
     ours: str,
-    context: str,
+    context_path: str,
+    run_dir: str,
 ) -> tuple[bool, str, str, float]:
     """Dispatch the merge agent. Returns (ok, detail, learnings, cost)."""
     logger.warning(
@@ -98,13 +99,14 @@ def _resolve_conflict(
             files=files,
             ours="Work merged from earlier tasks in this wave and previous waves.",
             theirs=task.get("report") or task.get("description") or "",
-            context=context,
+            context_path=context_path,
         ),
         spec=config.AGENTS[AGENT],
         system_prompt=MERGE_FRAME,
         cwd=target_repo,
         tag=f"{AGENT}-{task.get('task_id', 'x')}",
         tools=MERGE_TOOLS,
+        extra_dirs=(run_dir,),
     )
     if not result.ok:
         return False, f"the merge agent failed ({result.error_kind}): {result.error_message[:200]}", "", result.cost_usd
@@ -155,7 +157,8 @@ def merge_wave(
     target_repo: str,
     into: str,
     tasks: list[dict[str, Any]],
-    context: str,
+    context_path: str,
+    run_dir: str,
 ) -> MergeReport:
     """Merge every successful task branch of one wave into `into`.
 
@@ -212,7 +215,8 @@ def merge_wave(
             task=task,
             files=files,
             ours=", ".join(report.merged),
-            context=context,
+            context_path=context_path,
+            run_dir=run_dir,
         )
         report.cost_usd += cost
         if learning:

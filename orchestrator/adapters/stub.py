@@ -72,6 +72,7 @@ def run(
     tools: tuple[str, ...],
     json_schema: dict[str, Any] | None,
     resume_session: str,
+    extra_dirs: tuple[str, ...] = (),
 ) -> AgentResult:
     started = time.perf_counter()
     calls.append(
@@ -84,6 +85,7 @@ def run(
             "json_schema": json_schema,
             "resume_session": resume_session,
             "spec": spec,
+            "extra_dirs": extra_dirs,
         }
     )
 

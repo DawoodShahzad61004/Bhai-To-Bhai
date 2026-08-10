@@ -91,6 +91,53 @@ def normalise_tasks(raw: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:
     return tasks, problems
 
 
+def normalise_coding_agents(
+    raw: Any,
+    *,
+    max_count: int,
+    allowed: list[tuple[str, str]],
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Coerce the agent's requested coding-agent roster into `{backend, model}` dicts.
+
+    Returns (agents, problems). Each requested slot must name a (model, backend)
+    pair from `allowed` — normally config.SMALL_MEDIUM_MODELS + EXPERT_MODELS —
+    the same menu the plan prompt offered. A slot naming anything else is
+    dropped and named, the discipline normalise_tasks applies to a task the
+    pipeline cannot dispatch. An empty or entirely-invalid result is reported as
+    a problem but is not itself a failure: the caller decides the fallback.
+    """
+    allowed_pairs = {(backend, model) for model, backend in allowed}
+    agents: list[dict[str, str]] = []
+    problems: list[str] = []
+
+    items = raw if isinstance(raw, list) else []
+    if not isinstance(raw, list) and raw is not None:
+        problems.append(f"'coding_agents' is a {type(raw).__name__}, not a list")
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            problems.append(f"coding agent {index} is a {type(item).__name__}, not an object")
+            continue
+        backend = item.get("backend")
+        model = item.get("model", "")
+        if not isinstance(backend, str) or not isinstance(model, str):
+            problems.append(f"coding agent {index} has a non-string backend or model")
+            continue
+        if (backend, model) not in allowed_pairs:
+            problems.append(
+                f"coding agent {index} names backend={backend!r} model={model!r}, "
+                "which is not on the menu"
+            )
+            continue
+        agents.append({"backend": backend, "model": model})
+
+    if len(agents) > max_count:
+        problems.append(f"{len(agents)} coding agent(s) requested; capped at {max_count}")
+        agents = agents[:max_count]
+
+    return agents, problems
+
+
 def assign_waves(tasks: list[dict[str, Any]]) -> Schedule:
     """Group tasks into dependency-ordered waves.
 

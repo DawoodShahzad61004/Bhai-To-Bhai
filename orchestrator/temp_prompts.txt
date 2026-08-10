@@ -101,3 +101,15 @@ Acceptance criteria:
 - Each parallel coding agent reports what happened with `context.md`, `learnings.md`, and `user_choices.md`.
 - The final result should be reviewable through filesystem evidence, test output, and MongoDB/API behavior, not only agent claims.
 '@
+
+$prompt = @'
+Test run for this target repository. Build a small pricing tool for 'Bhai Digital Studio'.
+
+Foundational work: implement the actual pricing/discount calculation logic as a small, dependency-free JavaScript module (pricing.js), including realistic edge cases — tiered volume discounts, a minimum order threshold, currency rounding rules, and rejection of invalid inputs. Separately, implement an input-validation module (validation.js) that checks a raw order object against the required shape before it reaches the pricing module — malformed input, missing fields, out-of-range quantities. These two modules do not depend on each other, but nothing else in this project can be built until both exist and are correct. This is the part that needs real care and judgment, not boilerplate — get the edge cases right.
+
+Once pricing.js and validation.js exist, build three small, nearly identical static preview pages, each wiring the pricing module up against a different fixed product (product-a.html, product-b.html, product-c.html): product details, a couple of sample orders run through the pricing module, and the computed totals shown on the page. These three pages are mechanical and repetitive — same structure, different static data — and none of them can be written until the pricing and validation modules exist, since they import and call them directly.
+
+Every coding agent must, immediately after starting, read this run's shared learnings.md in full using the exact mechanism described in your brief, and note whether it found any earlier entries before doing anything else. Once it finishes its own task, it must append its own entry to learnings.md the same way, stating what it changed and confirming both that it could read the file's existing content and that its own append succeeded.
+
+Keep every file small and focused — this is a pipeline test, not a production build. No backend, no database, no test framework beyond whatever you judge worth sanity-checking the pricing logic with.
+'@

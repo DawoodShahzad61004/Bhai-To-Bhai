@@ -118,15 +118,21 @@ def test_findings_reach_the_learnings_file(final_state, stub):
 # ── What the supervisor is handed ────────────────────────────────────────────
 
 
-def test_the_brief_carries_the_requirements_and_the_user_choices(final_state, stub):
+def test_the_brief_points_at_the_requirements_and_the_user_choices(final_state, stub):
+    """Full files are not pasted in — the supervisor is pointed at them and
+    reads them itself, which is what extra_dirs grants tool access for."""
     stub.set_text("supervisor", json.dumps(ACCEPTED))
 
     supervisor_node(final_state)
 
-    prompt = stub.calls[0]["prompt"]
-    assert "Health check must probe the database." in prompt
-    assert "Must return JSON" in prompt
-    assert "Add the endpoint, then its tests." in prompt
+    artifacts = art.prepare(final_state["run_dir"])
+    call = stub.calls[0]
+    assert str(artifacts.context) in call["prompt"]
+    assert str(artifacts.user_choices) in call["prompt"]
+    assert "Health check must probe the database." not in call["prompt"]
+    # The plan summary is already short and derived, not a full file — it stays inline.
+    assert "Add the endpoint, then its tests." in call["prompt"]
+    assert final_state["run_dir"] in call["extra_dirs"]
 
 
 def test_the_brief_distinguishes_this_question_from_the_reviewers(final_state, stub):

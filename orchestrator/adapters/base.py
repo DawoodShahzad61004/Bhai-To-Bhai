@@ -97,6 +97,7 @@ class Backend(Protocol):
         tools: tuple[str, ...],
         json_schema: dict[str, Any] | None,
         resume_session: str,
+        extra_dirs: tuple[str, ...] = (),
     ) -> AgentResult: ...
 
 
@@ -246,6 +247,7 @@ def run_agent(
     json_schema: dict[str, Any] | None = None,
     resume_session: str = "",
     invocation: str | None = None,
+    extra_dirs: tuple[str, ...] = (),
 ) -> AgentResult:
     """Run one agent turn. Returns a result; never raises.
 
@@ -256,6 +258,13 @@ def run_agent(
     The reviewer's rework loop needs this: its comments go back to the *same*
     subagent, which is materially cheaper than briefing a fresh one and is the
     only way "here is what you got wrong" refers to anything.
+
+    `extra_dirs` grants tool access outside `cwd`. Every run's artifacts
+    (context.md, learnings.md, ...) live in `run_dir`, deliberately outside the
+    target repository (config.py, "PATHS"), so an agent told only a path there
+    cannot reach it without this — both vendor CLIs gate file access to `cwd`
+    plus whatever `--add-dir` names, independently of permission mode or
+    sandbox policy.
     """
     transport = invocation or config.INVOCATION
     key = _dispatch_key(transport, spec.backend)
@@ -288,6 +297,7 @@ def run_agent(
         tools=tools,
         json_schema=json_schema,
         resume_session=resume_session,
+        extra_dirs=extra_dirs,
     )
     if result.ok:
         logger.info("[%s] %s", tag, result.summary())

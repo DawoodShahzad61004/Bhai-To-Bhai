@@ -199,6 +199,51 @@ def test_learnings_accumulate_across_agents(run_dir):
     assert body.count("##") == 2
 
 
+def test_concurrent_appends_to_learnings_do_not_interleave_or_corrupt(run_dir):
+    """The coding subagents write learnings.md from separate OS processes,
+    genuinely in parallel — a Python-only lock would not reach across them, so
+    this has to prove the OS-level lock actually holds under real concurrency."""
+    import subprocess
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+
+    script = str(__import__("pathlib").Path(art.__file__).resolve())
+
+    def append(i: int) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, script, "append-learning", str(run_dir.run_dir), f"task-{i}", f"finding {i}"],
+            capture_output=True,
+            text=True,
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(append, range(8)))
+
+    for result in results:
+        assert result.returncode == 0, result.stderr
+
+    body = art.read_text(run_dir.learnings)
+    assert body.count("# Learnings") == 1
+    for i in range(8):
+        assert f"finding {i}" in body
+
+
+def test_the_append_learning_cli_reuses_the_same_writer(run_dir):
+    import subprocess
+    import sys
+
+    script = str(__import__("pathlib").Path(art.__file__).resolve())
+    result = subprocess.run(
+        [sys.executable, script, "append-learning", str(run_dir.run_dir), "task-T-001", "found a thing"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    body = art.read_text(run_dir.learnings)
+    assert "found a thing" in body
+    assert "task-T-001" in body
+
+
 def test_events_are_written_on_arrival(run_dir):
     """Durability at event time, not at process exit (ADR-005)."""
     art.append_event(run_dir, event("wave_started", wave=0))

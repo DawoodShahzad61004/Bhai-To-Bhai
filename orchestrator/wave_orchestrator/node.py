@@ -55,6 +55,24 @@ def _attempt_number(state: PipelineState, wave: int) -> int:
     return sum(1 for record in state.get("wave_results") or [] if record.get("wave") == wave)
 
 
+def _coding_agents_from(state: PipelineState) -> list[config.AgentSpec]:
+    """The roster the planner sized (state["coding_agents"]), or the default pair.
+
+    A checkpoint from before dynamic sizing existed, or a plan that provided
+    nothing usable (planner_node already validated and fell back at write
+    time), has no roster in state — the same two-slot default this pipeline
+    always ran with covers both.
+    """
+    entries = state.get("coding_agents") or []
+    if not entries:
+        return [config.CODING_AGENT_A, config.CODING_AGENT_B]
+    deadline = config.CODING_AGENT_A.deadline_seconds
+    return [
+        config.AgentSpec(backend=entry["backend"], model=entry["model"], deadline_seconds=deadline)
+        for entry in entries
+    ]
+
+
 def _revert_rejected_attempt(state: PipelineState, branch: str) -> None:
     """Undo a rejected wave, as the notes specify: the work is reverted/deleted.
 
@@ -153,20 +171,23 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         event("wave_started", agent=AGENT, wave=wave_index, attempt=attempt, tasks=task_ids),
     )
 
+    # Every task dispatched in an earlier wave, so the roster's slot index keeps
+    # advancing across the run instead of restarting at 0 each wave — see
+    # run_wave's docstring for why a bare per-wave index cannot honour a roster
+    # the planner ordered deliberately (e.g. experts first, small/medium after).
+    agent_offset = sum(len(wave) for wave in waves[:wave_index])
+
     outcomes = run_wave(
         tasks,
         target_repo=target,
         run_id=state["run_id"],
         base=base,
-        context=state.get("context") or art.read_text(artifacts.context),
-        learnings=art.read_text(artifacts.learnings),
+        run_dir=state["run_dir"],
+        coding_agents=_coding_agents_from(state),
+        agent_offset=agent_offset,
         rework_comments=rework_comments,
         sessions=_sessions_from(state, wave_index) if rework_comments else {},
     )
-
-    for outcome in outcomes:
-        if outcome.learnings:
-            art.append_learning(artifacts, f"task-{outcome.task_id}", outcome.learnings)
 
     succeeded = [outcome for outcome in outcomes if outcome.ok]
     failed = [outcome for outcome in outcomes if not outcome.ok]

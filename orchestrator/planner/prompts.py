@@ -42,9 +42,41 @@ are merged afterwards by a separate agent. So:
   invocation and a merge.
 - Every task must be independently verifiable. Say how in "acceptance".
 
+## Sizing the coding-agent roster
+
+You also decide how many coding agents this plan gets and which CLI and model \
+each one runs, within the two tiers below. This is a real capacity and cost \
+decision, not a formality.
+
+{model_menu}
+
+Pick between 1 and {max_coding_agents} agents. More agents only helps if the \
+plan actually has that much independent, parallel work in a single wave — sizing \
+the roster above your own wave widths just leaves agents idle. Use \
+small/medium-tier agents for tasks that are simple, mechanical, or long but \
+straightforward (boilerplate, repetitive edits, glue code); use expert-tier \
+agents for tasks that require real judgment (tricky logic, ambiguous \
+requirements, anything a mistake in would be expensive to unwind). A roster can, \
+and often should, mix tiers.
+
+**Order the list to match when each tier's work actually happens.** Tasks are \
+dispatched through this list in one continuous rotation across the whole run, in \
+the order the pipeline schedules them — not one rotation restarted per wave. You \
+do not assign waves yourself (the pipeline derives them from "depends_on"), but \
+you know the shape you are creating: tasks with no unmet dependencies run first, \
+and a task that depends on one of those cannot run until it is done. So if the \
+foundational, dependency-free work needs real judgment and what depends on it \
+afterward is comparatively mechanical, put the expert-tier entries first in the \
+list and the small/medium-tier entries after — the rotation will then reach the \
+right tier for the right stage of the work instead of cycling through all of \
+them evenly regardless of when each task actually runs.
+
 Return this JSON object:
 {{
   "summary": "<2-4 sentences: the approach you are taking and why>",
+  "coding_agents": [
+    {{"backend": "<claude or codex, from the menu above>", "model": "<model from the menu above, or \\"\\" for codex's default>"}}
+  ],
   "tasks": [
     {{
       "task_id": "T-001",
@@ -60,6 +92,14 @@ Return this JSON object:
 Task ids must be unique and stable. Use "depends_on": [] for a task that can \
 start immediately. Do not group tasks into waves or phases yourself — declare the \
 dependencies and the pipeline derives the schedule.\
+"""
+
+MODEL_MENU = """\
+Small/medium tier (simple and/or longer mechanical work):
+{small_medium}
+
+Expert tier (complex, judgment-heavy work):
+{expert}\
 """
 
 REPLAN_NOTE = """\
@@ -78,27 +118,43 @@ identified. Do not simply re-emit the previous plan with different task ids.\
 """
 
 
+def _format_model_menu(pairs: list[tuple[str, str]]) -> str:
+    lines = []
+    for model, backend in pairs:
+        model_repr = f'"{model}"' if model else '"" (the CLI\'s own default model)'
+        lines.append(f'- backend="{backend}", model={model_repr}')
+    return "\n".join(lines)
+
+
 def plan_prompt(
     *,
-    context: str,
-    user_choices: str,
+    context_path: str,
+    user_choices_path: str,
     target_repo: str,
+    max_coding_agents: int,
+    small_medium_models: list[tuple[str, str]],
+    expert_models: list[tuple[str, str]],
     supervisor_comments: str = "",
 ) -> str:
     replan = REPLAN_NOTE.format(comments=supervisor_comments) if supervisor_comments else ""
-    return f"""{PLAN_BRIEF}
+    model_menu = MODEL_MENU.format(
+        small_medium=_format_model_menu(small_medium_models),
+        expert=_format_model_menu(expert_models),
+    )
+    brief = PLAN_BRIEF.format(model_menu=model_menu, max_coding_agents=max_coding_agents)
+    return f"""{brief}
 
 ## Repository
 {target_repo}
 
-## Requirements (context.md)
-{context}
+## Requirements
 
-## Explicit user choices (user_choices.md)
+The full gathered requirements are written to `{context_path}`. Read that file \
+before planning — nothing below repeats it.
 
-These came from the user directly. Where anything else conflicts with one of \
-these, this wins.
+## Explicit user choices
 
-{user_choices}
+The user's own explicit decisions are written to `{user_choices_path}`. Read it \
+before planning. Where anything else conflicts with one of these, this wins.
 {replan}
 """

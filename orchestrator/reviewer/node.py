@@ -129,13 +129,14 @@ def reviewer_node(state: PipelineState) -> dict:
             branch=state.get("integration_branch") or "the integration branch",
             tasks=tasks,
             evidence=_evidence_lines(latest),
-            context=state.get("context") or art.read_text(artifacts.context),
+            context_path=str(artifacts.context),
         ),
         spec=config.AGENTS[AGENT],
         system_prompt=REVIEW_FRAME,
         cwd=state["target_repo"],
         tag=AGENT,
         tools=REVIEW_TOOLS,
+        extra_dirs=(state["run_dir"],),
     )
     cost = result.cost_usd
 

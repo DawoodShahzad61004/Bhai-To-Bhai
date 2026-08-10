@@ -56,7 +56,8 @@ is actually there.
 
 ## The requirements this is all in service of
 
-{context}
+The full requirements this run is working from are written to `{context_path}` \
+— read that file before judging whether this wave is consistent with them.
 
 ## How to decide
 
@@ -83,7 +84,7 @@ def review_prompt(
     branch: str,
     tasks: list[dict],
     evidence: list[str],
-    context: str,
+    context_path: str,
 ) -> str:
     task_blocks = []
     for task in tasks:
@@ -99,5 +100,5 @@ def review_prompt(
         count=len(tasks),
         tasks="\n\n".join(task_blocks) or "(no task records available)",
         evidence="\n".join(f"- {line}" for line in evidence) or "- (nothing reported)",
-        context=context.strip() or "(no context supplied)",
+        context_path=context_path,
     )

@@ -28,7 +28,7 @@ import worktrees as wt
 from adapters import run_agent
 from logging_config import get_logger
 from planner.prompts import PIPELINE_FRAME, plan_prompt
-from planner.waves import assign_waves, normalise_tasks
+from planner.waves import assign_waves, normalise_coding_agents, normalise_tasks
 from state import PipelineState, event
 
 logger = get_logger(__name__)
@@ -62,9 +62,12 @@ def planner_node(state: PipelineState) -> dict:
 
     result = run_agent(
         plan_prompt(
-            context=state.get("context") or art.read_text(artifacts.context),
-            user_choices=art.read_text(artifacts.user_choices, default="_none recorded_"),
+            context_path=str(artifacts.context),
+            user_choices_path=str(artifacts.user_choices),
             target_repo=target,
+            max_coding_agents=config.MAX_CODING_AGENT_COUNT,
+            small_medium_models=config.SMALL_MEDIUM_MODELS,
+            expert_models=config.EXPERT_MODELS,
             supervisor_comments=comments,
         ),
         spec=config.AGENTS[AGENT],
@@ -72,6 +75,7 @@ def planner_node(state: PipelineState) -> dict:
         cwd=target,
         tag=AGENT,
         tools=PLANNER_TOOLS,
+        extra_dirs=(state["run_dir"],),
     )
     if not result.ok:
         return _failure(
@@ -121,6 +125,28 @@ def planner_node(state: PipelineState) -> dict:
             kind="bounded",
         )
 
+    coding_agents, agent_problems = normalise_coding_agents(
+        payload.get("coding_agents"),
+        max_count=config.MAX_CODING_AGENT_COUNT,
+        allowed=config.SMALL_MEDIUM_MODELS + config.EXPERT_MODELS,
+    )
+    if agent_problems:
+        logger.warning("[%s] coding-agent roster adjusted: %s", AGENT, "; ".join(agent_problems))
+        art.append_learning(
+            artifacts,
+            AGENT,
+            "Coding-agent roster adjusted from what the plan requested:\n"
+            + "\n".join(f"- {problem}" for problem in agent_problems),
+        )
+    if not coding_agents:
+        # No usable roster from the plan — the two-slot default this pipeline
+        # ran with before dynamic sizing existed, so a plan that says nothing
+        # about it behaves exactly as it always did.
+        coding_agents = [
+            {"backend": config.CODING_AGENT_A.backend, "model": config.CODING_AGENT_A.model},
+            {"backend": config.CODING_AGENT_B.backend, "model": config.CODING_AGENT_B.model},
+        ]
+
     plan = {
         "run_id": state["run_id"],
         "goal": state["goal"],
@@ -131,6 +157,7 @@ def planner_node(state: PipelineState) -> dict:
         "waves": waves,
         "tasks": scheduled_tasks,
         "discarded": problems,
+        "coding_agents": coding_agents,
     }
     art.write_json(artifacts.plan, plan)
     art.write_tasks(artifacts, scheduled_tasks)
@@ -157,6 +184,7 @@ def planner_node(state: PipelineState) -> dict:
         "plan_path": str(artifacts.plan),
         "tasks": scheduled_tasks,
         "waves": waves,
+        "coding_agents": coding_agents,
         # A replan restarts the schedule. Without this the pipeline would resume
         # partway through a wave list that no longer exists.
         "current_wave": 0,

@@ -7,8 +7,9 @@ import json
 import pytest
 
 import artifacts as art
+import config
 from adapters.base import AgentResult
-from planner import assign_waves, normalise_tasks, planner_node
+from planner import assign_waves, normalise_coding_agents, normalise_tasks, planner_node
 
 PLAN = {
     "summary": "Add the endpoint, then its tests.",
@@ -145,6 +146,67 @@ def test_an_id_field_is_accepted_in_place_of_task_id():
     assert tasks[0]["task_id"] == "A"
 
 
+# ── The coding-agent roster ──────────────────────────────────────────────────
+
+_MENU = config.SMALL_MEDIUM_MODELS + config.EXPERT_MODELS
+
+
+def test_a_roster_naming_menu_pairs_is_accepted():
+    small_model, small_backend = config.SMALL_MEDIUM_MODELS[0]
+    expert_model, expert_backend = config.EXPERT_MODELS[0]
+    agents, problems = normalise_coding_agents(
+        [
+            {"backend": small_backend, "model": small_model},
+            {"backend": expert_backend, "model": expert_model},
+        ],
+        max_count=config.MAX_CODING_AGENT_COUNT,
+        allowed=_MENU,
+    )
+    assert problems == []
+    assert agents == [
+        {"backend": small_backend, "model": small_model},
+        {"backend": expert_backend, "model": expert_model},
+    ]
+
+
+def test_a_roster_entry_off_the_menu_is_dropped_and_named():
+    agents, problems = normalise_coding_agents(
+        [{"backend": "claude", "model": "some-model-not-on-the-menu"}],
+        max_count=config.MAX_CODING_AGENT_COUNT,
+        allowed=_MENU,
+    )
+    assert agents == []
+    assert "not on the menu" in problems[0]
+
+
+def test_a_roster_over_the_cap_is_truncated_and_named():
+    requested = [{"backend": backend, "model": model} for model, backend in _MENU] * 3
+    agents, problems = normalise_coding_agents(
+        requested,
+        max_count=2,
+        allowed=_MENU,
+    )
+    assert len(agents) == 2
+    assert any("capped at 2" in problem for problem in problems)
+
+
+def test_a_non_list_roster_is_reported_and_ignored():
+    agents, problems = normalise_coding_agents(
+        "not a list", max_count=config.MAX_CODING_AGENT_COUNT, allowed=_MENU
+    )
+    assert agents == []
+    assert "not a list" in problems[0]
+
+
+def test_no_roster_at_all_is_not_a_problem():
+    """Absent is normal — a plan need not mention it — only present-and-wrong is."""
+    agents, problems = normalise_coding_agents(
+        None, max_count=config.MAX_CODING_AGENT_COUNT, allowed=_MENU
+    )
+    assert agents == []
+    assert problems == []
+
+
 # ── The node ─────────────────────────────────────────────────────────────────
 
 
@@ -164,6 +226,42 @@ def test_plan_and_task_files_are_written(state, stub):
     assert result["total_cost_usd"] == pytest.approx(0.31)
 
 
+def test_a_plan_with_no_roster_falls_back_to_the_default_pair(state, stub):
+    stub.set_text("planner", json.dumps(PLAN))
+
+    result = planner_node(state)
+
+    assert result["coding_agents"] == [
+        {"backend": config.CODING_AGENT_A.backend, "model": config.CODING_AGENT_A.model},
+        {"backend": config.CODING_AGENT_B.backend, "model": config.CODING_AGENT_B.model},
+    ]
+    artifacts = art.prepare(state["run_dir"])
+    assert art.read_json(artifacts.plan)["coding_agents"] == result["coding_agents"]
+
+
+def test_a_plan_can_size_and_cast_its_own_coding_agent_roster(state, stub):
+    model, backend = config.EXPERT_MODELS[0]
+    stub.set_text(
+        "planner",
+        json.dumps({**PLAN, "coding_agents": [{"backend": backend, "model": model}]}),
+    )
+
+    result = planner_node(state)
+
+    assert result["coding_agents"] == [{"backend": backend, "model": model}]
+
+
+def test_the_prompt_offers_the_model_menu_and_the_agent_cap(state, stub):
+    stub.set_text("planner", json.dumps(PLAN))
+
+    planner_node(state)
+
+    prompt = stub.calls[0]["prompt"]
+    for model, backend in config.SMALL_MEDIUM_MODELS + config.EXPERT_MODELS:
+        assert backend in prompt
+    assert str(config.MAX_CODING_AGENT_COUNT) in prompt
+
+
 def test_the_planner_is_given_read_only_tools(state, stub):
     """The planner plans; the coding subagents implement."""
     stub.set_text("planner", json.dumps(PLAN))
@@ -172,7 +270,9 @@ def test_the_planner_is_given_read_only_tools(state, stub):
     assert "Edit" not in stub.calls[0]["tools"]
 
 
-def test_the_prompt_carries_the_requirements_and_the_user_choices(state, stub):
+def test_the_prompt_points_at_the_requirements_and_the_user_choices(state, stub):
+    """Full files are not pasted in — the planner is pointed at them and reads
+    them itself, which is what extra_dirs grants tool access for."""
     artifacts = art.prepare(state["run_dir"])
     art.write_text(artifacts.context, "# Context\nMust expose /health.")
     art.write_text(artifacts.user_choices, "# User choices\n- JSON, not plain text")
@@ -180,9 +280,11 @@ def test_the_prompt_carries_the_requirements_and_the_user_choices(state, stub):
 
     planner_node({**state, "context": "# Context\nMust expose /health."})
 
-    prompt = stub.calls[0]["prompt"]
-    assert "Must expose /health." in prompt
-    assert "JSON, not plain text" in prompt
+    call = stub.calls[0]
+    assert str(artifacts.context) in call["prompt"]
+    assert str(artifacts.user_choices) in call["prompt"]
+    assert "Must expose /health." not in call["prompt"]
+    assert state["run_dir"] in call["extra_dirs"]
 
 
 def test_waves_are_derived_not_taken_from_the_agent(state, stub):

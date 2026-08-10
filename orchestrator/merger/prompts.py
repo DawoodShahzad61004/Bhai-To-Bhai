@@ -61,7 +61,8 @@ is awkward.
 
 ## What the project is building overall
 
-{context}
+The full requirements this run is working from are written to `{context_path}` \
+— read that file if you need it to judge which side of the conflict is correct.
 """
 
 
@@ -73,7 +74,7 @@ def merge_prompt(
     files: list[str],
     ours: str,
     theirs: str,
-    context: str,
+    context_path: str,
 ) -> str:
     return MERGE_BRIEF.format(
         branch=branch,
@@ -82,5 +83,5 @@ def merge_prompt(
         files="\n".join(f"- {path}" for path in files) or "- (none reported)",
         ours=ours.strip() or "(no description available)",
         theirs=theirs.strip() or "(no description available)",
-        context=context.strip() or "(no context supplied)",
+        context_path=context_path,
     )
