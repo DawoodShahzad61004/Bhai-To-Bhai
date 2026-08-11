@@ -104,7 +104,7 @@ def _thread_id(stdout: str) -> str:
     return ""
 
 
-def run(
+def run_codex(
     prompt: str,
     *,
     spec: AgentSpec,
@@ -115,8 +115,10 @@ def run(
     json_schema: dict[str, Any] | None,
     resume_session: str,
     extra_dirs: tuple[str, ...] = (),
+    local_provider: str = "",
+    backend_label: str = "Codex",
 ) -> AgentResult:
-    """One Codex turn. Returns a result; never raises.
+    """One Codex-backed turn. Returns a result; never raises.
 
     Codex has no `--append-system-prompt`, so a system prompt is prepended to the
     user prompt instead. It also has no tool allowlist of the kind Claude Code
@@ -148,6 +150,16 @@ def run(
         # This does not disturb --output-last-message; both are populated.
         "--json",
     ]
+    if local_provider:
+        # Codex assumes reasoning for unknown local models; Ollama rejects that
+        # request for non-thinking models such as Qwen 2.5 Coder.
+        argv += [
+            "--oss",
+            "--local-provider",
+            local_provider,
+            "-c",
+            "model_reasoning_effort=none",
+        ]
     for extra_dir in extra_dirs:
         argv += ["--add-dir", extra_dir]
     argv += [
@@ -194,7 +206,8 @@ def run(
                 ok=False,
                 error_kind="not_installed",
                 error_message=(
-                    f"Codex CLI {config.CODEX_BIN!r} was not found from this process's "
+                    f"{backend_label} requires Codex CLI {config.CODEX_BIN!r}, which was not "
+                    "found from this process's "
                     "environment. Set CODEX_BIN or install it."
                 ),
                 duration_seconds=time.perf_counter() - started,
@@ -208,7 +221,7 @@ def run(
                 ok=False,
                 error_kind="timeout",
                 error_message=(
-                    f"Codex ran past its {spec.deadline_seconds}s deadline and was "
+                    f"{backend_label} ran past its {spec.deadline_seconds}s deadline and was "
                     "abandoned. Anything it saved before then is still on disk."
                 ),
                 duration_seconds=time.perf_counter() - started,
@@ -255,7 +268,11 @@ def run(
             )
 
         logger.info(
-            "[%s] codex done | %.1fs | session=%s", tag, elapsed, session_id[:8] or "-"
+            "[%s] %s done | %.1fs | session=%s",
+            tag,
+            backend_label.lower(),
+            elapsed,
+            session_id[:8] or "-",
         )
         logger.info("[%s] reply: %s", tag, text[:_CONSOLE_EXCERPT])
         logger.debug("[%s] full reply:\n%s", tag, _debug_block(text))
@@ -267,6 +284,31 @@ def run(
             os.unlink(last_message)
         except OSError:
             pass
+
+
+def run(
+    prompt: str,
+    *,
+    spec: AgentSpec,
+    system_prompt: str,
+    cwd: str,
+    tag: str,
+    tools: tuple[str, ...],
+    json_schema: dict[str, Any] | None,
+    resume_session: str,
+    extra_dirs: tuple[str, ...] = (),
+) -> AgentResult:
+    return run_codex(
+        prompt,
+        spec=spec,
+        system_prompt=system_prompt,
+        cwd=cwd,
+        tag=tag,
+        tools=tools,
+        json_schema=json_schema,
+        resume_session=resume_session,
+        extra_dirs=extra_dirs,
+    )
 
 
 register_backend("direct:codex", run)

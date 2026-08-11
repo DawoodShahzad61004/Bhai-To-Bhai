@@ -124,6 +124,13 @@ CLAUDE_PERMISSION_MODE = os.getenv("CLAUDE_PERMISSION_MODE", "bypassPermissions"
 # anything beyond it should still be refused.
 CODEX_SANDBOX = os.getenv("CODEX_SANDBOX", "workspace-write")
 
+# Which coding-agent CLI supplies the agent loop for `backend="ollama"`.
+# Codex is the proven default because it has an explicit `--local-provider
+# ollama` mode. Claude Code is allowed for setups that route third-party models
+# through Claude's own settings; in that mode the Ollama adapter delegates to the
+# Claude adapter and leaves model/provider interpretation to that harness.
+OLLAMA_HARNESS = os.getenv("OLLAMA_HARNESS", "codex").strip().lower()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # AGENT ROSTER
@@ -138,7 +145,7 @@ class AgentSpec:
     socket open while it generates is never idle. A limit has to name its unit.
     """
 
-    backend: str  # "claude" | "codex"
+    backend: str  # "claude" | "codex" | "ollama"
     model: str  # "" defers to whatever the CLI itself selects
     deadline_seconds: int
     # Dollar ceiling for one invocation. 0 leaves it uncapped. Honoured by the
@@ -156,13 +163,13 @@ class AgentSpec:
 # `backend="codex"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="claude", model="haiku", deadline_seconds=300),
-    "wave_orchestrator": AgentSpec(backend="claude", model="haiku", deadline_seconds=900),
-    "merger": AgentSpec(backend="claude", model="haiku", deadline_seconds=600),
+    "requirements": AgentSpec(backend="ollama", model="qwen2.5-coder:14b-instruct-q4_K_M", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="ollama", model="qwen2.5-coder:14b-instruct-q4_K_M", deadline_seconds=900),
+    "merger": AgentSpec(backend="ollama", model="qwen2.5-coder:14b-instruct-q4_K_M", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
-    "reviewer": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600),
-    "supervisor": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600),
+    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600),
+    "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600),
 }
 
 # The coding subagents dispatched inside a wave. These are the only agents that
@@ -195,8 +202,21 @@ MAX_CODING_AGENT_COUNT = 5
 # "sonnet" -> claude-sonnet-5, both reachable. Codex is logged in via ChatGPT,
 # which rejects a named --model (codex.py's own comment), so "" (CLI default)
 # is the only safe entry for that backend, not a specific model string.
-SMALL_MEDIUM_MODELS = [("haiku", "claude")]
-EXPERT_MODELS = [("sonnet", "claude"), ("", "codex")]
+SMALL_MEDIUM_MODELS = [
+    # ("haiku", "claude"),
+    # ("muse-glimmer:latest", "ollama"),
+    # ("devstral:24b-small-2505-q4_K_M", "ollama"),
+    ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
+    # ("qwen3:14b-q4_K_M", "ollama"),
+    # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
+    # ("qwen3.5:4b", "ollama"),
+    # ("qwen3:14b", "ollama"),
+    # ("qwen3:8b", "ollama"),
+]
+EXPERT_MODELS = [
+    # ("sonnet", "claude"), 
+    ("", "codex")
+]
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TERMINATION BOUNDS

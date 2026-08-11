@@ -75,7 +75,7 @@ Return this JSON object:
 {{
   "summary": "<2-4 sentences: the approach you are taking and why>",
   "coding_agents": [
-    {{"backend": "<claude or codex, from the menu above>", "model": "<model from the menu above, or \\"\\" for codex's default>"}}
+    {{"backend": "<backend from the menu above>", "model": "<model from the menu above, or \\"\\" for codex's default>"}}
   ],
   "tasks": [
     {{

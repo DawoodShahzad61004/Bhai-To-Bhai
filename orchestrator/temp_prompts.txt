@@ -113,3 +113,37 @@ Every coding agent must, immediately after starting, read this run's shared lear
 
 Keep every file small and focused — this is a pipeline test, not a production build. No backend, no database, no test framework beyond whatever you judge worth sanity-checking the pricing logic with.
 '@
+
+$prompt = @'
+Test run for this target repository. Build a small pricing tool for 'Bhai Digital Studio'.
+
+This run must contain exactly one wave with exactly two independent tasks and exactly two coding agents:
+
+1. Expert task and agent: implement the foundational pricing and validation logic.
+2. Simple task and agent: implement the static preview pages.
+
+Select exactly one expert-tier coding agent and one small/medium-tier coding agent. Order the coding-agent roster expert first and simple second. Emit the expert task first and the simple task second. Neither task may depend on the other; both must run concurrently in the same wave. Do not create additional tasks or waves.
+
+Task 1 — Expert:
+Create pricing.js and validation.js. pricing.js must implement tiered volume discounts, a minimum-order threshold, currency rounding, and rejection of invalid inputs. validation.js must validate raw order objects for required fields, malformed values, and out-of-range quantities.
+
+Use this fixed interface:
+- validation.js exports validateOrder(order).
+- pricing.js exports calculatePrice(order, product).
+- calculatePrice returns an object containing subtotal, discount, and total.
+
+Task 2 — Simple:
+Create product-a.html, product-b.html, and product-c.html. Each page must use the fixed interfaces above with a different static product and two sample orders. The pages may be written against the declared interface without waiting for Task 1; they will become executable after the branches are merged. Keep their structure simple and nearly identical.
+
+Every coding agent must immediately read context.md and learnings.md in full using the paths and mechanism provided in its brief. Before changing code, it must note whether learnings.md already contained entries.
+
+After completing its task, each agent must append an entry to learnings.md using the exact append mechanism from its brief. The entry must state what it changed, confirm that context.md and learnings.md were read successfully, and confirm that its learnings.md append succeeded.
+
+Each agent's final response must include an 'Artifact access' statement covering:
+- context.md: read successfully; whether it was written, and why.
+- learnings.md: read successfully and appended successfully.
+
+Treat context.md as read-only unless the coding brief explicitly authorizes writing to it. If no context.md write was needed or permitted, the agent must say so explicitly rather than claiming it wrote to the file.
+
+Keep every file small and focused. This is a pipeline test, not a production build. Do not add a backend, database, or test framework. The expert agent may add a minimal sanity-check script if useful.
+'@

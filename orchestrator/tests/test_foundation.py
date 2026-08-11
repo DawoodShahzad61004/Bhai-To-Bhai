@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -31,6 +33,7 @@ def test_every_transport_is_registered():
     assert "stub" in registered
     assert "direct:claude" in registered
     assert "direct:codex" in registered
+    assert "direct:ollama" in registered
     assert "maestro" in registered
 
 
@@ -63,6 +66,87 @@ def test_missing_binary_is_a_result_not_an_exception(monkeypatch):
     )
     assert result.ok is False
     assert result.error_kind == "not_installed"
+
+
+def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
+    model = "qwen2.5-coder:14b-instruct-q4_K_M"
+    captured: dict[str, object] = {}
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        captured.update(argv=argv, input=input, cwd=cwd, timeout=timeout)
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text("OLLAMA_ADAPTER_OK", encoding="utf-8")
+        stdout = '{"type":"thread.started","thread_id":"ollama-session"}\n'
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    monkeypatch.setattr("config.OLLAMA_HARNESS", "codex")
+    result = adapters.run_agent(
+        "Return the requested marker.",
+        spec=AgentSpec(backend="ollama", model=model, deadline_seconds=30),
+        cwd=str(tmp_path),
+        tag="ollama-probe",
+        invocation="direct",
+    )
+
+    argv = captured["argv"]
+    assert result.ok is True
+    assert result.text == "OLLAMA_ADAPTER_OK"
+    assert result.session_id == "ollama-session"
+    assert argv[argv.index("--model") + 1] == model
+    assert argv[argv.index("--local-provider") + 1] == "ollama"
+    assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
+    assert "--oss" in argv
+
+
+def test_ollama_adapter_can_use_claude_harness(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    def fake_run_claude(prompt, **kwargs):
+        captured.update(prompt=prompt, **kwargs)
+        return AgentResult(ok=True, text="CLAUDE_HARNESS_OK", session_id="claude-session")
+
+    monkeypatch.setattr("config.OLLAMA_HARNESS", "claude")
+    monkeypatch.setattr("adapters.ollama.run_claude", fake_run_claude)
+    result = adapters.run_agent(
+        "Return the requested marker.",
+        spec=AgentSpec(
+            backend="ollama",
+            model="qwen2.5-coder:14b-instruct-q4_K_M",
+            deadline_seconds=30,
+        ),
+        cwd=str(tmp_path),
+        tag="ollama-probe",
+        invocation="direct",
+        extra_dirs=("run-dir",),
+    )
+
+    assert result.ok is True
+    assert result.text == "CLAUDE_HARNESS_OK"
+    assert result.session_id == "claude-session"
+    assert captured["prompt"] == "Return the requested marker."
+    assert captured["tag"] == "ollama-probe"
+    assert captured["cwd"] == str(tmp_path)
+    assert captured["extra_dirs"] == ("run-dir",)
+
+
+def test_ollama_adapter_rejects_unknown_harness(monkeypatch, tmp_path):
+    monkeypatch.setattr("config.OLLAMA_HARNESS", "nonsense")
+    result = adapters.run_agent(
+        "hello",
+        spec=AgentSpec(
+            backend="ollama",
+            model="qwen2.5-coder:14b-instruct-q4_K_M",
+            deadline_seconds=30,
+        ),
+        cwd=str(tmp_path),
+        tag="ollama-probe",
+        invocation="direct",
+    )
+
+    assert result.ok is False
+    assert result.error_kind == "bad_request"
+    assert "OLLAMA_HARNESS" in result.error_message
 
 
 @pytest.mark.parametrize(

@@ -106,7 +106,7 @@ class Backend(Protocol):
 #
 #   transport (config.INVOCATION) -- HOW the CLI is reached: direct subprocess,
 #                                    through `maestro delegate`, or not at all.
-#   vendor    (AgentSpec.backend) -- WHICH CLI: claude or codex.
+#   vendor    (AgentSpec.backend) -- WHICH CLI/provider: claude, codex, or ollama.
 #
 # The direct transport needs one adapter per vendor, so it registers under
 # "direct:<vendor>". `maestro` and `stub` speak to any vendor and register under
@@ -321,7 +321,7 @@ def _load_builtin_backends() -> None:
 
     importlib.import_module("adapters.stub")
 
-    for module in ("claude", "codex", "maestro"):
+    for module in ("claude", "codex", "ollama", "maestro"):
         try:
             importlib.import_module(f"adapters.{module}")
         except Exception as exc:  # pragma: no cover - defensive
