@@ -124,17 +124,9 @@ CLAUDE_PERMISSION_MODE = os.getenv("CLAUDE_PERMISSION_MODE", "bypassPermissions"
 # anything beyond it should still be refused.
 CODEX_SANDBOX = os.getenv("CODEX_SANDBOX", "workspace-write")
 
-# Which coding-agent CLI supplies the agent loop for `backend="ollama"`.
-# Codex is the proven default because it has an explicit `--local-provider
-# ollama` mode. Claude Code is allowed for setups that route third-party models
-# through Claude's own settings; in that mode the Ollama adapter delegates to the
-# Claude adapter and leaves model/provider interpretation to that harness.
-OLLAMA_HARNESS = os.getenv("OLLAMA_HARNESS", "codex").strip().lower()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 # AGENT ROSTER
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════════════════
 @dataclass(frozen=True)
 class AgentSpec:
     """Which CLI runs one pipeline stage, and under what limits.
@@ -163,9 +155,9 @@ class AgentSpec:
 # `backend="codex"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="ollama", model="qwen2.5-coder:14b-instruct-q4_K_M", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="ollama", model="qwen2.5-coder:14b-instruct-q4_K_M", deadline_seconds=900),
-    "merger": AgentSpec(backend="ollama", model="qwen2.5-coder:14b-instruct-q4_K_M", deadline_seconds=900),
+    "requirements": AgentSpec(backend="ollama", model="devstral:24b-small-2505-q4_K_M", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="ollama", model="devstral:24b-small-2505-q4_K_M", deadline_seconds=900),
+    "merger": AgentSpec(backend="ollama", model="devstral:24b-small-2505-q4_K_M", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
     "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600),
@@ -205,8 +197,8 @@ MAX_CODING_AGENT_COUNT = 5
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
     # ("muse-glimmer:latest", "ollama"),
-    # ("devstral:24b-small-2505-q4_K_M", "ollama"),
-    ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
+    ("devstral:24b-small-2505-q4_K_M", "ollama"),
+    # ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
     # ("qwen3:14b-q4_K_M", "ollama"),
     # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
     # ("qwen3.5:4b", "ollama"),

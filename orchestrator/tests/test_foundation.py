@@ -80,7 +80,6 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
         return subprocess.CompletedProcess(argv, 0, stdout, "")
 
     monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
-    monkeypatch.setattr("config.OLLAMA_HARNESS", "codex")
     result = adapters.run_agent(
         "Return the requested marker.",
         spec=AgentSpec(backend="ollama", model=model, deadline_seconds=30),
@@ -97,56 +96,6 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     assert argv[argv.index("--local-provider") + 1] == "ollama"
     assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
     assert "--oss" in argv
-
-
-def test_ollama_adapter_can_use_claude_harness(monkeypatch, tmp_path):
-    captured: dict[str, object] = {}
-
-    def fake_run_claude(prompt, **kwargs):
-        captured.update(prompt=prompt, **kwargs)
-        return AgentResult(ok=True, text="CLAUDE_HARNESS_OK", session_id="claude-session")
-
-    monkeypatch.setattr("config.OLLAMA_HARNESS", "claude")
-    monkeypatch.setattr("adapters.ollama.run_claude", fake_run_claude)
-    result = adapters.run_agent(
-        "Return the requested marker.",
-        spec=AgentSpec(
-            backend="ollama",
-            model="qwen2.5-coder:14b-instruct-q4_K_M",
-            deadline_seconds=30,
-        ),
-        cwd=str(tmp_path),
-        tag="ollama-probe",
-        invocation="direct",
-        extra_dirs=("run-dir",),
-    )
-
-    assert result.ok is True
-    assert result.text == "CLAUDE_HARNESS_OK"
-    assert result.session_id == "claude-session"
-    assert captured["prompt"] == "Return the requested marker."
-    assert captured["tag"] == "ollama-probe"
-    assert captured["cwd"] == str(tmp_path)
-    assert captured["extra_dirs"] == ("run-dir",)
-
-
-def test_ollama_adapter_rejects_unknown_harness(monkeypatch, tmp_path):
-    monkeypatch.setattr("config.OLLAMA_HARNESS", "nonsense")
-    result = adapters.run_agent(
-        "hello",
-        spec=AgentSpec(
-            backend="ollama",
-            model="qwen2.5-coder:14b-instruct-q4_K_M",
-            deadline_seconds=30,
-        ),
-        cwd=str(tmp_path),
-        tag="ollama-probe",
-        invocation="direct",
-    )
-
-    assert result.ok is False
-    assert result.error_kind == "bad_request"
-    assert "OLLAMA_HARNESS" in result.error_message
 
 
 @pytest.mark.parametrize(
