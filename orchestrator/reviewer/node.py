@@ -104,7 +104,7 @@ def _rework_text(payload: dict) -> str:
 
 def reviewer_node(state: PipelineState) -> dict:
     """Review the merged wave against its task files and the original context."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     wave_index = state.get("current_wave", 0)
     results = state.get("wave_results") or []
 
@@ -136,7 +136,7 @@ def reviewer_node(state: PipelineState) -> dict:
         cwd=state["target_repo"],
         tag=AGENT,
         tools=REVIEW_TOOLS,
-        extra_dirs=(state["run_dir"],),
+        extra_dirs=(str(artifacts.shared_dir),),
     )
     cost = result.cost_usd
 

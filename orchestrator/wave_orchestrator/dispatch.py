@@ -170,14 +170,14 @@ def run_task(
         outcome.worktree = str(workdir)
         outcome.branch = base
 
-    artifacts = art.prepare(run_dir)
+    artifacts = art.prepare(run_dir, target_repo)
     result = run_agent(
         coding_prompt(
             task=task,
             worktree=str(workdir),
             context_path=str(artifacts.context),
             learnings_path=str(artifacts.learnings),
-            run_dir=run_dir,
+            artifacts_dir=str(artifacts.shared_dir),
             python_exe=sys.executable,
             script_path=_ARTIFACTS_SCRIPT,
             rework_comments=rework_comments,
@@ -188,10 +188,9 @@ def run_task(
         tag=f"task-{task_id}",
         tools=CODING_TOOLS,
         resume_session=resume_session,
-        # run_dir sits outside the worktree by design (config.py, "PATHS"); this
-        # is what lets the agent read context.md and append to learnings.md
-        # there despite its sandbox otherwise confining it to the worktree.
-        extra_dirs=(run_dir,),
+        # The shared artifact directory is in the target checkout, not in this
+        # task's isolated worktree, so the agent still needs explicit access.
+        extra_dirs=(str(artifacts.shared_dir),),
     )
 
     outcome.session_id = result.session_id

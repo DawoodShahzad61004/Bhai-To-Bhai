@@ -29,7 +29,7 @@ REWORK = {
 
 @pytest.fixture
 def review_state(tmp_path):
-    run_dir = art.prepare(tmp_path / "run")
+    run_dir = art.prepare(tmp_path / "run", tmp_path)
     art.write_text(run_dir.context, "# Context\nThe endpoint must return JSON.")
     state = initial_state(
         run_id="rv1",
@@ -89,7 +89,11 @@ def test_the_review_is_written_as_markdown(review_state, stub):
 
     reviewer_node(review_state)
 
-    notes = art.read_text(art.prepare(review_state["run_dir"]).review_file(0, 0))
+    notes = art.read_text(
+        art.prepare(
+            review_state["run_dir"], review_state["target_repo"]
+        ).review_file(0, 0)
+    )
     assert "**Verdict:** rework" in notes
     assert "returns a string, not JSON" in notes
     assert "Return jsonify" in notes
@@ -106,7 +110,9 @@ def test_the_reviewer_gets_read_only_tools(review_state, stub):
 def test_findings_reach_the_learnings_file(review_state, stub):
     stub.set_text("reviewer", json.dumps(APPROVED))
     reviewer_node(review_state)
-    learnings = art.read_text(art.prepare(review_state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(review_state["run_dir"], review_state["target_repo"]).learnings
+    )
     assert "app/__init__.py" in learnings
 
 
@@ -195,7 +201,9 @@ def test_an_exhausted_bound_records_what_was_left_undone(review_state, stub, mon
 
     reviewer_node({**review_state, "rework_count": 1})
 
-    learnings = art.read_text(art.prepare(review_state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(review_state["run_dir"], review_state["target_repo"]).learnings
+    )
     assert "could not be brought to an acceptable state" in learnings
     assert "Return jsonify" in learnings
 

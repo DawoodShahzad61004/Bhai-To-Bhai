@@ -215,7 +215,7 @@ def test_plan_and_task_files_are_written(state, stub):
 
     result = planner_node(state)
 
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     plan = art.read_json(artifacts.plan)
     assert plan["task_count"] == 2
     assert plan["waves"] == [["T-001"], ["T-002"]]
@@ -235,7 +235,7 @@ def test_a_plan_with_no_roster_falls_back_to_the_default_pair(state, stub):
         {"backend": config.CODING_AGENT_A.backend, "model": config.CODING_AGENT_A.model},
         {"backend": config.CODING_AGENT_B.backend, "model": config.CODING_AGENT_B.model},
     ]
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     assert art.read_json(artifacts.plan)["coding_agents"] == result["coding_agents"]
 
 
@@ -273,7 +273,7 @@ def test_the_planner_is_given_read_only_tools(state, stub):
 def test_the_prompt_points_at_the_requirements_and_the_user_choices(state, stub):
     """Full files are not pasted in — the planner is pointed at them and reads
     them itself, which is what extra_dirs grants tool access for."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     art.write_text(artifacts.context, "# Context\nMust expose /health.")
     art.write_text(artifacts.user_choices, "# User choices\n- JSON, not plain text")
     stub.set_text("planner", json.dumps(PLAN))
@@ -284,7 +284,7 @@ def test_the_prompt_points_at_the_requirements_and_the_user_choices(state, stub)
     assert str(artifacts.context) in call["prompt"]
     assert str(artifacts.user_choices) in call["prompt"]
     assert "Must expose /health." not in call["prompt"]
-    assert state["run_dir"] in call["extra_dirs"]
+    assert str(artifacts.shared_dir) in call["extra_dirs"]
 
 
 def test_waves_are_derived_not_taken_from_the_agent(state, stub):
@@ -341,7 +341,9 @@ def test_discarded_tasks_are_recorded_as_a_learning(state, stub):
 
     planner_node(state)
 
-    learnings = art.read_text(art.prepare(state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).learnings
+    )
     assert "no usable task_id" in learnings
 
 

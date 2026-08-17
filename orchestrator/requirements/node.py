@@ -91,8 +91,14 @@ def _context_markdown(*, goal: str, payload: dict, qa: list[tuple[str, str]]) ->
     return "\n".join(sections).rstrip() + "\n"
 
 
-def _user_choices_markdown(*, goal: str, stated: list[str], qa: list[tuple[str, str]]) -> str:
-    """Assemble user_choices.md: explicit user decisions and nothing else.
+def _user_choices_markdown(
+    *,
+    run_id: str,
+    goal: str,
+    stated: list[str],
+    qa: list[tuple[str, str]],
+) -> str:
+    """Assemble one append-only user-choice ledger entry.
 
     Every line here traces to something the user actually said — either in the
     goal or in an answer. The file states its own rule, because it is meant to be
@@ -100,14 +106,9 @@ def _user_choices_markdown(*, goal: str, stated: list[str], qa: list[tuple[str, 
     """
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
     lines = [
-        "# User choices",
+        f"## Run `{run_id}` — {stamp}",
         "",
-        "_Explicit decisions made by the user. Nothing inferred, assumed, or",
-        "derived from the code appears here — see context.md for those._",
-        "",
-        f"_Recorded {stamp}._",
-        "",
-        "## Stated in the original request",
+        "### Stated in the original request",
         "",
         goal.strip(),
         "",
@@ -118,7 +119,7 @@ def _user_choices_markdown(*, goal: str, stated: list[str], qa: list[tuple[str, 
         lines += [f"- {choice}" for choice in stated]
         lines += [""]
 
-    lines += ["## Answered during clarification", ""]
+    lines += ["### Answered during clarification", ""]
     if qa:
         for question, answer in qa:
             lines += [f"- **{question}**", f"  - {answer}", ""]
@@ -148,13 +149,15 @@ def _finish(
     cost: float,
 ) -> dict:
     """Write both artifacts and return the state update. Shared by both nodes."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     goal = state["goal"]
 
     context_md = _context_markdown(goal=goal, payload=payload, qa=qa)
-    choices_md = _user_choices_markdown(goal=goal, stated=stated, qa=qa)
+    choices_md = _user_choices_markdown(
+        run_id=state["run_id"], goal=goal, stated=stated, qa=qa
+    )
     art.write_text(artifacts.context, context_md)
-    art.write_text(artifacts.user_choices, choices_md)
+    art.append_user_choices(artifacts, state["run_id"], choices_md)
 
     if unasked:
         art.append_learning(
@@ -210,12 +213,16 @@ def requirements_survey_node(state: PipelineState) -> dict:
     documents are written once, by whichever node reaches the end.
     """
     target = state["target_repo"]
+    artifacts = art.prepare(state["run_dir"], target)
     logger.info("[%s] surveying %s", AGENT, target)
 
     survey = run_agent(
         survey_prompt(
             goal=state["goal"],
             target_repo=target,
+            context_path=str(artifacts.context),
+            user_choices_path=str(artifacts.user_choices),
+            learnings_path=str(artifacts.learnings),
             max_questions=config.MAX_CLARIFYING_QUESTIONS,
         ),
         spec=config.AGENTS[AGENT],

@@ -103,7 +103,7 @@ def _replan_text(payload: dict) -> str:
 
 def supervisor_node(state: PipelineState) -> dict:
     """Assess the finished result against the original requirements."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     replan_count = state.get("replan_count", 0)
     waves = state.get("waves") or []
 
@@ -124,7 +124,7 @@ def supervisor_node(state: PipelineState) -> dict:
         cwd=state["target_repo"],
         tag=AGENT,
         tools=SUPERVISOR_TOOLS,
-        extra_dirs=(state["run_dir"],),
+        extra_dirs=(str(artifacts.shared_dir),),
     )
     cost = result.cost_usd
     running_cost = state.get("total_cost_usd", 0.0) + cost

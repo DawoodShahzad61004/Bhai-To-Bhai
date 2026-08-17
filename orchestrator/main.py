@@ -176,7 +176,7 @@ def ask(questions: list[str], understanding: str) -> list[str]:
     return answers
 
 
-def report(final: dict, log_file: Path, run_dir: Path) -> int:
+def report(final: dict, log_file: Path, artifacts_dir: Path) -> int:
     """Print the outcome. Returns the process exit code.
 
     A run's own success signals are not evidence that it succeeded — every one of
@@ -205,7 +205,7 @@ def report(final: dict, log_file: Path, run_dir: Path) -> int:
     print(f"  cost             ${cost:.4f}")
     if final.get("integration_branch"):
         print(f"  branch           {final['integration_branch']}")
-    print(f"  artifacts        {run_dir}")
+    print(f"  artifacts        {artifacts_dir}")
     print(f"  log              {log_file}")
 
     if changed:
@@ -265,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
 
     run_id = args.resume or args.run_id or datetime.now().strftime("run-%Y%m%d-%H%M%S")
     run_dir = config.RUNS_DIR / run_id
-    artifacts = art.prepare(run_dir)
+    artifacts = art.prepare(run_dir, target)
 
     log_file = setup_logging(app_name=f"orchestrator_{run_id}")
     set_run_id(run_id)
@@ -302,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
                 graph,
             )
 
-    return report(final, log_file, artifacts.run_dir)
+    return report(final, log_file, artifacts.shared_dir)
 
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ def _resolve_conflict(
     files: list[str],
     ours: str,
     context_path: str,
-    run_dir: str,
+    artifacts_dir: str,
 ) -> tuple[bool, str, str, float]:
     """Dispatch the merge agent. Returns (ok, detail, learnings, cost)."""
     logger.warning(
@@ -106,7 +106,7 @@ def _resolve_conflict(
         cwd=target_repo,
         tag=f"{AGENT}-{task.get('task_id', 'x')}",
         tools=MERGE_TOOLS,
-        extra_dirs=(run_dir,),
+        extra_dirs=(artifacts_dir,),
     )
     if not result.ok:
         return False, f"the merge agent failed ({result.error_kind}): {result.error_message[:200]}", "", result.cost_usd
@@ -158,7 +158,7 @@ def merge_wave(
     into: str,
     tasks: list[dict[str, Any]],
     context_path: str,
-    run_dir: str,
+    artifacts_dir: str,
 ) -> MergeReport:
     """Merge every successful task branch of one wave into `into`.
 
@@ -216,7 +216,7 @@ def merge_wave(
             files=files,
             ours=", ".join(report.merged),
             context_path=context_path,
-            run_dir=run_dir,
+            artifacts_dir=artifacts_dir,
         )
         report.cost_usd += cost
         if learning:

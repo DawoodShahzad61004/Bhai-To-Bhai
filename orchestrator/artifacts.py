@@ -11,6 +11,11 @@ Recorded permanently in docs/Architecture.md, the artifacts carried forward are:
 plus `learnings.md`, which four of the six agents append to and which is
 invisible in the drawing because it is a write-side channel touching most boxes.
 
+The context, user choices, and learnings are project-scoped under the target
+repository's `runs/` directory so a later run can reuse them. Run-specific
+artifacts live there too, grouped by kind and then run id: plans, tasks, events,
+and reviews remain auditable without turning `runs/<run-id>/` into the layout.
+
 Two properties are deliberate. Everything is written the moment it is produced,
 never buffered to the end of a run — a killed process still leaves a recoverable
 state, which is ADR-005's whole argument and what made docs/Bugs.md #15 findable.
@@ -25,6 +30,8 @@ import contextlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -42,6 +49,19 @@ PLAN_FILE = "plan.json"
 LEARNINGS_FILE = "learnings.md"
 EVENTS_FILE = "events.jsonl"
 TASK_GLOB = "TASK-*.json"
+
+_LOCAL_EXCLUDE_BEGIN = "# >>> bhai-to-bhai artifacts >>>"
+_LOCAL_EXCLUDE_END = "# <<< bhai-to-bhai artifacts <<<"
+_LOCAL_EXCLUDE_PATTERNS = (
+    "/runs/context.md",
+    "/runs/learnings.md",
+    "/runs/learnings.md.lock",
+    "/runs/user_choices.md",
+    "/runs/plans/",
+    "/runs/tasks/",
+    "/runs/reviews/",
+    "/runs/events/",
+)
 
 # A task id has to survive being used as a filename, a git branch component and a
 # log tag, so it is constrained rather than trusted. The planner is a language
@@ -67,36 +87,49 @@ class RunArtifacts:
     """
 
     run_dir: Path
+    shared_dir: Path
+
+    @property
+    def run_id(self) -> str:
+        return safe_id(self.run_dir.name, fallback="run")
 
     @property
     def context(self) -> Path:
-        return self.run_dir / CONTEXT_FILE
+        return self.shared_dir / CONTEXT_FILE
 
     @property
     def user_choices(self) -> Path:
-        return self.run_dir / USER_CHOICES_FILE
+        return self.shared_dir / USER_CHOICES_FILE
 
     @property
     def plan(self) -> Path:
-        return self.run_dir / PLAN_FILE
+        return self.shared_dir / "plans" / f"{self.run_id}.json"
 
     @property
     def learnings(self) -> Path:
-        return self.run_dir / LEARNINGS_FILE
+        return self.shared_dir / LEARNINGS_FILE
+
+    @property
+    def learnings_lock(self) -> Path:
+        return self.learnings.with_name(self.learnings.name + ".lock")
 
     @property
     def events(self) -> Path:
-        return self.run_dir / EVENTS_FILE
+        return self.shared_dir / "events" / f"{self.run_id}.jsonl"
+
+    @property
+    def tasks_dir(self) -> Path:
+        return self.shared_dir / "tasks" / self.run_id
 
     @property
     def reviews_dir(self) -> Path:
-        return self.run_dir / "reviews"
+        return self.shared_dir / "reviews" / self.run_id
 
     def task_file(self, task_id: str) -> Path:
-        return self.run_dir / f"TASK-{safe_id(task_id)}.json"
+        return self.tasks_dir / f"TASK-{safe_id(task_id)}.json"
 
     def task_files(self) -> list[Path]:
-        return sorted(self.run_dir.glob(TASK_GLOB))
+        return sorted(self.tasks_dir.glob(TASK_GLOB))
 
     def review_file(self, wave: int, attempt: int) -> Path:
         return self.reviews_dir / f"wave-{wave:02d}-attempt-{attempt:02d}.md"
@@ -105,12 +138,132 @@ class RunArtifacts:
         return self.reviews_dir / f"supervisor-{attempt:02d}.md"
 
 
-def prepare(run_dir: Path | str) -> RunArtifacts:
-    """Create this run's artifact directory and return its paths."""
+def _git_exclude_path(target_repo: Path) -> Path | None:
+    """Resolve this checkout's local exclude file without touching .gitignore."""
+    try:
+        completed = subprocess.run(
+            [shutil.which("git") or "git", "rev-parse", "--git-path", "info/exclude"],
+            cwd=str(target_repo),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return None
+    path = Path(completed.stdout.strip())
+    return path.resolve() if path.is_absolute() else (target_repo / path).resolve()
+
+
+def _ensure_local_artifacts_excluded(target_repo: Path) -> None:
+    """Keep generated artifacts out of target commits using Git-local config.
+
+    Exact paths are excluded instead of the whole `runs/` directory, so a
+    target project that already owns unrelated files there is not hidden.
+    """
+    exclude_path = _git_exclude_path(target_repo)
+    if exclude_path is None:
+        return
+    exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    current = (
+        exclude_path.read_text(encoding="utf-8", errors="replace")
+        if exclude_path.exists()
+        else ""
+    )
+    block = "\n".join(
+        (_LOCAL_EXCLUDE_BEGIN, *_LOCAL_EXCLUDE_PATTERNS, _LOCAL_EXCLUDE_END)
+    )
+    pattern = re.compile(
+        re.escape(_LOCAL_EXCLUDE_BEGIN) + r".*?" + re.escape(_LOCAL_EXCLUDE_END),
+        re.DOTALL,
+    )
+    if pattern.search(current):
+        updated = pattern.sub(block, current)
+    else:
+        prefix = current.rstrip("\r\n")
+        updated = f"{prefix}\n\n{block}\n" if prefix else f"{block}\n"
+    if updated != current:
+        exclude_path.write_text(updated, encoding="utf-8")
+
+
+def _copy_legacy_file(source: Path, destination: Path) -> None:
+    if source.is_file() and not destination.exists():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        logger.info("migrated legacy artifact %s -> %s", source, destination)
+
+
+def _migrate_legacy_layout(artifacts: RunArtifacts) -> None:
+    """Copy this run's old flat artifacts into the category-based layout."""
+    legacy = artifacts.run_dir
+    _copy_legacy_file(legacy / CONTEXT_FILE, artifacts.context)
+    _copy_legacy_file(legacy / USER_CHOICES_FILE, artifacts.user_choices)
+    _copy_legacy_file(legacy / LEARNINGS_FILE, artifacts.learnings)
+    _copy_legacy_file(legacy / PLAN_FILE, artifacts.plan)
+    _copy_legacy_file(legacy / EVENTS_FILE, artifacts.events)
+    for source in legacy.glob(TASK_GLOB):
+        _copy_legacy_file(source, artifacts.tasks_dir / source.name)
+    legacy_reviews = legacy / "reviews"
+    if legacy_reviews.is_dir():
+        for source in legacy_reviews.glob("*.md"):
+            _copy_legacy_file(source, artifacts.reviews_dir / source.name)
+
+
+def _initialise_empty_artifacts(artifacts: RunArtifacts) -> None:
+    """Create first-run artifacts whose empty form is valid and readable.
+
+    Agents receive absolute paths and may read them unconditionally. Text
+    memory, its lock, and JSONL event streams all have a meaningful empty
+    state. Plans, tasks, and reviews do not: creating placeholders for those
+    would falsely claim that their owning pipeline stage had produced output.
+    """
+    for path in (
+        artifacts.context,
+        artifacts.learnings,
+        artifacts.learnings_lock,
+        artifacts.user_choices,
+        artifacts.events,
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.touch(exist_ok=False)
+        except FileExistsError:
+            pass
+
+
+def prepare(
+    run_dir: Path | str,
+    target_repo: Path | str | None = None,
+) -> RunArtifacts:
+    """Create the run-local and target-repository artifact directories.
+
+    `target_repo` is optional for callers that only need an isolated artifact
+    layout (notably tests and the append-learning CLI). Production pipeline
+    callers always provide it, making every artifact live under the target's
+    `runs/` directory while `run_dir` remains the controller's run identity and
+    legacy migration source.
+    """
     resolved = Path(run_dir).resolve()
+    shared = (
+        (Path(target_repo).resolve() / "runs")
+        if target_repo is not None
+        else resolved
+    )
     resolved.mkdir(parents=True, exist_ok=True)
-    (resolved / "reviews").mkdir(exist_ok=True)
-    return RunArtifacts(run_dir=resolved)
+    shared.mkdir(parents=True, exist_ok=True)
+    artifacts = RunArtifacts(run_dir=resolved, shared_dir=shared)
+    artifacts.tasks_dir.mkdir(parents=True, exist_ok=True)
+    artifacts.reviews_dir.mkdir(parents=True, exist_ok=True)
+    (shared / "plans").mkdir(exist_ok=True)
+    (shared / "events").mkdir(exist_ok=True)
+    if target_repo is not None:
+        _ensure_local_artifacts_excluded(Path(target_repo).resolve())
+        _migrate_legacy_layout(artifacts)
+        _initialise_empty_artifacts(artifacts)
+    return artifacts
 
 
 def write_text(path: Path, content: str) -> Path:
@@ -219,11 +372,43 @@ def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
         header = (
             ""
             if path.exists() and path.stat().st_size
-            else "# Learnings\n\nFindings reported by agents during this run.\n"
+            else "# Learnings\n\nFindings reported by agents across project runs.\n"
         )
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(header + entry)
     logger.debug("learnings += %s (%d chars)", agent, len(finding))
+
+
+def append_user_choices(artifacts: RunArtifacts, run_id: str, content: str) -> None:
+    """Append one run's explicit user decisions to the project ledger.
+
+    The run marker makes checkpoint replay idempotent. The approved
+    `learnings.md.lock` coordinates this second append-only project file too,
+    avoiding another lock artifact in the flat shared layout.
+    """
+    content = content.strip()
+    if not content:
+        return
+    marker = f"<!-- run:{safe_id(run_id, fallback='run')} -->"
+    path = artifacts.user_choices
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _exclusive_lock(artifacts.learnings):
+        existing = read_text(path)
+        if marker in existing:
+            return
+        header = (
+            ""
+            if existing.strip()
+            else (
+                "# User choices\n\n"
+                "_Append-only explicit decisions made by the user across project runs. "
+                "Nothing inferred, assumed, or derived from code belongs here._\n"
+            )
+        )
+        entry = f"\n{marker}\n{content}\n"
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(header + entry)
+    logger.debug("user_choices += %s (%d chars)", run_id, len(content))
 
 
 def append_event(artifacts: RunArtifacts, entry: dict[str, Any]) -> None:
@@ -259,7 +444,7 @@ def load_tasks(artifacts: RunArtifacts) -> list[dict[str, Any]]:
 
 
 def _cli(argv: list[str] | None = None) -> int:
-    """`python artifacts.py append-learning <run_dir> <agent> [message]`.
+    """`python artifacts.py append-learning <artifacts_dir> <agent> [message]`.
 
     The coding subagents' own entry point for writing directly to the shared
     learnings.md from inside their worktree — invoked over Bash, not imported,
@@ -277,7 +462,9 @@ def _cli(argv: list[str] | None = None) -> int:
     append = subcommands.add_parser(
         "append-learning", help="Append a finding, excluding other concurrent writers."
     )
-    append.add_argument("run_dir", help="This run's artifact directory (absolute path).")
+    append.add_argument(
+        "artifacts_dir", help="Directory containing the shared learnings.md (absolute path)."
+    )
     append.add_argument("agent", help='Who is reporting this, e.g. "task-T-001".')
     append.add_argument(
         "message", nargs="?", help="The finding to record. Omit to read it from stdin."
@@ -289,7 +476,7 @@ def _cli(argv: list[str] | None = None) -> int:
         print("error: no message given (pass it as an argument or on stdin)", file=sys.stderr)
         return 1
 
-    run_artifacts = prepare(args.run_dir)
+    run_artifacts = prepare(args.artifacts_dir)
     append_learning(run_artifacts, args.agent, message)
     print(f"appended to {run_artifacts.learnings}")
     return 0

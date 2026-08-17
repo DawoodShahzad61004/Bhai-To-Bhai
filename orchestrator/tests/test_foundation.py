@@ -289,6 +289,162 @@ def test_prepare_creates_the_run_layout(tmp_path):
     assert a.user_choices.name == "user_choices.md"
 
 
+def test_project_artifacts_use_category_paths_inside_the_target_repo(tmp_path):
+    target = tmp_path / "target"
+    run_dir = tmp_path / "controller" / "runs" / "run-001"
+
+    a = art.prepare(run_dir, target)
+
+    shared = (target / "runs").resolve()
+    assert a.shared_dir == shared
+    assert a.context == shared / "context.md"
+    assert a.learnings == shared / "learnings.md"
+    assert a.user_choices == shared / "user_choices.md"
+
+    assert a.plan == shared / "plans" / "run-001.json"
+    assert a.events == shared / "events" / "run-001.jsonl"
+    assert a.task_file("T-001").parent == shared / "tasks" / "run-001"
+    assert a.reviews_dir == shared / "reviews" / "run-001"
+
+    for readable in (
+        a.context,
+        a.learnings,
+        a.learnings_lock,
+        a.user_choices,
+        a.events,
+    ):
+        assert readable.is_file()
+        assert readable.read_text(encoding="utf-8") == ""
+
+    # Structured stage outputs have no honest empty representation. Their
+    # directories exist, but files appear only when the owning stage writes.
+    assert not a.plan.exists()
+    assert a.task_files() == []
+    assert list(a.reviews_dir.iterdir()) == []
+
+    art.append_learning(a, "planner", "shared across runs")
+    assert a.learnings_lock == shared / "learnings.md.lock"
+
+
+def test_multiple_runs_resolve_to_the_same_project_shared_artifacts(tmp_path):
+    target = tmp_path / "target"
+    first = art.prepare(tmp_path / "controller" / "run-001", target)
+    second = art.prepare(tmp_path / "controller" / "run-002", target)
+
+    assert first.context == second.context
+    assert first.learnings == second.learnings
+    assert first.user_choices == second.user_choices
+    assert first.plan != second.plan
+
+    art.append_learning(first, "run-001", "first finding")
+    art.append_learning(second, "run-002", "second finding")
+    body = art.read_text(second.learnings)
+    assert "first finding" in body
+    assert "second finding" in body
+
+
+def test_user_choices_are_append_only_and_idempotent_per_run(tmp_path):
+    target = tmp_path / "target"
+    first = art.prepare(tmp_path / "controller" / "run-001", target)
+    second = art.prepare(tmp_path / "controller" / "run-002", target)
+
+    art.append_user_choices(first, "run-001", "## Run one\n\nUse PostgreSQL.")
+    art.append_user_choices(first, "run-001", "## Duplicate replay")
+    art.append_user_choices(second, "run-002", "## Run two\n\nKeep the API public.")
+
+    body = art.read_text(first.user_choices)
+    assert body.count("# User choices") == 1
+    assert body.count("<!-- run:run-001 -->") == 1
+    assert body.count("<!-- run:run-002 -->") == 1
+    assert "Use PostgreSQL." in body
+    assert "Keep the API public." in body
+    assert "Duplicate replay" not in body
+    assert (target / "runs" / "learnings.md.lock").is_file()
+
+
+def test_prepare_migrates_one_legacy_flat_run_without_overwriting_new_files(tmp_path):
+    run_dir = tmp_path / "controller" / "run-legacy"
+    target = tmp_path / "target"
+    (run_dir / "reviews").mkdir(parents=True)
+    target.mkdir()
+    art.write_text(run_dir / "context.md", "legacy context")
+    art.write_text(run_dir / "user_choices.md", "legacy choices")
+    art.write_text(run_dir / "learnings.md", "legacy learnings")
+    art.write_json(run_dir / "plan.json", {"summary": "legacy plan"})
+    art.write_json(run_dir / "TASK-T-001.json", {"task_id": "T-001"})
+    art.write_text(run_dir / "events.jsonl", '{"kind":"legacy"}\n')
+    art.write_text(run_dir / "reviews" / "wave-00-attempt-00.md", "legacy review")
+
+    a = art.prepare(run_dir, target)
+
+    assert art.read_text(a.context) == "legacy context"
+    assert art.read_text(a.user_choices) == "legacy choices"
+    assert art.read_text(a.learnings) == "legacy learnings"
+    assert art.read_json(a.plan)["summary"] == "legacy plan"
+    assert art.read_json(a.task_file("T-001"))["task_id"] == "T-001"
+    assert "legacy" in art.read_text(a.events)
+    assert "legacy review" in art.read_text(a.review_file(0, 0))
+
+    art.write_text(a.context, "new context")
+    art.prepare(run_dir, target)
+    assert art.read_text(a.context) == "new context"
+
+
+def test_prepare_does_not_overwrite_existing_empty_capable_artifacts(tmp_path):
+    target = tmp_path / "target"
+    first = art.prepare(tmp_path / "controller" / "run-001", target)
+    art.write_text(first.context, "current context")
+    art.write_text(first.learnings, "existing learnings")
+    art.write_text(first.user_choices, "existing choices")
+    art.write_text(first.events, '{"kind":"existing"}\n')
+
+    second = art.prepare(tmp_path / "controller" / "run-001", target)
+
+    assert art.read_text(second.context) == "current context"
+    assert art.read_text(second.learnings) == "existing learnings"
+    assert art.read_text(second.user_choices) == "existing choices"
+    assert art.read_text(second.events) == '{"kind":"existing"}\n'
+
+
+def test_prepare_locally_excludes_only_generated_artifact_paths(git_repo, tmp_path):
+    a = art.prepare(tmp_path / "controller" / "run-001", git_repo)
+    art.write_text(a.context, "context")
+    art.append_learning(a, "planner", "finding")
+    art.append_user_choices(a, "run-001", "## Choices\n\nUse JSON.")
+    art.write_json(a.plan, {"summary": "plan"})
+    art.write_json(a.task_file("T-001"), {"task_id": "T-001"})
+    art.write_text(a.review_file(0, 0), "review")
+    art.append_event(a, {"kind": "started"})
+
+    project_owned = git_repo / "runs" / "application-owned.txt"
+    project_owned.write_text("not an orchestrator artifact\n", encoding="utf-8")
+
+    status = wt.git(git_repo, "status", "--porcelain", "--untracked-files=all")
+    assert status.ok
+    assert "runs/application-owned.txt" in status.stdout.replace("\\", "/")
+    for generated in (
+        "context.md",
+        "learnings.md",
+        "learnings.md.lock",
+        "user_choices.md",
+        "plans/",
+        "tasks/",
+        "reviews/",
+        "events/",
+    ):
+        assert generated not in status.stdout
+
+    exclude = wt.git(git_repo, "rev-parse", "--git-path", "info/exclude")
+    exclude_path = Path(exclude.stdout)
+    if not exclude_path.is_absolute():
+        exclude_path = git_repo / exclude_path
+    art.prepare(tmp_path / "controller" / "run-002", git_repo)
+    exclude_body = exclude_path.read_text(encoding="utf-8")
+    assert exclude_body.count("# >>> bhai-to-bhai artifacts >>>") == 1
+    assert "/runs/context.md" in exclude_body
+    assert "/runs/events/" in exclude_body
+
+
 def test_task_ids_are_sanitised_into_paths_and_branches():
     """The planner is a model; its output is untrusted input here."""
     assert art.safe_id("T-001") == "T-001"

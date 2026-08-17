@@ -50,7 +50,7 @@ def _failure(message: str, *, kind: str) -> dict:
 
 def planner_node(state: PipelineState) -> dict:
     """Decompose the requirements into tasks and derive their wave schedule."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     target = state["target_repo"]
     replan_count = state.get("replan_count", 0)
     comments = state.get("supervisor_comments", "") if replan_count else ""
@@ -75,7 +75,7 @@ def planner_node(state: PipelineState) -> dict:
         cwd=target,
         tag=AGENT,
         tools=PLANNER_TOOLS,
-        extra_dirs=(state["run_dir"],),
+        extra_dirs=(str(artifacts.shared_dir),),
     )
     if not result.ok:
         return _failure(

@@ -29,7 +29,7 @@ REPLAN = {
 
 @pytest.fixture
 def final_state(tmp_path):
-    run_dir = art.prepare(tmp_path / "run")
+    run_dir = art.prepare(tmp_path / "run", tmp_path)
     art.write_text(run_dir.context, "# Context\nHealth check must probe the database.")
     art.write_text(run_dir.user_choices, "# User choices\n- Must return JSON")
     art.write_json(run_dir.plan, {"summary": "Add the endpoint, then its tests."})
@@ -95,7 +95,11 @@ def test_the_assessment_is_written_as_markdown(final_state, stub):
 
     supervisor_node(final_state)
 
-    notes = art.read_text(art.prepare(final_state["run_dir"]).supervisor_file(0))
+    notes = art.read_text(
+        art.prepare(
+            final_state["run_dir"], final_state["target_repo"]
+        ).supervisor_file(0)
+    )
     assert "**Verdict:** replan" in notes
     assert "database reachability" in notes
     assert "never produced a task for the database probe" in notes
@@ -111,7 +115,9 @@ def test_the_supervisor_gets_read_only_tools(final_state, stub):
 def test_findings_reach_the_learnings_file(final_state, stub):
     stub.set_text("supervisor", json.dumps(ACCEPTED))
     supervisor_node(final_state)
-    learnings = art.read_text(art.prepare(final_state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(final_state["run_dir"], final_state["target_repo"]).learnings
+    )
     assert "app/ops/" in learnings
 
 
@@ -125,14 +131,14 @@ def test_the_brief_points_at_the_requirements_and_the_user_choices(final_state, 
 
     supervisor_node(final_state)
 
-    artifacts = art.prepare(final_state["run_dir"])
+    artifacts = art.prepare(final_state["run_dir"], final_state["target_repo"])
     call = stub.calls[0]
     assert str(artifacts.context) in call["prompt"]
     assert str(artifacts.user_choices) in call["prompt"]
     assert "Health check must probe the database." not in call["prompt"]
     # The plan summary is already short and derived, not a full file — it stays inline.
     assert "Add the endpoint, then its tests." in call["prompt"]
-    assert final_state["run_dir"] in call["extra_dirs"]
+    assert str(artifacts.shared_dir) in call["extra_dirs"]
 
 
 def test_the_brief_distinguishes_this_question_from_the_reviewers(final_state, stub):
@@ -209,7 +215,9 @@ def test_an_exhausted_bound_records_what_was_left_unmet(final_state, stub, monke
 
     supervisor_node({**final_state, "replan_count": 1})
 
-    learnings = art.read_text(art.prepare(final_state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(final_state["run_dir"], final_state["target_repo"]).learnings
+    )
     assert "The goal was not reached" in learnings
     assert "database probe" in learnings
 

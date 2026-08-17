@@ -54,6 +54,7 @@ def state(tmp_path, run_dir):
     """A fresh pipeline state pointed at a throwaway target repository."""
     target = tmp_path / "target"
     target.mkdir(exist_ok=True)
+    artifacts_module.prepare(run_dir.run_dir, target)
     return initial_state(
         run_id="testrun",
         goal="Add a health-check endpoint",

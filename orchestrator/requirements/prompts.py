@@ -92,11 +92,30 @@ verbatim, and your paraphrase of them would be a second and less reliable copy.\
 """
 
 
-def survey_prompt(*, goal: str, target_repo: str, max_questions: int) -> str:
+def survey_prompt(
+    *,
+    goal: str,
+    target_repo: str,
+    context_path: str,
+    user_choices_path: str,
+    learnings_path: str,
+    max_questions: int,
+) -> str:
     return f"""{SURVEY_BRIEF.format(max_questions=max_questions)}
 
 ## Repository
 {target_repo}
+
+## Durable project memory
+
+Before drafting, read these files when they exist:
+
+- Current synthesized context: `{context_path}`
+- Append-only user decision ledger: `{user_choices_path}`
+- Accumulated agent findings: `{learnings_path}`
+
+The user's recorded choices are authoritative. Treat learnings as leads and
+validate them against the repository before relying on them.
 
 ## Goal, as the user stated it
 {goal}

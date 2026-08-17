@@ -106,7 +106,7 @@ def _revert_rejected_attempt(state: PipelineState, branch: str) -> None:
 
 def wave_orchestrator_node(state: PipelineState) -> dict:
     """Dispatch the current wave's tasks, each in its own worktree."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     target = state["target_repo"]
     wave_index = state.get("current_wave", 0)
     waves = state.get("waves") or []

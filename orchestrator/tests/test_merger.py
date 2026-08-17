@@ -38,7 +38,7 @@ def _commit_on_branch(repo: Path, run_id: str, task_id: str, filename: str, body
 
 @pytest.fixture
 def merge_state(git_repo, tmp_path):
-    run_dir = art.prepare(tmp_path / "run")
+    run_dir = art.prepare(tmp_path / "run", git_repo)
     art.write_text(run_dir.context, "# Context\nBuild the thing.")
     state = initial_state(
         run_id="m1",
@@ -296,7 +296,9 @@ def test_merge_agent_findings_reach_the_learnings_file(merge_state, git_repo, st
     stub.set_reply("merger-*", resolve)
     merger_node(merge_state)
 
-    learnings = art.read_text(art.prepare(merge_state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(merge_state["run_dir"], merge_state["target_repo"]).learnings
+    )
     assert "serialise them" in learnings
 
 

@@ -67,9 +67,8 @@ def _build_argv(
     if tools:
         argv += ["--tools", ",".join(tools)]
     if extra_dirs:
-        # Grants tool access outside cwd — a run's artifacts (context.md,
-        # learnings.md, ...) live in run_dir, deliberately outside the target
-        # repository, so an agent told only a path there needs this to reach it.
+        # Grants tool access outside cwd — a coding worktree is separate from
+        # the target checkout that owns the shared artifact directory.
         argv += ["--add-dir", *extra_dirs]
     if json_schema is not None:
         argv += ["--json-schema", json.dumps(json_schema)]

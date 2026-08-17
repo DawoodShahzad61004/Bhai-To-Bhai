@@ -187,5 +187,7 @@ def test_the_rewind_is_recorded_in_the_event_log(state, stub, git_repo):
 
     planner_node({**state, **first, "replan_count": 1, "supervisor_comments": "no"})
 
-    events = art.prepare(state["run_dir"]).events.read_text(encoding="utf-8")
+    events = art.prepare(state["run_dir"], state["target_repo"]).events.read_text(
+        encoding="utf-8"
+    )
     assert "replan_rewind" in events

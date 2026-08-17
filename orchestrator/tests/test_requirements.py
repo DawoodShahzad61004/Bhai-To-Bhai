@@ -17,7 +17,7 @@ from requirements import (
     requirements_survey_node,
     route_after_survey,
 )
-from state import PipelineState
+from state import PipelineState, initial_state
 
 SURVEY = {
     "understanding": "A small Flask service with no monitoring endpoints.",
@@ -82,6 +82,58 @@ def test_the_agent_is_given_read_only_tools(state, stub, monkeypatch):
     assert "Edit" not in tools
 
 
+def test_the_survey_is_pointed_at_durable_project_memory(state, stub, monkeypatch):
+    monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    art.write_text(artifacts.context, "prior context")
+    art.append_learning(artifacts, "reviewer", "prior finding")
+    art.append_user_choices(artifacts, "older-run", "## Earlier choice\n\nUse JSON.")
+    stub.set_text("requirements", json.dumps(SURVEY))
+
+    requirements_survey_node(state)
+
+    prompt = stub.calls[0]["prompt"]
+    assert str(artifacts.context) in prompt
+    assert str(artifacts.user_choices) in prompt
+    assert str(artifacts.learnings) in prompt
+    assert "prior context" not in prompt
+    assert "prior finding" not in prompt
+    assert "Treat learnings as leads" in prompt
+
+
+def test_first_survey_memory_paths_exist_before_agent_dispatch(tmp_path, monkeypatch):
+    target = tmp_path / "new-target"
+    target.mkdir()
+    state = initial_state(
+        run_id="first-run",
+        goal="Inspect a new repository",
+        target_repo=str(target),
+        run_dir=str(tmp_path / "controller" / "first-run"),
+    )
+
+    def inspect_then_reply(prompt, **kwargs):
+        artifacts = art.RunArtifacts(
+            run_dir=(tmp_path / "controller" / "first-run").resolve(),
+            shared_dir=(target / "runs").resolve(),
+        )
+        for path in (
+            artifacts.context,
+            artifacts.learnings,
+            artifacts.learnings_lock,
+            artifacts.user_choices,
+            artifacts.events,
+        ):
+            assert path.is_file()
+        return AgentResult(ok=True, text=json.dumps({**SURVEY, "questions": []}))
+
+    monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
+    monkeypatch.setattr("requirements.node.run_agent", inspect_then_reply)
+
+    result = requirements_survey_node(state)
+
+    assert result["context_path"] == str((target / "runs" / "context.md").resolve())
+
+
 def test_unasked_questions_are_recorded_as_a_learning(state, stub, monkeypatch):
     """A question the pipeline declined to ask is an assumption downstream."""
     monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
@@ -89,7 +141,9 @@ def test_unasked_questions_are_recorded_as_a_learning(state, stub, monkeypatch):
 
     requirements_survey_node(state)
 
-    learnings = art.read_text(art.prepare(state["run_dir"]).learnings)
+    learnings = art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).learnings
+    )
     assert "database connection" in learnings
     assert "assumptions" in learnings
 
@@ -114,7 +168,9 @@ def test_user_choices_records_only_what_the_user_said(state, stub, monkeypatch):
     stub.set_text("requirements", json.dumps(SURVEY))
 
     requirements_survey_node(state)
-    choices = art.read_text(art.prepare(state["run_dir"]).user_choices)
+    choices = art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+    )
 
     assert state["goal"] in choices
     assert "Must return JSON, not plain text" in choices
@@ -123,6 +179,34 @@ def test_user_choices_records_only_what_the_user_said(state, stub, monkeypatch):
     # An unanswered question is not a decision.
     assert "Should /health check" not in choices
     assert "No clarifying questions were asked" in choices
+
+
+def test_user_choices_accumulate_while_context_remains_the_current_snapshot(
+    state, stub, monkeypatch, tmp_path
+):
+    monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
+    stub.set_text("requirements", json.dumps(SURVEY))
+    requirements_survey_node(state)
+
+    second = initial_state(
+        run_id="testrun-2",
+        goal="Add a readiness endpoint without changing the health contract",
+        target_repo=state["target_repo"],
+        run_dir=str(tmp_path / "run-2"),
+    )
+    stub.set_text("requirements", json.dumps(SURVEY))
+    requirements_survey_node(second)
+
+    artifacts = art.prepare(second["run_dir"], second["target_repo"])
+    choices = art.read_text(artifacts.user_choices)
+    context = art.read_text(artifacts.context)
+    assert state["goal"] in choices
+    assert second["goal"] in choices
+    assert choices.count("# User choices") == 1
+    assert choices.count("<!-- run:testrun -->") == 1
+    assert choices.count("<!-- run:testrun-2 -->") == 1
+    assert second["goal"] in context
+    assert state["goal"] not in context
 
 
 def test_answers_are_recorded_verbatim_not_paraphrased(state, stub, monkeypatch):
@@ -139,7 +223,9 @@ def test_answers_are_recorded_verbatim_not_paraphrased(state, stub, monkeypatch)
     graph.invoke(state, thread)
     graph.invoke(Command(resume=["Yes, but with a 200ms timeout"]), thread)
 
-    choices = art.read_text(art.prepare(state["run_dir"]).user_choices)
+    choices = art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+    )
     assert "Yes, but with a 200ms timeout" in choices
     assert "Should /health check the database connection?" in choices
 
@@ -159,8 +245,11 @@ def test_material_questions_suspend_the_graph(state, stub, monkeypatch):
     payload = paused["__interrupt__"][0].value
     assert payload["questions"] == ["Should /health check the database connection?"]
     assert payload["agent"] == "requirements"
-    # Suspended before any file was written.
-    assert not art.prepare(state["run_dir"]).context.exists()
+    # The first-run file is readable, but no synthesized context is published
+    # until the user's answers are available.
+    assert art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).context
+    ) == ""
 
 
 def test_the_survey_is_paid_for_exactly_once_across_a_pause(state, stub, monkeypatch):
@@ -235,7 +324,9 @@ def test_an_unanswered_question_is_not_recorded_as_answered(state, stub, monkeyp
     graph.invoke(state, thread)
     graph.invoke(Command(resume=["Yes", "   "]), thread)
 
-    choices = art.read_text(art.prepare(state["run_dir"]).user_choices)
+    choices = art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+    )
     assert "Check the DB?" in choices
     assert "Require auth?" not in choices
 
@@ -285,7 +376,9 @@ def test_a_failed_finalise_keeps_the_survey_and_the_answers(state, stub, monkeyp
 
     assert done.get("status") != "failed"
     assert "Expose `GET /health`" in done["context"]  # the survey draft survived
-    choices = art.read_text(art.prepare(state["run_dir"]).user_choices)
+    choices = art.read_text(
+        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+    )
     assert "Yes, ping it" in choices
 
 

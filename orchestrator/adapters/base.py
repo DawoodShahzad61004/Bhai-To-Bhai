@@ -259,12 +259,11 @@ def run_agent(
     subagent, which is materially cheaper than briefing a fresh one and is the
     only way "here is what you got wrong" refers to anything.
 
-    `extra_dirs` grants tool access outside `cwd`. Every run's artifacts
-    (context.md, learnings.md, ...) live in `run_dir`, deliberately outside the
-    target repository (config.py, "PATHS"), so an agent told only a path there
-    cannot reach it without this — both vendor CLIs gate file access to `cwd`
-    plus whatever `--add-dir` names, independently of permission mode or
-    sandbox policy.
+    `extra_dirs` grants tool access outside `cwd`. Shared project artifacts may
+    live in the target checkout while a coding agent works in a sibling Git
+    worktree, so an agent told only their absolute paths still needs this — both
+    vendor CLIs gate file access to `cwd` plus whatever `--add-dir` names,
+    independently of permission mode or sandbox policy.
     """
     transport = invocation or config.INVOCATION
     key = _dispatch_key(transport, spec.backend)

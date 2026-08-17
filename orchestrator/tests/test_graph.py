@@ -241,7 +241,9 @@ def test_the_events_log_replays_the_whole_run(pipeline, stub):
         "supervisor_verdict",
     ]
     # And the same story is on disk, written as it happened.
-    on_disk = art.prepare(pipeline["run_dir"]).events.read_text(encoding="utf-8")
+    on_disk = art.prepare(
+        pipeline["run_dir"], pipeline["target_repo"]
+    ).events.read_text(encoding="utf-8")
     assert "wave_started" in on_disk
     assert "supervisor_verdict" in on_disk
 

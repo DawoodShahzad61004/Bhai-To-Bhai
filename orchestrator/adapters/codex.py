@@ -127,9 +127,9 @@ def run_codex(
 
     `extra_dirs` is not cosmetic here: `--sandbox workspace-write` confines
     writes to `--cd`'s tree (verified against the installed `codex exec --help`),
-    so an agent whose worktree is one directory and whose artifacts live in
-    another (run_dir, per config.py's "PATHS") cannot write to the second
-    without `--add-dir` naming it explicitly.
+    so an agent whose worktree is one directory and whose shared artifacts live
+    in another cannot write to the second without `--add-dir` naming it
+    explicitly.
     """
     handle, last_message = tempfile.mkstemp(prefix="codex-", suffix=".txt")
     os.close(handle)

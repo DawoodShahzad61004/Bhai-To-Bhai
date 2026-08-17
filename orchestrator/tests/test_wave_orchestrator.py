@@ -43,7 +43,7 @@ TASKS = [
 @pytest.fixture
 def wave_state(git_repo, tmp_path):
     """A run positioned at wave 0 of a two-task plan, against a real repo."""
-    run_dir = art.prepare(tmp_path / "run")
+    run_dir = art.prepare(tmp_path / "run", git_repo)
     art.write_text(run_dir.context, "# Context\nAdd a health endpoint.")
     state = initial_state(
         run_id="r1",
@@ -166,12 +166,12 @@ def test_the_brief_tells_agents_how_to_record_a_finding_directly(wave_state, stu
 
     wave_orchestrator_node(wave_state)
 
-    artifacts = art.prepare(wave_state["run_dir"])
+    artifacts = art.prepare(wave_state["run_dir"], wave_state["target_repo"])
     call = stub.calls[0]
     assert str(artifacts.learnings) in call["prompt"]
     assert "append-learning" in call["prompt"]
-    assert wave_state["run_dir"] in call["prompt"]
-    assert wave_state["run_dir"] in call["extra_dirs"]
+    assert str(artifacts.shared_dir) in call["prompt"]
+    assert str(artifacts.shared_dir) in call["extra_dirs"]
 
 
 def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_state, stub):
@@ -181,6 +181,7 @@ def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_st
     import sys
 
     script = str(__import__("pathlib").Path(art.__file__).resolve())
+    artifacts = art.prepare(wave_state["run_dir"], wave_state["target_repo"])
 
     def reply(prompt: str) -> AgentResult:
         marker = "## Working directory\n\n"
@@ -193,7 +194,7 @@ def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_st
                 sys.executable,
                 script,
                 "append-learning",
-                wave_state["run_dir"],
+                str(artifacts.shared_dir),
                 "task-T-001",
                 "Blueprints register in __init__.",
             ],
@@ -217,7 +218,7 @@ def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_st
 
     wave_orchestrator_node(wave_state)
 
-    learnings = art.read_text(art.prepare(wave_state["run_dir"]).learnings)
+    learnings = art.read_text(artifacts.learnings)
     assert "Blueprints register in __init__." in learnings
     assert "task-T-001" in learnings
 

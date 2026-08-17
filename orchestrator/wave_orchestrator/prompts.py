@@ -81,7 +81,7 @@ codebase actually follows, a dead end — record it the moment you find it, do \
 not wait until you finish, by running this from a shell (adjust the finding, \
 keep the rest exactly as shown):
 
-    "{python_exe}" "{script_path}" append-learning "{run_dir}" "{task_id}" "<your finding, one paragraph>"
+    "{python_exe}" "{script_path}" append-learning "{artifacts_dir}" "{task_id}" "<your finding, one paragraph>"
 
 This is safe to run at any time, including at the same moment another agent \
 runs it too — writes are queued automatically, so nothing is lost. Only call it \
@@ -112,7 +112,7 @@ def coding_prompt(
     worktree: str,
     context_path: str,
     learnings_path: str,
-    run_dir: str,
+    artifacts_dir: str,
     python_exe: str,
     script_path: str,
     rework_comments: str = "",
@@ -132,7 +132,7 @@ def coding_prompt(
         learnings_path=learnings_path,
         python_exe=python_exe,
         script_path=script_path,
-        run_dir=run_dir,
+        artifacts_dir=artifacts_dir,
         task_id=task["task_id"],
     )
     if rework_comments.strip():

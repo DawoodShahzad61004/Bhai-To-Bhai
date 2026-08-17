@@ -28,7 +28,7 @@ AGENT = "merger"
 
 def merger_node(state: PipelineState) -> dict:
     """Merge the current wave's branches into the integration branch."""
-    artifacts = art.prepare(state["run_dir"])
+    artifacts = art.prepare(state["run_dir"], state["target_repo"])
     target = state["target_repo"]
     wave_index = state.get("current_wave", 0)
 
@@ -56,7 +56,7 @@ def merger_node(state: PipelineState) -> dict:
         into=into,
         tasks=latest.get("tasks", []),
         context_path=str(artifacts.context),
-        run_dir=state["run_dir"],
+        artifacts_dir=str(artifacts.shared_dir),
     )
 
     for learning in report.learnings:
