@@ -24,6 +24,7 @@ AGENT_COMMANDS = {
     "agy": "agy",
     "claude": "claude",
     "codex": "codex",
+    "copilot": "copilot",
     "gemini": "gemini",
     "opencode": "opencode",
 }

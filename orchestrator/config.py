@@ -112,6 +112,7 @@ INVOCATION = os.getenv("INVOCATION", "direct")
 # what happens when a dependency moves and one consumer hardcoded its lookup.
 CLAUDE_BIN = os.getenv("CLAUDE_BIN", "claude")
 CODEX_BIN = os.getenv("CODEX_BIN", "codex")
+COPILOT_BIN = os.getenv("COPILOT_BIN", "copilot")
 # Maestro is installed repo-locally (ADR-007), so it is NOT on PATH. Resolution
 # order is: this setting -> project-local node_modules -> PATH.
 MAESTRO_BIN = os.getenv("MAESTRO_BIN", str(PROJECT_ROOT / "node_modules" / ".bin" / "maestro"))
@@ -137,7 +138,7 @@ class AgentSpec:
     socket open while it generates is never idle. A limit has to name its unit.
     """
 
-    backend: str  # "claude" | "codex" | "ollama"
+    backend: str  # "claude" | "codex" | "copilot" | "ollama"
     model: str  # "" defers to whatever the CLI itself selects
     deadline_seconds: int
     # Dollar ceiling for one invocation. 0 leaves it uncapped. Honoured by the
@@ -152,12 +153,12 @@ class AgentSpec:
 # The notes assign agents 1, 3 and 4 to the Gemini CLI. Gemini is not installed
 # on this machine and is disabled in ~/.maestro/cli-tools.json, so the tiers are
 # expressed as haiku vs sonnet on Claude Code. Any entry can be switched to
-# `backend="codex"` — the adapter layer makes them interchangeable.
+# `backend="codex"` or `backend="copilot"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="ollama", model="devstral:24b-small-2505-q4_K_M", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="ollama", model="devstral:24b-small-2505-q4_K_M", deadline_seconds=900),
-    "merger": AgentSpec(backend="ollama", model="devstral:24b-small-2505-q4_K_M", deadline_seconds=900),
+    "requirements": AgentSpec(backend="copilot", model="auto", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="ollama", model="gpt-oss:20b-cloud", deadline_seconds=900),
+    "merger": AgentSpec(backend="ollama", model="nemotron-3-nano:30b-cloud", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
     "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600),
@@ -178,8 +179,8 @@ CODING_AGENT_A = AgentSpec(
     deadline_seconds=_int("CODING_AGENT_DEADLINE_SECONDS", 900),
 )
 CODING_AGENT_B = AgentSpec(
-    backend=os.getenv("CODING_AGENT_B_BACKEND", os.getenv("CODING_AGENT_BACKEND", "claude")),
-    model=os.getenv("CODING_AGENT_B_MODEL", os.getenv("CODING_AGENT_MODEL", "sonnet")),
+    backend=os.getenv("CODING_AGENT_B_BACKEND", os.getenv("CODING_AGENT_BACKEND", "codex")),
+    model=os.getenv("CODING_AGENT_B_MODEL", os.getenv("CODING_AGENT_MODEL", "")),
     deadline_seconds=_int("CODING_AGENT_DEADLINE_SECONDS", 900),
 )
 
@@ -196,8 +197,28 @@ MAX_CODING_AGENT_COUNT = 5
 # is the only safe entry for that backend, not a specific model string.
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
+    ("auto", "copilot"),
+    # ("gpt-oss:120b-cloud", "ollama"),
+    ("gpt-oss:20b-cloud", "ollama"),
+    # ("mistral-large-3:675b-cloud", "ollama"),
+    ("gemma4:31b-cloud", "ollama"),
+    ("gemma4:cloud", "ollama"),
+    # ("qwen3.5:397b-cloud", "ollama"),
+    # ("qwen3.5:cloud", "ollama"),
+    ("nemotron-3-nano:30b-cloud", "ollama"),
+    # ("nemotron-3-super:cloud", "ollama"),
+    # ("nemotron-3-ultra:cloud", "ollama"),
+    # ("minimax-m3:cloud", "ollama"),
+    ("minimax-m2.7:cloud", "ollama"),
+    # ("kimi-k2.6:cloud", "ollama"),
+    # ("kimi-k2.7-code:cloud", "ollama"),
+    # ("kimi-k3:cloud", "ollama"),
+    # ("deepseek-v4-pro:cloud", "ollama"),
+    # ("deepseek-v4-flash:cloud", "ollama"),
+    # ("glm-5.1:cloud", "ollama"),
+    # ("glm-5.2:cloud", "ollama"),
     # ("muse-glimmer:latest", "ollama"),
-    ("devstral:24b-small-2505-q4_K_M", "ollama"),
+    # ("devstral:24b-small-2505-q4_K_M", "ollama"),
     # ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
     # ("qwen3:14b-q4_K_M", "ollama"),
     # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
@@ -207,7 +228,8 @@ SMALL_MEDIUM_MODELS = [
 ]
 EXPERT_MODELS = [
     # ("sonnet", "claude"), 
-    ("", "codex")
+    ("", "codex"),
+    ("auto", "copilot"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════

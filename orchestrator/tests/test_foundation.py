@@ -18,6 +18,7 @@ import artifacts as art
 import worktrees as wt
 import config
 from adapters.base import AgentResult, _dispatch_key, classify_failure, subprocess_env
+from adapters.copilot import _parse_json_lines
 from adapters.codex import _thread_id
 from config import AgentSpec
 from state import event, initial_state
@@ -33,6 +34,7 @@ def test_every_transport_is_registered():
     assert "stub" in registered
     assert "direct:claude" in registered
     assert "direct:codex" in registered
+    assert "direct:copilot" in registered
     assert "direct:ollama" in registered
     assert "maestro" in registered
 
@@ -40,6 +42,7 @@ def test_every_transport_is_registered():
 def test_dispatch_key_separates_transport_from_vendor():
     assert _dispatch_key("direct", "claude") == "direct:claude"
     assert _dispatch_key("direct", "codex") == "direct:codex"
+    assert _dispatch_key("direct", "copilot") == "direct:copilot"
     # maestro and stub speak to any vendor themselves.
     assert _dispatch_key("maestro", "codex") == "maestro"
     assert _dispatch_key("stub", "claude") == "stub"
@@ -96,6 +99,84 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     assert argv[argv.index("--local-provider") + 1] == "ollama"
     assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
     assert "--oss" in argv
+
+
+def test_copilot_adapter_builds_noninteractive_command(monkeypatch):
+    captured: dict[str, object] = {}
+    cwd = os.getcwd()
+    run_dir = str(Path.cwd() / "orchestrator" / "runs")
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        captured.update(argv=argv, input=input, cwd=cwd, timeout=timeout)
+        stdout = "\n".join(
+            [
+                '{"type":"session","session_id":"copilot-session"}',
+                '{"type":"message","content":"COPILOT_ADAPTER_OK"}',
+            ]
+        )
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr("adapters.copilot.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Return the requested marker.",
+        spec=AgentSpec(backend="copilot", model="auto", deadline_seconds=30),
+        system_prompt="System rules.",
+        cwd=cwd,
+        tag="copilot-probe",
+        invocation="direct",
+        resume_session="previous-session",
+        extra_dirs=(run_dir,),
+    )
+
+    argv = captured["argv"]
+    assert result.ok is True
+    assert result.text == "COPILOT_ADAPTER_OK"
+    assert result.session_id == "copilot-session"
+    assert captured["input"] is None
+    assert captured["cwd"] == cwd
+    assert argv[argv.index("-C") + 1] == cwd
+    assert argv[argv.index("--model") + 1] == "auto"
+    assert argv[argv.index("--add-dir") + 1] == run_dir
+    assert argv[argv.index("--output-format") + 1] == "json"
+    assert "--allow-all-tools" in argv
+    assert "--no-ask-user" in argv
+    assert "--resume=previous-session" in argv
+    assert "System rules." in argv[argv.index("-p") + 1]
+
+
+def test_copilot_json_parser_preserves_session_and_last_reply():
+    stdout = "\n".join(
+        [
+            '{"type":"session","session":{"id":"abc-123"}}',
+            '{"type":"message","content":[{"type":"text","text":"draft"}]}',
+            '{"type":"message","content":[{"type":"text","text":"final"}]}',
+        ]
+    )
+    assert _parse_json_lines(stdout) == ("final", "abc-123", "")
+
+
+def test_copilot_stderr_only_failure_is_not_reported_as_no_output(monkeypatch):
+    message = (
+        "Error: Authentication token found but could not be validated.\n\n"
+        "  Failed to fetch OAuth user login (503): GitHub returned: No server is currently available."
+    )
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        return subprocess.CompletedProcess(argv, 0, "", message)
+
+    monkeypatch.setattr("adapters.copilot.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Return OK.",
+        spec=AgentSpec(backend="copilot", model="auto", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="copilot-auth-failure",
+        invocation="direct",
+    )
+
+    assert result.ok is False
+    assert result.error_kind == "agent_error"
+    assert "Authentication token found" in result.error_message
+    assert "503" in result.error_message
 
 
 @pytest.mark.parametrize(
