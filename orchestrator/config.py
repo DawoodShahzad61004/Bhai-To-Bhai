@@ -151,8 +151,8 @@ class AgentSpec:
 # `backend="codex"` or `backend="copilot"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="copilot", model="auto", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="ollama", model="gpt-oss:20b-cloud", deadline_seconds=900),
+    "requirements": AgentSpec(backend="codex", model="", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="codex", model="", deadline_seconds=900),
     "merger": AgentSpec(backend="codex", model="", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
@@ -200,7 +200,7 @@ SMALL_MEDIUM_MODELS = [
     # ("gemma4:cloud", "ollama"),
     # ("qwen3.5:397b-cloud", "ollama"),
     # ("qwen3.5:cloud", "ollama"),
-    ("nemotron-3-nano:30b-cloud", "ollama"),
+    # ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
     # ("minimax-m3:cloud", "ollama"),

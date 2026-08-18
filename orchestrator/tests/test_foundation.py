@@ -155,6 +155,18 @@ def test_copilot_json_parser_preserves_session_and_last_reply():
     assert _parse_json_lines(stdout) == ("final", "abc-123", "")
 
 
+def test_copilot_json_parser_reads_nested_final_assistant_message():
+    stdout = "\n".join(
+        [
+            '{"type":"user.message","data":{"content":"ignore this prompt"}}',
+            '{"type":"assistant.message_delta","data":{"deltaContent":"draft"}}',
+            '{"type":"assistant.message","data":{"content":"final reply"}}',
+            '{"type":"result","sessionId":"session-123","exitCode":0}',
+        ]
+    )
+    assert _parse_json_lines(stdout) == ("final reply", "session-123", "")
+
+
 def test_copilot_stderr_only_failure_is_not_reported_as_no_output(monkeypatch):
     message = (
         "Error: Authentication token found but could not be validated.\n\n"

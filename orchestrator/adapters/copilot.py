@@ -126,6 +126,14 @@ def _parse_json_lines(stdout: str) -> tuple[str, str, str]:
 
         error = error or _error_message(payload)
 
+        payload_type = str(payload.get("type") or payload.get("event") or "").lower()
+        if payload_type == "assistant.message":
+            data = payload.get("data")
+            if isinstance(data, dict):
+                candidate = _text_from_value(data.get("content"))
+                if candidate:
+                    text = candidate
+
         for key in ("result", "response", "text", "message", "content"):
             candidate = _text_from_value(payload.get(key))
             if candidate:
