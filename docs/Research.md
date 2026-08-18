@@ -10,6 +10,42 @@
 
 ---
 
+## 34. Copilot direct execution is wired and testable, but live authentication and service availability remain separate risks
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the 2026-08-17 Copilot adapter work established, and what the first live smoke attempt did not establish |
+| **Date** | 2026-08-17 |
+| **Findings** | `orchestrator/adapters/copilot.py` adds `direct:copilot` behind the shared non-raising `AgentResult` contract. It builds a non-interactive `copilot -p` invocation with JSON output, optional model, resume, and `--add-dir` arguments; uses the common Windows-safe deadline and scrubbed subprocess environment; parses JSONL events; and is auto-registered by `adapters/base.py`. Focused foundation tests and `compileall` covered the implementation, but no successful live Copilot turn was available. The direct smoke attempt found an authentication token that could not be validated, GitHub OAuth/CLI user-login requests returning HTTP 503, exit code 0, and empty stdout. The adapter was corrected to preserve stderr and classify that stderr as `agent_error` instead of reporting misleading `no_output`. |
+| **Conclusion** | The adapter boundary and failure classification are covered locally; Copilot entitlement and GitHub service health still need an independent live probe before the backend can be called production-proven. |
+| **Relevance to Project** | Supports `docs/Decisions.md` ADR-030 and records the remaining external failure in `docs/Bugs.md` #42. |
+
+---
+
+## 35. Target-repository run artifacts now provide project-scoped shared memory while preserving per-run audit records
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the 2026-08-17 artifact-boundary change fixed about cross-run continuity and concurrent evidence |
+| **Date** | 2026-08-17 |
+| **Findings** | `RunArtifacts` now separates a run directory from a target-repository shared directory. Each target owns `runs/context.md`, `runs/learnings.md`, its lock, and `runs/user_choices.md`; plans, task contracts, reviews, and events remain under run-specific paths. `prepare()` migrates the legacy flat layout safely, creates valid empty shared files on the first run, and writes precise local excludes. `context.md` is a current project snapshot, `learnings.md` is a locked append-only cross-run channel, and `user_choices.md` is append-only and idempotent by run marker. Production nodes and direct-agent path grants were updated to use the target repository consistently. |
+| **Conclusion** | The project-scope half of `Bugs.md` #36 is fixed without collapsing audit isolation: shared knowledge persists by target, while plans, tasks, reviews, and events remain attributable to one run. |
+| **Relevance to Project** | Establishes the implementation recorded in `docs/Decisions.md` ADR-029 and updates the artifact model in `docs/Architecture.md`. |
+
+---
+
+## 36. A future direct local OpenAI-compatible adapter must remain distinct from the Ollama-via-Codex bridge
+
+| Field | Detail |
+|---|---|
+| **Topic** | Boundary and probe requirements for the local LLM adapter identified after the 2026-08-17 Copilot and Ollama review |
+| **Date** | 2026-08-17 |
+| **Findings** | The production Ollama backend is a harness bridge: `adapters/ollama.py` delegates to `run_codex(local_provider="ollama")`; it does not consume `CUSTOM_API_BASE` and does not provide a direct OpenAI-compatible client. The production dependency set does not include `openai` or `langchain-openai`, while the tutorial's `ChatOpenAI` path is isolated learning code. A direct adapter therefore needs endpoint probes for `/v1/models`, `/v1/chat/completions`, and `/v1/responses`, followed by a deliberate choice of protocol; Chat Completions compatibility must not be assumed to imply Codex Responses compatibility. It must preserve the existing non-raising `AgentResult` contract and explicit error taxonomy. |
+| **Conclusion** | A local LLM adapter is needed, but it is planned work rather than a hidden extension of the current Ollama path. Probe the server and implement a separate backend only after its supported response protocol is known. |
+| **Relevance to Project** | Supports `docs/Decisions.md` ADR-031 and records the open boundary in `docs/Bugs.md` #44. |
+
+---
+
 ## 2. Survey of existing cross-agent orchestration frameworks
 
 | Field | Detail |

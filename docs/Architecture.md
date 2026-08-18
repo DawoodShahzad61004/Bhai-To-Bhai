@@ -79,9 +79,9 @@ orchestrator/
   bhai/<run-id>/<task-id>      inspectable task branches
 ```
 
-Artifacts use absolute paths and are written immediately in UTF-8. They live outside the target repository so an agent checkout or reset cannot erase the controller's memory. `user_choices.md` is written by deterministic orchestrator code from the questions asked and answers received; model assumptions and code-derived conclusions are excluded.
+Artifacts use absolute paths and are written immediately in UTF-8. The target repository now owns project-scoped shared memory under `runs/`: `context.md` is the current project snapshot, `learnings.md` is an append-only cross-run channel with a sidecar lock, and `user_choices.md` is deterministic orchestrator-owned provenance. Plans, task contracts, reviews, and events remain under run-specific paths so every execution retains an attributable audit trail. Legacy flat artifacts migrate safely, precise local excludes prevent accidental commits, and the first run creates valid empty shared files before any node reads them.
 
-The current boundary makes artifacts outside the target checkout, but no longer makes them unreachable. Agents receive absolute artifact paths rather than pasted artifact contents, and the direct Claude/Codex adapters grant access to the run directory with `extra_dirs` / `--add-dir`. Planner, merger, reviewer, supervisor, and coding briefs tell agents to read `context.md`, `user_choices.md`, `plan.json`, and/or `learnings.md` by path as needed. Coding agents can append findings directly to the run's shared `learnings.md` through `python orchestrator/artifacts.py append-learning <run_dir> <agent> <message>`, which uses an OS-level sidecar lock so concurrent writers do not interleave while ordinary reads remain non-blocking. `user_choices.md` remains deterministic orchestrator-owned provenance. The artifacts are still scoped to one run rather than one target project; project-scoped shared context remains planned but not implemented (`Bugs.md` #36).
+Agents receive absolute artifact paths rather than pasted artifact contents. Direct Claude, Codex, and Copilot adapters grant access to the target repository's shared directory with `extra_dirs` / `--add-dir`; planner, merger, reviewer, supervisor, and coding briefs tell agents which shared or run-specific files to read. Coding agents can append findings directly through `python orchestrator/artifacts.py append-learning <run_dir> <agent> <message>`, with OS-level locking so concurrent writers do not interleave. This fixes the project-scope portion of `Bugs.md` #36 while preserving per-run plans, tasks, reviews, and events.
 
 ## Module Breakdown
 
@@ -161,11 +161,12 @@ Supervisor replans are bounded by `MAX_REPLAN_ROUNDS`. Exhaustion records `bound
 | `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult`, the closed error taxonomy, adapter selection, the non-raising boundary used by every node, a scrubbed UTF-8 subprocess environment (`subprocess_env()`), and `run_with_deadline()`, which terminates the complete Windows CLI process tree on timeout. |
 | `orchestrator/adapters/claude.py` | Runs Claude Code through stdin with JSON output, tool/budget controls, wall-clock timeout, telemetry, and vendor session resume (sessions are persisted rather than suppressed on cold start, so `--resume` has something to resume). |
 | `orchestrator/adapters/codex.py` | Runs `codex exec` through stdin with workspace sandboxing and a dedicated final-answer file; reads errors from the end of stderr, and parses `--json` events for a resumable thread id. |
+| `orchestrator/adapters/copilot.py` | Runs GitHub Copilot CLI non-interactively through `copilot -p`, parses JSONL output, supports resume/model/workspace flags, and preserves stderr-only authentication or service failures as classified `AgentResult` errors. |
 | `orchestrator/adapters/maestro.py` | Runs synchronous `maestro delegate`, resolves the repo-local binary, and adds a wall-clock deadline above Maestro's stale-stream timeout. |
 | `orchestrator/adapters/ollama.py` | Routes a `backend="ollama"` dispatch unconditionally through `adapters/codex.py`'s `run_codex(local_provider="ollama")`, since bare `ollama run` has no file/shell/sandbox/session tooling of its own and can only supply inference underneath Codex's existing agent-loop machinery. Sets `-c model_reasoning_effort=none` because Codex otherwise assumes reasoning-capable models, which Ollama's non-thinking models (Qwen 2.5 Coder, Devstral) reject. |
 | `orchestrator/adapters/stub.py` | Provides deterministic scripted replies for offline end-to-end tests and deliberately fails unscripted tags. |
 
-Transport and vendor are separate choices. Supported invocation modes are direct vendor CLIs (including locally-hosted Ollama models via the Codex harness), Maestro delegation, and the stub backend. Failures are classified as `not_installed`, `timeout`, `rate_limit`, `no_output`, `agent_error`, or `bad_request`; they return to the graph as data instead of raising through the router.
+Transport and vendor are separate choices. Supported invocation modes are direct vendor CLIs (Claude, Codex, Copilot, and locally-hosted Ollama models via the Codex harness), Maestro delegation, and the stub backend. Failures are classified as `not_installed`, `timeout`, `rate_limit`, `no_output`, `agent_error`, or `bad_request`; they return to the graph as data instead of raising through the router.
 
 ### Support Modules
 
@@ -190,13 +191,13 @@ Transport and vendor are separate choices. Supported invocation modes are direct
 | Rework rounds | 2 per wave |
 | Replan rounds | 1 per run |
 | Wave cap | 20 |
-| Mechanical stages | Claude Haiku: requirements, wave orchestrator, merger |
+| Mechanical stages | Copilot (auto): requirements; Ollama `gpt-oss:20b-cloud`: wave orchestrator; Codex CLI default: merger |
 | Planning stage | Codex CLI default: planner |
-| Judgment stages | Claude Sonnet: reviewer, supervisor |
-| Coding roster menus | Small/medium: Claude Haiku. Expert: Claude Sonnet, Codex CLI default. |
+| Judgment stages | Codex CLI default: reviewer, supervisor |
+| Coding roster menus | Small/medium: Copilot (auto), Ollama `gpt-oss:20b-cloud`, Ollama `nemotron-3-nano:30b-cloud`. Expert: Codex CLI default. |
 | Fallback coding subagent A / B | Codex CLI default / Claude Sonnet |
 
-The roster is configurable per stage. The 2026-08-09 defaults are deliberately mixed after two rapid operational flips: requirements, wave orchestration, and merge use Claude Haiku; planning remains on Codex; review and supervision use Claude Sonnet. Coding slots have independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides and fall back to the legacy shared `CODING_AGENT_BACKEND` / `CODING_AGENT_MODEL` variables for backward compatibility. Since 2026-08-10, those slots are fallback defaults rather than the only coding roster: the planner can request a larger or smaller validated roster for the run. Gemini assignments in the design notes were translated to installed vendors because Gemini CLI was unavailable. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier.
+The roster is configurable per stage. The current working configuration reflects the Aug 17 operational experiment: Copilot handles requirements automatically, Ollama handles wave orchestration, Codex handles merge/planning/review/supervision, and the planner may choose from the active small/medium and expert menus. Coding slots retain independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides plus legacy shared fallbacks. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier.
 
 Any role's `backend` may be set to `"ollama"` with a locally-hosted model as `model`, which `adapters/ollama.py` runs through the Codex harness (ADR-028). This was exercised on 2026-08-11 as a zero-marginal-cost fallback during a Claude weekly rate-limit exhaustion. It is reliable for single-shot structured-output stages (requirements, planning-shaped JSON) but not yet proven reliable for coding-agent dispatch itself — see `Bugs.md` #40–#41 and `Research.md` topics 32–33. There is deliberately no per-harness switch for it: a short-lived `OLLAMA_HARNESS` option that could route through Claude Code instead of Codex was removed the same day it failed in production, since Claude Code's `--model` flag has no mechanism for accepting an arbitrary local model tag (`Bugs.md` #39).
 
@@ -214,27 +215,35 @@ Task claims are compared with Git diffs, conflict claims with index and marker s
 
 ## Testing and Operational Evidence
 
-The orchestrator has **209 tests across 10 test files**. They cover configuration, graph wiring/toggles, CLI behavior, requirements interrupts, deterministic waves, dispatch/worktrees/reverts, merging, reviewing, supervision, terminal bounds, subprocess environment scrubbing, vendor session-id extraction, planner-sized coding rosters, concurrent direct `learnings.md` appends, and Ollama-harness routing through Codex. The full suite was recorded passing on 2026-08-07 (189 tests), 2026-08-08 after the adapter session-resume fixes (193 tests), 2026-08-09 after the process-tree deadline and dual coding-slot changes (197 tests), 2026-08-10 after the prompt/reference and roster work (197 tests), and 2026-08-11 after the Ollama adapter landed and its short-lived Claude-harness option and three accompanying tests were removed the same day (209 tests). Workflow tests use the first-class stub transport so they are deterministic and incur no agent cost.
+The orchestrator has **221 collected tests across 10 test files**. They cover configuration, graph wiring/toggles, CLI behavior, requirements interrupts, deterministic waves, dispatch/worktrees/reverts, merging, reviewing, supervision, terminal bounds, subprocess environment scrubbing, vendor session-id extraction, Copilot parsing/classification, planner-sized coding rosters, concurrent direct `learnings.md` appends, target-repository artifact migration, and Ollama-harness routing through Codex. The Aug 17 commits expanded the suite from 209 to 221 collected tests. `compileall` passes; a full pytest attempt in this Windows checkout is currently blocked during pytest temporary-directory cleanup by `[WinError 5]` ACL failures, so collection and static validation are the current live evidence. Workflow tests use the first-class stub transport so they are deterministic and incur no agent cost.
 
 `orchestrator/run_logs/live_probe_20260807_194239.debug.log` records a real Claude adapter probe: one turn, structured output parsed, session id captured, approximately 4.8 seconds, and `$0.067745`. Two full live runs against real target repositories were diagnosed read-only on 2026-08-08 (`Research.md` topic 24): one failed at worktree setup against an uncommitted target repository, the other completed and was accepted by the supervisor but contained a latent rendering defect the pipeline's checks did not cover. On 2026-08-10, `run-20260810-162135` proved the new path-reference and direct-learning flow in a paid smoke run: the planner chose three Haiku coding agents, all three task prompts used artifact paths and the append-learning command, reviewer rework fixed an over-line-limit `data.js`, and the supervisor accepted the run. Later pricing-tool runs exposed two operational limits: a stale `sonnet-5` menu entry caused an immediate agent error (`Bugs.md` #37, fixed by using live aliases), and a single-Sonnet plan then hit the user's weekly Claude limit before producing usable wave output (`Bugs.md` #38). There has not yet been a paid six-agent end-to-end run that is both live and defect-free; worktree merge, rework, replan, and recovery remain primarily validated by the stub-backed suite.
 
-Known open findings are tracked in `docs/Bugs.md` #26–#28 (incomplete merge-context propagation, duplicate requirements routing logic, and successful-run worktree cleanup), #32–#33 (unborn-repository worktree setup and a browser-rendered HTML defect), #35–#36 (wave-wide rework discarding completed integrations, and run-scoped artifacts remaining non-project-scoped), #38 (static roster validation does not yet route around live quota exhaustion), #40 (a local Ollama model breaking the pipeline's JSON-only output contract), and #41 (local coding-agent models reporting false task completion and, once, fabricating a shared `learnings.md` entry — a model-capability limit, not an adapter defect).
+Known open findings are tracked in `docs/Bugs.md` #26–#28, #32–#33, #35, #38, #40–#44. #36's project-scope artifact gap is fixed; #42 remains dependent on Copilot/GitHub service health, #43 tracks subscription-gated Ollama Cloud roster entries, and #44 records the planned direct local OpenAI-compatible adapter. The current Ollama backend remains a Codex harness bridge, not that future adapter.
 
 ## Technology Stack
 
 | Layer | Technology |
 |---|---|
 | Workflow and checkpointing | LangGraph + SQLite checkpointer |
-| Agent execution | Claude Code CLI, Codex CLI, locally-hosted Ollama models (via the Codex harness), Maestro delegation, scripted stub |
+| Agent execution | Claude Code CLI, Codex CLI, GitHub Copilot CLI, locally-hosted Ollama models (via the Codex harness), Maestro delegation, scripted stub |
 | State and validation | Python typed state, deterministic reducers, structured JSON parsing |
 | Isolation and integration | Git branches and worktrees |
 | Persistence and audit | Markdown/JSON artifacts, JSONL events, per-run DEBUG logs |
 | Environment probe | Git, agent binaries, repo-local Maestro, MongoDB connectivity |
-| Tests | pytest, 209 tests |
+| Tests | pytest, 221 collected tests |
 
 The runtime dependency list is intentionally small. Agents are external subprocesses, so the project does not need model SDKs. `pymongo` exists for the standalone preflight probe, not for pipeline storage.
 
 ## Changelog
+
+### 2026-08-17 — Copilot adapter added and run memory moved into the target repository
+
+Commit `d71c20e` added `orchestrator/adapters/copilot.py`, automatic backend registration, `COPILOT_BIN`, preflight recognition, generalized planner prompts, and foundation coverage. The adapter is non-raising and preserves stderr-only Copilot authentication/service failures, but the live smoke attempt was blocked by GitHub 503 responses, so production entitlement is not yet proven (`Bugs.md` #42, `Decisions.md` ADR-030).
+
+Commit `1fa0c73` moved shared run memory into the target repository's `runs/` directory while retaining per-run plans, tasks, reviews, and events. It added legacy migration, first-run artifact initialization, precise local excludes, append-only/idempotent choices, locked cross-run learnings, and target-repository path propagation across the flow. The suite now collects 221 tests; current static validation passes, while this Windows checkout's full pytest attempt is blocked by temporary-directory ACL errors. A direct local OpenAI-compatible adapter remains planned separately from the Ollama-via-Codex bridge (`Bugs.md` #43–#44, `Decisions.md` ADR-029 and ADR-031).
+
+---
 
 ### 2026-07-31 — Target architecture documented
 

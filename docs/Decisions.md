@@ -400,3 +400,45 @@
 | **Impact** | `orchestrator/adapters/ollama.py` is now a thin, unconditional router to `run_codex(local_provider="ollama", backend_label="Ollama")`, reusing Codex's existing file-tool, sandbox, deadline, and session machinery with inference redirected to the local Ollama server via `-c model_reasoning_effort=none` (required because Codex assumes reasoning-capable models by default and Ollama's non-thinking models, such as Qwen 2.5 Coder and Devstral, reject that mode). Three tests covering Claude-harness selection, unknown-harness rejection, and the harness env var were deleted along with the option. This does not resolve whether locally-hosted models are actually reliable coding agents once dispatched through this single harness — see `Bugs.md` #40–#41 and `Research.md` topics 32–33 for that separate, still-open question. |
 
 ---
+
+## ADR-029 · Scope durable project memory to the target repository and group run records by artifact type
+
+| Field | Detail |
+|---|---|
+| **Decision** | Store shared project memory under `<target-repository>/runs/`, with `context.md`, `learnings.md`, `learnings.md.lock`, and `user_choices.md` at the shared root; store plans, tasks, reviews, and events below per-run paths under that same directory. Keep the controller-side run directory as the run identity and legacy migration source. |
+| **Date** | 2026-08-17 |
+| **Context** | `Bugs.md` #36 showed that prompt snapshots were not shared memory and that a new `orchestrator/runs/<run-id>/` directory fragmented knowledge across repeated runs of one target. The user explicitly required prior work and learnings to remain visible to later runs while asking that the remaining artifacts not collapse into `runs/<run-id>/...`. |
+| **Options Considered** | Keep all artifacts under the controller; move every artifact into one flat target `runs/` directory; put shared files at the target root and keep run records elsewhere; or use a target-owned `runs/` root with shared files plus type/run-scoped subdirectories. |
+| **Chosen Solution** | Use the target-owned, category-based layout. `artifacts.prepare()` receives `target_repo`, migrates legacy flat files without overwriting destinations, creates valid empty first-run files, and writes precise generated-path rules to the target repository's local Git exclude. |
+| **Rationale** | The target repository is the stable identity across runs, while plans, tasks, reviews, and events must remain independently auditable by run. Keeping `user_choices.md` orchestrator-owned preserves explicit-user provenance; locking `learnings.md` preserves concurrent append safety; local excludes keep generated artifacts out of product commits without hiding unrelated `runs/` content. |
+| **Impact** | Direct agents now receive the target's shared artifact directory by path. `context.md` remains the current synthesized snapshot; `learnings.md` accumulates findings across runs; `user_choices.md` is append-only and replay-idempotent; run-specific files use `plans/<run-id>.json`, `tasks/<run-id>/`, `reviews/<run-id>/`, and `events/<run-id>.jsonl`. The 2026-08-17 foundation and requirements tests cover exact paths, cross-run sharing, migration, local excludes, and first-run initialization. |
+
+---
+
+## ADR-030 · Add GitHub Copilot as a direct adapter behind the existing non-raising contract
+
+| Field | Detail |
+|---|---|
+| **Decision** | Treat Copilot as another direct CLI vendor, registered as `direct:copilot`, while preserving the same `AgentResult` boundary and shared subprocess controls used by Claude and Codex. |
+| **Date** | 2026-08-17 |
+| **Context** | The project needed another coding-agent CLI after repeated local/cloud model availability problems. Reusing the adapter boundary keeps workflow nodes independent of vendor-specific argv, JSONL shape, session identifiers, and authentication errors. |
+| **Options Considered** | Add Copilot-specific branches to every workflow node; route Copilot through an existing vendor adapter; or add a dedicated adapter that translates Copilot's CLI surface into the established contract. |
+| **Chosen Solution** | Add `orchestrator/adapters/copilot.py`; auto-load it from `adapters.base`; resolve `COPILOT_BIN`; build non-interactive `copilot -C ... --output-format json --silent --no-ask-user --allow-all-tools` calls with optional model, resume, and `--add-dir` arguments; parse JSONL-like output conservatively for the latest reply, errors, and session id; and run it through `run_with_deadline()` and the shared environment handling. |
+| **Rationale** | Vendor differences belong at one boundary. The adapter can preserve the non-raising graph contract even when Copilot exits 0 with an error on stderr, while the rest of the pipeline continues to consume `AgentResult` classifications. |
+| **Impact** | Copilot is available in the planner menus as `("auto", "copilot")` and can be selected in `AgentSpec`. Focused tests cover registration, command construction, session/reply parsing, and stderr-only failures. A live end-to-end Copilot turn was not proven: the observed failure was GitHub token validation returning HTTP 503 (`Bugs.md` #42). |
+
+---
+
+## ADR-031 · Keep a future direct local-LLM adapter separate from the Ollama-via-Codex bridge
+
+| Field | Detail |
+|---|---|
+| **Decision** | Do not treat `backend="ollama"` as a generic OpenAI-compatible model API. Keep the existing Ollama-via-Codex agent harness unchanged and investigate a separate direct adapter only after probing the target endpoint's capabilities. |
+| **Date** | 2026-08-17 |
+| **Context** | The Copilot auth failure and Ollama Cloud entitlement failure made a local, controllable inference route desirable. The current `adapters/ollama.py` is intentionally an agent-loop bridge through Codex; production dependencies do not include `openai` or `langchain-openai`, and the tutorial `ChatOpenAI` wrapper is not a production adapter. |
+| **Options Considered** | Extend the Ollama bridge to consume arbitrary local endpoints; add a direct model-client adapter under the same backend name; or add a distinct direct-local backend after measuring `/v1/models`, `/v1/chat/completions`, and `/v1/responses`. |
+| **Chosen Solution** | Defer implementation and preserve separate routes. Probe endpoint behavior without logging credentials, then choose a direct adapter that still returns the non-raising `AgentResult` contract and does not assume Chat Completions compatibility with Codex's Responses API path. |
+| **Rationale** | A model API supplies inference but not the file, shell, sandbox, session, and verification behavior the coding-agent harness provides. Conflating the two would hide transport incompatibilities and make a failed local endpoint look like a working coding-agent backend. |
+| **Impact** | The direct local adapter is planned, not shipped. The current Ollama bridge remains available for Codex-backed runs, while `Bugs.md` #44 records the missing capability and the required probe matrix. |
+
+---

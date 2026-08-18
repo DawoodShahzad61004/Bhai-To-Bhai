@@ -1,3 +1,5 @@
+## DO NOT USE MAESTRO
+
 ## Documentation First
 
 Before making assumptions, asking the user a question, researching externally, or making a significant implementation/design decision, check the `docs/` directory for relevant existing knowledge.

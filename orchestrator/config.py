@@ -151,8 +151,8 @@ class AgentSpec:
 # `backend="codex"` or `backend="copilot"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="codex", model="", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="codex", model="", deadline_seconds=900),
+    "requirements": AgentSpec(backend="copilot", model="auto", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="ollama", model="gpt-oss:20b-cloud", deadline_seconds=900),
     "merger": AgentSpec(backend="codex", model="", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
@@ -192,15 +192,15 @@ MAX_CODING_AGENT_COUNT = 5
 # is the only safe entry for that backend, not a specific model string.
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
-    # ("auto", "copilot"),
+    ("auto", "copilot"),
     # ("gpt-oss:120b-cloud", "ollama"),
-    # ("gpt-oss:20b-cloud", "ollama"),
+    ("gpt-oss:20b-cloud", "ollama"),
     # ("mistral-large-3:675b-cloud", "ollama"),
     # ("gemma4:31b-cloud", "ollama"),
     # ("gemma4:cloud", "ollama"),
     # ("qwen3.5:397b-cloud", "ollama"),
     # ("qwen3.5:cloud", "ollama"),
-    # ("nemotron-3-nano:30b-cloud", "ollama"),
+    ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
     # ("minimax-m3:cloud", "ollama"),
@@ -216,7 +216,7 @@ SMALL_MEDIUM_MODELS = [
     # ("devstral:24b-small-2505-q4_K_M", "ollama"),
     # ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
     # ("qwen3:14b-q4_K_M", "ollama"),
-    ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
+    # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
     # ("qwen3.5:4b", "ollama"),
     # ("qwen3:14b", "ollama"),
     # ("qwen3:8b", "ollama"),
@@ -224,7 +224,6 @@ SMALL_MEDIUM_MODELS = [
 EXPERT_MODELS = [
     # ("sonnet", "claude"), 
     ("", "codex"),
-    ("auto", "copilot"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════

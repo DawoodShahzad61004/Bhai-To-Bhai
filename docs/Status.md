@@ -1,5 +1,14 @@
 ## Chronological Log
 
+#### 2026-08-17 — Copilot adapter, target-repository artifacts, and local-model boundary clarified
+
+* Commit `d71c20e` added `orchestrator/adapters/copilot.py`, automatic adapter registration, `COPILOT_BIN`, preflight support, generalized planner prompts, and foundation tests. The shared adapter boundary is non-raising, supports JSONL parsing, resume, model, and workspace flags, and now classifies stderr-only Copilot failures as `agent_error`. A live smoke attempt still failed before a turn completed because GitHub authentication/service requests returned 503; no successful live Copilot call is claimed.
+* Commit `1fa0c73` moved shared project memory into the target repository's `runs/` directory: `context.md`, locked append-only `learnings.md`, and idempotent `user_choices.md` are shared across runs, while plans, tasks, reviews, and events remain run-specific. Legacy flat artifacts migrate safely, first-run files are initialized, local excludes are precise, and all production readers and agent path grants now use the target repository.
+* The test suite now collects 221 tests across 10 files, and `compileall` passes. A full pytest attempt in this Windows checkout hit `[WinError 5]` while pytest scanned/removed temporary directories, so the current evidence is collection plus static validation rather than a fresh complete-suite pass.
+* An Ollama Cloud roster entry was shown to fail before requirements because `kimi-k2.6:cloud` requires a subscription. The current Ollama backend remains the Codex harness bridge; a direct local OpenAI-compatible adapter is needed but is planned separately. Endpoint probes for `/v1/models`, `/v1/chat/completions`, and `/v1/responses` are required before selecting its protocol (`Bugs.md` #42–#44; `Decisions.md` ADR-029–ADR-031; `Research.md` topics 34–36).
+
+---
+
 ### July 2026 — Defining requirements and surveying existing orchestration tools
 
 - **Wrote a 35-item requirements checklist:** covering multi-CLI agent support (Claude Code, Codex, Gemini CLI, OpenCode/Aider), dynamic per-stage agent selection, mid-task switching, planner→implementer→reviewer→fixer workflows, canonical cross-agent task context, native session resumption, deterministic (non-LLM-judge) completion checks, human approval gates, and honest handling of the fact that hidden model state cannot cross vendors.
