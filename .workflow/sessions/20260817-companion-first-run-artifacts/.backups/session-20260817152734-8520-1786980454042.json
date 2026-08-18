@@ -1,0 +1,202 @@
+{
+  "session_id": "20260817-companion-first-run-artifacts",
+  "intent": "Fix first-run artifact initialization for every applicable artifact",
+  "status": "running",
+  "identity_revision": 2,
+  "activity_revision": 2,
+  "active_run_id": null,
+  "latest_completed_run_id": "20260817-001-companion",
+  "boundary_contract": {
+    "in_scope": [],
+    "out_of_scope": [],
+    "constraints": [],
+    "definition_of_done": ""
+  },
+  "orchestration": {
+    "engine": "manual",
+    "quality_mode": "standard",
+    "auto_mode": false,
+    "chain": [],
+    "decision_points": [],
+    "position": null,
+    "decomposition": null,
+    "lease": null,
+    "executor": null
+  },
+  "lifecycle": {
+    "sealed_at": null,
+    "seal_summary": null,
+    "promoted_spec_ids": [],
+    "promoted_knowhow_ids": [],
+    "forked_from": null
+  },
+  "refs": {
+    "gates": "gates.json",
+    "artifacts": "artifacts.json",
+    "evidence": "evidence.json"
+  },
+  "intent_identity": {
+    "schema_version": "intent-identity/1.0",
+    "normalization": "NFKC+unicode-lower+whitespace-collapse/1",
+    "workspace_id": "sha256:2740b0328cfc5b27e97c6f49f1a8995521e7681a06d0d72971e27f92b46f9cb2",
+    "command": "companion",
+    "verbatim": "Fix first-run artifact initialization for every applicable artifact",
+    "normalized": "fix first-run artifact initialization for every applicable artifact",
+    "normalized_length": 67,
+    "normalized_hash": "sha256:195684da6c2546ba4ca8ff2bada4b023f9fa15b2c1e54fcd35223ba06cb6745a",
+    "revision": 1,
+    "source": "persisted",
+    "backfill_status": "native",
+    "empty": false
+  },
+  "provenance": {
+    "source": "native",
+    "forked_from": null,
+    "imported_from": [],
+    "created_by": "session-store"
+  },
+  "requests": [
+    {
+      "request_id": "req_62431dde-8fae-478a-8628-b678fa6f02cc",
+      "type": "transition",
+      "status": "applied",
+      "payload": {
+        "schema_version": "transition-request/1.0",
+        "request_id": "req_62431dde-8fae-478a-8628-b678fa6f02cc",
+        "operation": "complete",
+        "subject": {
+          "session_id": "20260817-companion-first-run-artifacts",
+          "run_id": "20260817-001-companion",
+          "chain_step_id": null
+        },
+        "normalized_request_hash": "sha256:7765ca0595cc74ae0c0a85a902ef4b1c7afab424e3f8e07c126d390edf5f3565",
+        "requested_at": "2026-08-17T15:27:29.960Z",
+        "preconditions": {
+          "session_identity_revision": 2,
+          "session_activity_revision": 1,
+          "active_run_id": "20260817-001-companion",
+          "run_hash": "sha256:406c63286e89daa074d9379fce6bc86329723cfeba2f3c9ad51400a9e4eaa3cf",
+          "artifact_registry_revision": 0
+        },
+        "payload": {
+          "run_id": "20260817-001-companion",
+          "notes": [],
+          "extra_artifacts": [],
+          "summary_fallback": null,
+          "decisions": [],
+          "chain_verdict": "done",
+          "require_running_session": false,
+          "chain_proposal": null,
+          "completion_input_snapshot": {
+            "schema_version": "complete-input-snapshot/1.0",
+            "files": [
+              {
+                "path": "report.md",
+                "content_hash": "sha256:78aaa15407414c9f864fdc5f0828ba1b7de50ba023987f44fa78600e8fd39d9a"
+              }
+            ],
+            "snapshot_hash": "sha256:87260ad6f172afb74c0bc60efa21527bca02747b74b6a729066ae6c4833434d5"
+          },
+          "expected_identity_revision": 2,
+          "expected_activity_revision": 1,
+          "lease": {}
+        }
+      },
+      "claimed_by_run_id": "20260817-001-companion",
+      "outcome": {
+        "schema_version": "transition-outcome/1.0",
+        "transition_id": "tr_88de6b43-9e28-4d71-b61a-09723c9ea6bb",
+        "request_id": "req_62431dde-8fae-478a-8628-b678fa6f02cc",
+        "request_hash": "sha256:7765ca0595cc74ae0c0a85a902ef4b1c7afab424e3f8e07c126d390edf5f3565",
+        "operation": "complete",
+        "status": "applied",
+        "applied_at": "2026-08-17T15:27:29.968Z",
+        "subject": {
+          "session_id": "20260817-companion-first-run-artifacts",
+          "run_id": "20260817-001-companion",
+          "chain_step_id": null
+        },
+        "postconditions": {
+          "session_identity_revision": 2,
+          "session_activity_revision": 2,
+          "active_run_id": null,
+          "run_hash": "sha256:2d1e6d3d95e94fac3b95a16db25f5ca4333d1641d081e245d54efcb73bf98d27",
+          "artifact_registry_revision": 1
+        },
+        "exit_code": 0,
+        "error_code": null,
+        "result_hash": "sha256:5751ca7341de9936cf62a5edc97452000b7af4d1cb695c93b1a8a0db72151a6b",
+        "result": {
+          "value": {
+            "session_id": "20260817-companion-first-run-artifacts",
+            "run_id": "20260817-001-companion",
+            "status": "sealed",
+            "gates": {
+              "passed": [],
+              "failed": [],
+              "skipped": [],
+              "blocking": []
+            },
+            "artifacts": [],
+            "warnings": [],
+            "errors": [],
+            "upstream": {},
+            "reuse_assessments": [],
+            "sealed": true,
+            "primary_artifact_id": null,
+            "artifact_ids": [],
+            "next_action": {
+              "suggest_only": true,
+              "action": "seal_session",
+              "command": "maestro run seal-session 20260817-companion-first-run-artifacts",
+              "reason": "all steps complete — seal the session",
+              "preconditions": [
+                "all Runs are sealed",
+                "all chain steps are terminal"
+              ]
+            },
+            "chain_transition": null,
+            "chain_proposal": null,
+            "knowledge": {
+              "schema_version": "knowledge-candidate-receipt/1.0",
+              "staged_candidate_ids": [
+                "KDC-18d0cb647f870b2a",
+                "KDC-c2ef1f84d1d8ed58",
+                "KDC-fd0ec92b7419a8eb"
+              ],
+              "staged_count": 3,
+              "review_command": "maestro knowledge review 20260817-companion-first-run-artifacts",
+              "promote_template": "maestro knowledge promote 20260817-companion-first-run-artifacts --candidate <candidate-id>",
+              "reconciliation": {
+                "schema_version": "knowledge-reconciliation-receipt/1.0",
+                "candidate_snapshot_hash": "cc9c9d386f78060724c85de6d54e9e7c5a5c844617e343954b8243bd789a48a6",
+                "corpus_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "retrieval_mode": "lexical-kg",
+                "candidates": 3,
+                "duplicates": 0,
+                "conflicts": 0,
+                "review_required": 0,
+                "suppressed": 0,
+                "review_command": "maestro knowledge review 20260817-companion-first-run-artifacts"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "ralph_authority": null,
+  "schema_version": "session/1.3",
+  "topic_identity": {
+    "schema_version": "topic-identity/1.0",
+    "normalization": "NFKC+unicode-lower+whitespace-collapse/1",
+    "workspace_id": "sha256:2740b0328cfc5b27e97c6f49f1a8995521e7681a06d0d72971e27f92b46f9cb2",
+    "source": "legacy-intent",
+    "verbatim": "Fix first-run artifact initialization for every applicable artifact",
+    "normalized": "fix first-run artifact initialization for every applicable artifact",
+    "normalized_length": 67,
+    "normalized_hash": "sha256:88afe5fcc2d93b882b12891c2ae05269f61b02a06cebf3bfa005731a06e8d43b",
+    "identity_hash": "sha256:d5d0c084e1aeaa95fbf0e73da50e06f45b58e4d5f11929a7abea0e7933a58231",
+    "revision": 1
+  }
+}

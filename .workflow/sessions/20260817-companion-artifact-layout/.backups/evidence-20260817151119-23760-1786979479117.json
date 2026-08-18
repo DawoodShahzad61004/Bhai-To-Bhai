@@ -1,0 +1,51 @@
+{
+  "schema_version": "evidence/1.0",
+  "revision": 1,
+  "records": {
+    "EVD-001-001": {
+      "run_id": "20260817-001-companion",
+      "command": "companion",
+      "kind": "decision",
+      "point": "exact-local-excludes",
+      "claim": "Use exact local Git exclude patterns managed in .git/info/exclude.",
+      "outcome": "accepted",
+      "rationale": "Use exact local Git exclude patterns managed in .git/info/exclude.",
+      "status": "accepted",
+      "artifact_refs": [],
+      "gate_refs": [],
+      "source_refs": [
+        "report.md"
+      ]
+    },
+    "EVD-001-002": {
+      "run_id": "20260817-001-companion",
+      "command": "companion",
+      "kind": "decision",
+      "point": "memory-file-semantics",
+      "claim": "Treat context as a current snapshot and user choices as an append-only ledger.",
+      "outcome": "accepted",
+      "rationale": "Treat context as a current snapshot and user choices as an append-only ledger.",
+      "status": "accepted",
+      "artifact_refs": [],
+      "gate_refs": [],
+      "source_refs": [
+        "report.md"
+      ]
+    },
+    "EVD-001-003": {
+      "run_id": "20260817-001-companion",
+      "command": "companion",
+      "kind": "decision",
+      "point": "bounded-legacy-migration",
+      "claim": "Migrate only the current legacy run and never overwrite an existing destination.",
+      "outcome": "accepted",
+      "rationale": "Migrate only the current legacy run and never overwrite an existing destination.",
+      "status": "accepted",
+      "artifact_refs": [],
+      "gate_refs": [],
+      "source_refs": [
+        "report.md"
+      ]
+    }
+  }
+}

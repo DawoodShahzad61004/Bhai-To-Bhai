@@ -1,0 +1,118 @@
+{
+  "version": 2,
+  "generatedAt": 1787039178272,
+  "entries": [
+    {
+      "id": "session-20260817-companion-artifact-layout",
+      "type": "knowhow",
+      "title": "Implement target-repo artifact categories, local Git exclusion, and persistent user choices",
+      "summary": "Durable artifacts now use the approved target-repository layout with run-keyed categories.；决策：Use exact local Git exclude patterns managed in .git/info/exclude.",
+      "tags": [
+        "session",
+        "sealed"
+      ],
+      "status": "completed",
+      "created": "2026-08-17T20:11:19+05:00",
+      "updated": "2026-08-17T20:11:19+05:00",
+      "scope": null,
+      "category": null,
+      "specCategory": null,
+      "createdBy": "session-runtime",
+      "sourceRef": "20260817-companion-artifact-layout",
+      "parent": null,
+      "related": [
+        "session-run-20260817-companion-artifact-layout-20260817-001-companion"
+      ],
+      "source": {
+        "kind": "virtual",
+        "path": "sessions/20260817-companion-artifact-layout/session.json"
+      }
+    },
+    {
+      "id": "session-20260817-companion-first-run-artifacts",
+      "type": "knowhow",
+      "title": "Fix first-run artifact initialization for every applicable artifact",
+      "summary": "First-run target repositories now initialize every artifact whose empty form is valid before agent dispatch.；决策：Eagerly create context, learnings, learnings lock, user choices, and run events after legacy migration.",
+      "tags": [
+        "session",
+        "sealed"
+      ],
+      "status": "completed",
+      "created": "2026-08-17T20:27:34+05:00",
+      "updated": "2026-08-17T20:27:34+05:00",
+      "scope": null,
+      "category": null,
+      "specCategory": null,
+      "createdBy": "session-runtime",
+      "sourceRef": "20260817-companion-first-run-artifacts",
+      "parent": null,
+      "related": [
+        "session-run-20260817-companion-first-run-artifacts-20260817-001-companion"
+      ],
+      "source": {
+        "kind": "virtual",
+        "path": "sessions/20260817-companion-first-run-artifacts/session.json"
+      }
+    },
+    {
+      "id": "session-run-20260817-companion-artifact-layout-20260817-001-companion",
+      "type": "knowhow",
+      "title": "companion 20260817-001-companion",
+      "summary": "Durable artifacts now use the approved target-repository layout with run-keyed categories.；决策：Use exact local Git exclude patterns managed in .git/info/exclude.",
+      "tags": [
+        "session",
+        "run",
+        "sealed",
+        "companion",
+        "verdict:ready",
+        "constraint"
+      ],
+      "status": "completed",
+      "created": "2026-08-17T19:59:11+05:00",
+      "updated": "2026-08-17T20:11:14+05:00",
+      "scope": null,
+      "category": null,
+      "specCategory": null,
+      "createdBy": "companion",
+      "sourceRef": "20260817-001-companion",
+      "parent": "session-20260817-companion-artifact-layout",
+      "related": [
+        "session-20260817-companion-artifact-layout"
+      ],
+      "source": {
+        "kind": "virtual",
+        "path": "sessions/20260817-companion-artifact-layout/runs/20260817-001-companion/run.json"
+      }
+    },
+    {
+      "id": "session-run-20260817-companion-first-run-artifacts-20260817-001-companion",
+      "type": "knowhow",
+      "title": "companion 20260817-001-companion",
+      "summary": "First-run target repositories now initialize every artifact whose empty form is valid before agent dispatch.；决策：Eagerly create context, learnings, learnings lock, user choices, and run events after legacy migration.",
+      "tags": [
+        "session",
+        "run",
+        "sealed",
+        "companion",
+        "verdict:ready",
+        "constraint"
+      ],
+      "status": "completed",
+      "created": "2026-08-17T20:21:53+05:00",
+      "updated": "2026-08-17T20:27:29+05:00",
+      "scope": null,
+      "category": null,
+      "specCategory": null,
+      "createdBy": "companion",
+      "sourceRef": "20260817-001-companion",
+      "parent": "session-20260817-companion-first-run-artifacts",
+      "related": [
+        "session-20260817-companion-first-run-artifacts"
+      ],
+      "source": {
+        "kind": "virtual",
+        "path": "sessions/20260817-companion-first-run-artifacts/runs/20260817-001-companion/run.json"
+      }
+    }
+  ]
+}

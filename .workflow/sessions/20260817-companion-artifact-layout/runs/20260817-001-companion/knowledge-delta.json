@@ -1,0 +1,119 @@
+{
+  "schema_version": "run-knowledge-delta/1.0",
+  "session_id": "20260817-companion-artifact-layout",
+  "run_id": "20260817-001-companion",
+  "revision": 1,
+  "created_at": "2026-08-17T15:11:14.866Z",
+  "updated_at": "2026-08-17T15:11:14.866Z",
+  "inputs": [],
+  "candidates": [
+    {
+      "candidate_id": "KDC-80af6cde1769206a",
+      "target": "spec",
+      "action": "propose",
+      "title": "Use exact local Git exclude patterns managed in .git/info/exclude.",
+      "content": "Use exact local Git exclude patterns managed in .git/info/exclude.",
+      "category": "arch",
+      "source_kind": "decision",
+      "evidence_refs": [
+        "run:20260817-001-companion"
+      ],
+      "occurrences": 1,
+      "first_recorded_at": "2026-08-17T15:11:14.866Z",
+      "last_recorded_at": "2026-08-17T15:11:14.866Z",
+      "status": "pending",
+      "promoted_id": null,
+      "promotion_receipt": null
+    },
+    {
+      "candidate_id": "KDC-71f3e8fd28feb82d",
+      "target": "spec",
+      "action": "propose",
+      "title": "Treat context as a current snapshot and user choices as an append-only ledger.",
+      "content": "Treat context as a current snapshot and user choices as an append-only ledger.",
+      "category": "arch",
+      "source_kind": "decision",
+      "evidence_refs": [
+        "run:20260817-001-companion"
+      ],
+      "occurrences": 1,
+      "first_recorded_at": "2026-08-17T15:11:14.866Z",
+      "last_recorded_at": "2026-08-17T15:11:14.866Z",
+      "status": "pending",
+      "promoted_id": null,
+      "promotion_receipt": null
+    },
+    {
+      "candidate_id": "KDC-fcc6efa96ce06ef4",
+      "target": "spec",
+      "action": "propose",
+      "title": "Migrate only the current legacy run and never overwrite an existing destination.",
+      "content": "Migrate only the current legacy run and never overwrite an existing destination.",
+      "category": "arch",
+      "source_kind": "decision",
+      "evidence_refs": [
+        "run:20260817-001-companion"
+      ],
+      "occurrences": 1,
+      "first_recorded_at": "2026-08-17T15:11:14.866Z",
+      "last_recorded_at": "2026-08-17T15:11:14.866Z",
+      "status": "pending",
+      "promoted_id": null,
+      "promotion_receipt": null
+    },
+    {
+      "candidate_id": "KDC-7c66beaa5b306883",
+      "target": "spec",
+      "action": "propose",
+      "title": "Keep context.md, learnings.md, learnings.md.lock, and user_choices.md flat under target_repo/runs.",
+      "content": "Keep context.md, learnings.md, learnings.md.lock, and user_choices.md flat under target_repo/runs.",
+      "category": "arch",
+      "source_kind": "constraint",
+      "evidence_refs": [
+        "run:20260817-001-companion"
+      ],
+      "occurrences": 1,
+      "first_recorded_at": "2026-08-17T15:11:14.866Z",
+      "last_recorded_at": "2026-08-17T15:11:14.866Z",
+      "status": "pending",
+      "promoted_id": null,
+      "promotion_receipt": null
+    },
+    {
+      "candidate_id": "KDC-2c76db7284aeeacf",
+      "target": "spec",
+      "action": "propose",
+      "title": "Store plans, tasks, reviews, and events in category paths keyed by run ID.",
+      "content": "Store plans, tasks, reviews, and events in category paths keyed by run ID.",
+      "category": "arch",
+      "source_kind": "constraint",
+      "evidence_refs": [
+        "run:20260817-001-companion"
+      ],
+      "occurrences": 1,
+      "first_recorded_at": "2026-08-17T15:11:14.866Z",
+      "last_recorded_at": "2026-08-17T15:11:14.866Z",
+      "status": "pending",
+      "promoted_id": null,
+      "promotion_receipt": null
+    },
+    {
+      "candidate_id": "KDC-c8e1ce9407e1c71c",
+      "target": "spec",
+      "action": "propose",
+      "title": "Do not hide project-owned files elsewhere under target_repo/runs from Git.",
+      "content": "Do not hide project-owned files elsewhere under target_repo/runs from Git.",
+      "category": "arch",
+      "source_kind": "constraint",
+      "evidence_refs": [
+        "run:20260817-001-companion"
+      ],
+      "occurrences": 1,
+      "first_recorded_at": "2026-08-17T15:11:14.866Z",
+      "last_recorded_at": "2026-08-17T15:11:14.866Z",
+      "status": "pending",
+      "promoted_id": null,
+      "promotion_receipt": null
+    }
+  ]
+}

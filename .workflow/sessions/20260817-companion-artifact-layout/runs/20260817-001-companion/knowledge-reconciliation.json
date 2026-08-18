@@ -1,0 +1,76 @@
+{
+  "schema_version": "knowledge-reconciliation/1.0",
+  "session_id": "20260817-companion-artifact-layout",
+  "run_id": "20260817-001-companion",
+  "candidate_snapshot_hash": "28613592f7384308fbc1cef481e473b48f12136f0177f980232615a3844de4bf",
+  "corpus_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "matcher_revision": "semantic-delta/1.0",
+  "generated_at": "2026-08-17T15:11:09.941Z",
+  "retrieval": {
+    "mode": "lexical-kg",
+    "embedding_used": false,
+    "candidate_limit": 28,
+    "identity_documents": 0,
+    "semantic_documents": 0,
+    "relation_documents": 0
+  },
+  "counts": {
+    "candidates": 6,
+    "unique": 6,
+    "duplicates": 0,
+    "related": 0,
+    "conflicts": 0,
+    "review_required": 0,
+    "suppressed": 0
+  },
+  "candidates": [
+    {
+      "candidate_id": "KDC-2c76db7284aeeacf",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-71f3e8fd28feb82d",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-7c66beaa5b306883",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-80af6cde1769206a",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-c8e1ce9407e1c71c",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-fcc6efa96ce06ef4",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    }
+  ]
+}

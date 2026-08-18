@@ -20,8 +20,5 @@
   "bugs": {
     "url": "https://github.com/DawoodShahzad61004/Bhai-To-Bhai/issues"
   },
-  "homepage": "https://github.com/DawoodShahzad61004/Bhai-To-Bhai#readme",
-  "dependencies": {
-    "maestro-flow": "^0.5.61"
-  }
+  "homepage": "https://github.com/DawoodShahzad61004/Bhai-To-Bhai#readme"
 }

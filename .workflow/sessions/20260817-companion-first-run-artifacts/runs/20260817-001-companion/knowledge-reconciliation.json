@@ -1,0 +1,52 @@
+{
+  "schema_version": "knowledge-reconciliation/1.0",
+  "session_id": "20260817-companion-first-run-artifacts",
+  "run_id": "20260817-001-companion",
+  "candidate_snapshot_hash": "cc9c9d386f78060724c85de6d54e9e7c5a5c844617e343954b8243bd789a48a6",
+  "corpus_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "matcher_revision": "semantic-delta/1.0",
+  "generated_at": "2026-08-17T15:27:24.224Z",
+  "retrieval": {
+    "mode": "lexical-kg",
+    "embedding_used": false,
+    "candidate_limit": 28,
+    "identity_documents": 0,
+    "semantic_documents": 0,
+    "relation_documents": 0
+  },
+  "counts": {
+    "candidates": 3,
+    "unique": 3,
+    "duplicates": 0,
+    "related": 0,
+    "conflicts": 0,
+    "review_required": 0,
+    "suppressed": 0
+  },
+  "candidates": [
+    {
+      "candidate_id": "KDC-18d0cb647f870b2a",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-c2ef1f84d1d8ed58",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    },
+    {
+      "candidate_id": "KDC-fd0ec92b7419a8eb",
+      "disposition": "unique",
+      "promotion_eligibility": "eligible",
+      "canonical_id": null,
+      "matches": [],
+      "resolution": null
+    }
+  ]
+}

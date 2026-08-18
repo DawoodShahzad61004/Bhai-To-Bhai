@@ -1,0 +1,205 @@
+{
+  "session_id": "20260817-companion-artifact-layout",
+  "intent": "Implement target-repo artifact categories, local Git exclusion, and persistent user choices",
+  "status": "sealed",
+  "identity_revision": 3,
+  "activity_revision": 3,
+  "active_run_id": null,
+  "latest_completed_run_id": "20260817-001-companion",
+  "boundary_contract": {
+    "in_scope": [],
+    "out_of_scope": [],
+    "constraints": [],
+    "definition_of_done": ""
+  },
+  "orchestration": {
+    "engine": "manual",
+    "quality_mode": "standard",
+    "auto_mode": false,
+    "chain": [],
+    "decision_points": [],
+    "position": null,
+    "decomposition": null,
+    "lease": null,
+    "executor": null
+  },
+  "lifecycle": {
+    "sealed_at": "2026-08-17T20:11:19+05:00",
+    "seal_summary": "Sealed with 1 Run(s)",
+    "promoted_spec_ids": [],
+    "promoted_knowhow_ids": [],
+    "forked_from": null
+  },
+  "refs": {
+    "gates": "gates.json",
+    "artifacts": "artifacts.json",
+    "evidence": "evidence.json"
+  },
+  "intent_identity": {
+    "schema_version": "intent-identity/1.0",
+    "normalization": "NFKC+unicode-lower+whitespace-collapse/1",
+    "workspace_id": "sha256:2740b0328cfc5b27e97c6f49f1a8995521e7681a06d0d72971e27f92b46f9cb2",
+    "command": "companion",
+    "verbatim": "Implement target-repo artifact categories, local Git exclusion, and persistent user choices",
+    "normalized": "implement target-repo artifact categories, local git exclusion, and persistent user choices",
+    "normalized_length": 91,
+    "normalized_hash": "sha256:afa17695c58f916deb09ccd38bad489a1f2cad95b4e48e9b663dcfadd924182a",
+    "revision": 1,
+    "source": "persisted",
+    "backfill_status": "native",
+    "empty": false
+  },
+  "provenance": {
+    "source": "native",
+    "forked_from": null,
+    "imported_from": [],
+    "created_by": "session-store"
+  },
+  "requests": [
+    {
+      "request_id": "req_e3f5fe05-d376-4dd4-9ec2-ef7589a2be8f",
+      "type": "transition",
+      "status": "applied",
+      "payload": {
+        "schema_version": "transition-request/1.0",
+        "request_id": "req_e3f5fe05-d376-4dd4-9ec2-ef7589a2be8f",
+        "operation": "complete",
+        "subject": {
+          "session_id": "20260817-companion-artifact-layout",
+          "run_id": "20260817-001-companion",
+          "chain_step_id": null
+        },
+        "normalized_request_hash": "sha256:82124208ff4a2808d7b8f88394405d7170aa8010d46fb9f9f25734f7cf521ce9",
+        "requested_at": "2026-08-17T15:11:14.861Z",
+        "preconditions": {
+          "session_identity_revision": 2,
+          "session_activity_revision": 1,
+          "active_run_id": "20260817-001-companion",
+          "run_hash": "sha256:f830519e11e1a42ef78601d3938b083538ff29c5723d6009f361a926568b7e67",
+          "artifact_registry_revision": 0
+        },
+        "payload": {
+          "run_id": "20260817-001-companion",
+          "notes": [],
+          "extra_artifacts": [],
+          "summary_fallback": null,
+          "decisions": [],
+          "chain_verdict": "done",
+          "require_running_session": false,
+          "chain_proposal": null,
+          "completion_input_snapshot": {
+            "schema_version": "complete-input-snapshot/1.0",
+            "files": [
+              {
+                "path": "report.md",
+                "content_hash": "sha256:ae122ab4586cc2c482d3a55347c65882bf267e16c36ecc492ce08f8c66382496"
+              }
+            ],
+            "snapshot_hash": "sha256:9bd2d569dc7c34e54e0ac42e02e8b1fde16a9be1554133d5a4ba97c440ef71a2"
+          },
+          "expected_identity_revision": 2,
+          "expected_activity_revision": 1,
+          "lease": {}
+        }
+      },
+      "claimed_by_run_id": "20260817-001-companion",
+      "outcome": {
+        "schema_version": "transition-outcome/1.0",
+        "transition_id": "tr_cc74f098-14d5-4e37-b582-bd41a817e864",
+        "request_id": "req_e3f5fe05-d376-4dd4-9ec2-ef7589a2be8f",
+        "request_hash": "sha256:82124208ff4a2808d7b8f88394405d7170aa8010d46fb9f9f25734f7cf521ce9",
+        "operation": "complete",
+        "status": "applied",
+        "applied_at": "2026-08-17T15:11:14.868Z",
+        "subject": {
+          "session_id": "20260817-companion-artifact-layout",
+          "run_id": "20260817-001-companion",
+          "chain_step_id": null
+        },
+        "postconditions": {
+          "session_identity_revision": 2,
+          "session_activity_revision": 2,
+          "active_run_id": null,
+          "run_hash": "sha256:503c4460d49cfff84604adca18e19c7cd3c3a4e29e8791a0b20190e7fec0b50a",
+          "artifact_registry_revision": 1
+        },
+        "exit_code": 0,
+        "error_code": null,
+        "result_hash": "sha256:fc767a88e2d12fca81ea2f5496304dcc8d2c59648bbb3089638bb7f46ff0706f",
+        "result": {
+          "value": {
+            "session_id": "20260817-companion-artifact-layout",
+            "run_id": "20260817-001-companion",
+            "status": "sealed",
+            "gates": {
+              "passed": [],
+              "failed": [],
+              "skipped": [],
+              "blocking": []
+            },
+            "artifacts": [],
+            "warnings": [],
+            "errors": [],
+            "upstream": {},
+            "reuse_assessments": [],
+            "sealed": true,
+            "primary_artifact_id": null,
+            "artifact_ids": [],
+            "next_action": {
+              "suggest_only": true,
+              "action": "seal_session",
+              "command": "maestro run seal-session 20260817-companion-artifact-layout",
+              "reason": "all steps complete — seal the session",
+              "preconditions": [
+                "all Runs are sealed",
+                "all chain steps are terminal"
+              ]
+            },
+            "chain_transition": null,
+            "chain_proposal": null,
+            "knowledge": {
+              "schema_version": "knowledge-candidate-receipt/1.0",
+              "staged_candidate_ids": [
+                "KDC-2c76db7284aeeacf",
+                "KDC-71f3e8fd28feb82d",
+                "KDC-7c66beaa5b306883",
+                "KDC-80af6cde1769206a",
+                "KDC-c8e1ce9407e1c71c",
+                "KDC-fcc6efa96ce06ef4"
+              ],
+              "staged_count": 6,
+              "review_command": "maestro knowledge review 20260817-companion-artifact-layout",
+              "promote_template": "maestro knowledge promote 20260817-companion-artifact-layout --candidate <candidate-id>",
+              "reconciliation": {
+                "schema_version": "knowledge-reconciliation-receipt/1.0",
+                "candidate_snapshot_hash": "28613592f7384308fbc1cef481e473b48f12136f0177f980232615a3844de4bf",
+                "corpus_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "retrieval_mode": "lexical-kg",
+                "candidates": 6,
+                "duplicates": 0,
+                "conflicts": 0,
+                "review_required": 0,
+                "suppressed": 0,
+                "review_command": "maestro knowledge review 20260817-companion-artifact-layout"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "ralph_authority": null,
+  "schema_version": "session/1.3",
+  "topic_identity": {
+    "schema_version": "topic-identity/1.0",
+    "normalization": "NFKC+unicode-lower+whitespace-collapse/1",
+    "workspace_id": "sha256:2740b0328cfc5b27e97c6f49f1a8995521e7681a06d0d72971e27f92b46f9cb2",
+    "source": "legacy-intent",
+    "verbatim": "Implement target-repo artifact categories, local Git exclusion, and persistent user choices",
+    "normalized": "implement target-repo artifact categories, local git exclusion, and persistent user choices",
+    "normalized_length": 91,
+    "normalized_hash": "sha256:28817b11d843d15aadfac48a02f7c3d146c3f11cf53eb8c8630eefc755d70726",
+    "identity_hash": "sha256:d11484e62e7dd7c5de8d17dc96e690420f1427d3edda1536bb222582738112fd",
+    "revision": 1
+  }
+}

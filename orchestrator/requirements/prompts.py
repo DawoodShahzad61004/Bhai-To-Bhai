@@ -42,7 +42,11 @@ it.
 Do this:
 1. Inspect the repository at the working directory you were started in. Read its \
    README, its package manifests, and enough source to understand its shape.
-2. Search accumulated project knowledge if it is available to you.
+2. If `graphify-out/graph.json` exists, query the project graph before broad
+   browsing: use `graphify query "<question>"` for connected context,
+   `graphify path "<A>" "<B>"` for relationships, and
+   `graphify explain "<concept>"` for one focused concept. If the graph lacks
+   enough evidence, continue with direct source inspection.
 3. Draft the requirements the goal implies.
 4. List ONLY the questions whose answers you genuinely cannot infer and which \
    would change what gets built. A material decision is one where two reasonable \

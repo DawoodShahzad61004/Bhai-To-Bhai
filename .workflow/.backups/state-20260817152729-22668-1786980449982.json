@@ -1,0 +1,36 @@
+{
+  "project_name": "Bhai-To-Bhai",
+  "status": "active",
+  "version": "2.0",
+  "current_milestone": null,
+  "current_task_id": null,
+  "milestones": [],
+  "artifacts": [],
+  "accumulated_context": {
+    "key_decisions": [],
+    "blockers": [],
+    "deferred": []
+  },
+  "transition_history": [],
+  "milestone_history": [],
+  "last_updated": "2026-08-17T20:21:53+05:00",
+  "sessions": [
+    {
+      "session_id": "20260817-companion-artifact-layout",
+      "intent": "Implement target-repo artifact categories, local Git exclusion, and persistent user choices",
+      "status": "sealed",
+      "depends_on": [],
+      "roadmap_artifact_id": null,
+      "seed_ref": null
+    },
+    {
+      "session_id": "20260817-companion-first-run-artifacts",
+      "intent": "Fix first-run artifact initialization for every applicable artifact",
+      "status": "running",
+      "depends_on": [],
+      "roadmap_artifact_id": null,
+      "seed_ref": null
+    }
+  ],
+  "active_session_id": "20260817-companion-first-run-artifacts"
+}

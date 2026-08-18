@@ -1,0 +1,21 @@
+{
+  "schema_version": "evidence/1.0",
+  "revision": 1,
+  "records": {
+    "EVD-001-001": {
+      "run_id": "20260817-001-companion",
+      "command": "companion",
+      "kind": "decision",
+      "point": "initialize-readable-empty-artifacts",
+      "claim": "Eagerly create context, learnings, learnings lock, user choices, and run events after legacy migration.",
+      "outcome": "accepted",
+      "rationale": "Eagerly create context, learnings, learnings lock, user choices, and run events after legacy migration.",
+      "status": "accepted",
+      "artifact_refs": [],
+      "gate_refs": [],
+      "source_refs": [
+        "report.md"
+      ]
+    }
+  }
+}

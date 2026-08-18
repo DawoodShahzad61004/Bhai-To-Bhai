@@ -1,0 +1,62 @@
+{
+  "schema_version": "session/1.3",
+  "session_id": "20260817-companion-first-run-artifacts",
+  "intent": "Fix first-run artifact initialization for every applicable artifact",
+  "intent_identity": {
+    "schema_version": "intent-identity/1.0",
+    "normalization": "NFKC+unicode-lower+whitespace-collapse/1",
+    "workspace_id": "sha256:2740b0328cfc5b27e97c6f49f1a8995521e7681a06d0d72971e27f92b46f9cb2",
+    "command": "companion",
+    "verbatim": "Fix first-run artifact initialization for every applicable artifact",
+    "normalized": "fix first-run artifact initialization for every applicable artifact",
+    "normalized_length": 67,
+    "normalized_hash": "sha256:195684da6c2546ba4ca8ff2bada4b023f9fa15b2c1e54fcd35223ba06cb6745a",
+    "revision": 1,
+    "source": "persisted",
+    "backfill_status": "native",
+    "empty": false
+  },
+  "topic_identity": null,
+  "provenance": {
+    "source": "native",
+    "forked_from": null,
+    "imported_from": [],
+    "created_by": "session-store"
+  },
+  "status": "running",
+  "identity_revision": 1,
+  "activity_revision": 0,
+  "active_run_id": null,
+  "latest_completed_run_id": null,
+  "boundary_contract": {
+    "in_scope": [],
+    "out_of_scope": [],
+    "constraints": [],
+    "definition_of_done": ""
+  },
+  "orchestration": {
+    "engine": "manual",
+    "quality_mode": "standard",
+    "auto_mode": false,
+    "chain": [],
+    "decision_points": [],
+    "position": null,
+    "decomposition": null,
+    "lease": null,
+    "executor": null
+  },
+  "requests": [],
+  "ralph_authority": null,
+  "lifecycle": {
+    "sealed_at": null,
+    "seal_summary": null,
+    "promoted_spec_ids": [],
+    "promoted_knowhow_ids": [],
+    "forked_from": null
+  },
+  "refs": {
+    "gates": "gates.json",
+    "artifacts": "artifacts.json",
+    "evidence": "evidence.json"
+  }
+}
