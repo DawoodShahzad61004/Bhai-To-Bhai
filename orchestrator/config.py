@@ -120,6 +120,14 @@ CLAUDE_PERMISSION_MODE = os.getenv("CLAUDE_PERMISSION_MODE", "bypassPermissions"
 # anything beyond it should still be refused.
 CODEX_SANDBOX = os.getenv("CODEX_SANDBOX", "workspace-write")
 
+# An arbitrary OpenAI-compatible server reached through Codex's custom-provider
+# surface. Codex remains the coding-agent runtime; these values only redirect
+# its inference calls. The API key is passed by environment-variable name and
+# never placed in argv, where it would be exposed by debug logging.
+CUSTOM_API_BASE = os.getenv("CUSTOM_API_BASE", "")
+CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "")
+CUSTOM_API_MODEL_NAME = os.getenv("CUSTOM_API_MODEL_NAME", "")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT ROSTER
 # ═════════════════════════════════════════════════════════════════════════════════════════
@@ -133,7 +141,7 @@ class AgentSpec:
     socket open while it generates is never idle. A limit has to name its unit.
     """
 
-    backend: str  # "claude" | "codex" | "copilot" | "ollama"
+    backend: str  # "claude" | "codex" | "copilot" | "ollama" | "local_llm"
     model: str  # "" defers to whatever the CLI itself selects
     deadline_seconds: int
     # Dollar ceiling for one invocation. 0 leaves it uncapped. Honoured by the
@@ -151,13 +159,13 @@ class AgentSpec:
 # `backend="codex"` or `backend="copilot"` — the adapter layer makes them interchangeable.
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="codex", model="", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="codex", model="", deadline_seconds=900),
-    "merger": AgentSpec(backend="codex", model="", deadline_seconds=900),
+    "requirements": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="copilot", model="auto", deadline_seconds=900),
+    "merger": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
-    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600),
-    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600),
-    "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600),
+    "planner": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=600),
+    "reviewer": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=600),
+    "supervisor": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=600),
 }
 
 # The coding subagents dispatched inside a wave. These are the only agents that
@@ -193,6 +201,7 @@ MAX_CODING_AGENT_COUNT = 5
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
     ("auto", "copilot"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
     # ("gpt-oss:120b-cloud", "ollama"),
     ("gpt-oss:20b-cloud", "ollama"),
     # ("mistral-large-3:675b-cloud", "ollama"),
@@ -200,11 +209,11 @@ SMALL_MEDIUM_MODELS = [
     # ("gemma4:cloud", "ollama"),
     # ("qwen3.5:397b-cloud", "ollama"),
     # ("qwen3.5:cloud", "ollama"),
-    # ("nemotron-3-nano:30b-cloud", "ollama"),
+    ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
-    # ("minimax-m3:cloud", "ollama"),
-    # ("minimax-m2.7:cloud", "ollama"),
+    ("minimax-m3:cloud", "ollama"),
+    ("minimax-m2.7:cloud", "ollama"),
     # ("kimi-k2.6:cloud", "ollama"),
     # ("kimi-k2.7-code:cloud", "ollama"),
     # ("kimi-k3:cloud", "ollama"),
@@ -214,7 +223,7 @@ SMALL_MEDIUM_MODELS = [
     # ("glm-5.2:cloud", "ollama"),
     # ("muse-glimmer:latest", "ollama"),
     # ("devstral:24b-small-2505-q4_K_M", "ollama"),
-    # ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
+    ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
     # ("qwen3:14b-q4_K_M", "ollama"),
     # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
     # ("qwen3.5:4b", "ollama"),

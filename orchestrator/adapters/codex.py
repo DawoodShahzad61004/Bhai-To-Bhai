@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -40,6 +41,7 @@ logger = get_logger(__name__)
 
 _CONSOLE_EXCERPT = 200
 _DEBUG_BLOCK_LIMIT = 12000
+_PROVIDER_ID = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 
 
 def _debug_block(text: str) -> str:
@@ -70,6 +72,23 @@ def _codex_error(stderr: str) -> str:
         return json.loads(errors[-1])["error"]["message"]
     except (json.JSONDecodeError, KeyError, TypeError):
         return errors[-1]
+
+
+def _codex_failure(stdout: str) -> str:
+    """Return the structured failure emitted by ``codex exec --json``."""
+    fallback = ""
+    for line in stdout.splitlines():
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("type") == "error" and isinstance(payload.get("message"), str):
+            fallback = payload["message"]
+        if payload.get("type") == "turn.failed":
+            error = payload.get("error")
+            if isinstance(error, dict) and isinstance(error.get("message"), str):
+                return error["message"]
+    return fallback
 
 
 def _thread_id(stdout: str) -> str:
@@ -116,6 +135,9 @@ def run_codex(
     resume_session: str,
     extra_dirs: tuple[str, ...] = (),
     local_provider: str = "",
+    custom_provider_id: str = "",
+    custom_provider_base_url: str = "",
+    custom_provider_env_key: str = "",
     backend_label: str = "Codex",
 ) -> AgentResult:
     """One Codex-backed turn. Returns a result; never raises.
@@ -131,6 +153,23 @@ def run_codex(
     in another cannot write to the second without `--add-dir` naming it
     explicitly.
     """
+    if local_provider and custom_provider_id:
+        return AgentResult(
+            ok=False,
+            error_kind="bad_request",
+            error_message="Codex cannot use a built-in local provider and a custom provider together.",
+        )
+    if custom_provider_id and (
+        not _PROVIDER_ID.fullmatch(custom_provider_id)
+        or not custom_provider_base_url
+        or not custom_provider_env_key
+    ):
+        return AgentResult(
+            ok=False,
+            error_kind="bad_request",
+            error_message="The Codex custom provider configuration is incomplete or invalid.",
+        )
+
     handle, last_message = tempfile.mkstemp(prefix="codex-", suffix=".txt")
     os.close(handle)
 
@@ -157,6 +196,25 @@ def run_codex(
             "--oss",
             "--local-provider",
             local_provider,
+            "-c",
+            "model_reasoning_effort=none",
+        ]
+    elif custom_provider_id:
+        # Codex custom providers speak the Responses API only. JSON string
+        # encoding is also valid TOML string encoding and keeps URLs/names safe
+        # when passed through repeated `-c key=value` overrides.
+        provider = f"model_providers.{custom_provider_id}"
+        argv += [
+            "-c",
+            f"model_provider={json.dumps(custom_provider_id)}",
+            "-c",
+            f"{provider}.name={json.dumps(backend_label)}",
+            "-c",
+            f"{provider}.base_url={json.dumps(custom_provider_base_url)}",
+            "-c",
+            f"{provider}.env_key={json.dumps(custom_provider_env_key)}",
+            "-c",
+            f'{provider}.wire_api="responses"',
             "-c",
             "model_reasoning_effort=none",
         ]
@@ -247,7 +305,12 @@ def run_codex(
             text = ""
 
         if completed.returncode != 0:
-            reason = text or _codex_error(stderr) or f"codex exited {completed.returncode}"
+            reason = (
+                text
+                or _codex_failure(stdout)
+                or _codex_error(stderr)
+                or f"codex exited {completed.returncode}"
+            )
             return AgentResult(
                 ok=False,
                 error_kind=classify_failure(reason),
@@ -261,7 +324,7 @@ def run_codex(
                 error_kind="no_output",
                 error_message=(
                     "codex exited 0 but wrote no final message. "
-                    f"{_codex_error(stderr) or '(no stderr)'}"
+                    f"{_codex_failure(stdout) or _codex_error(stderr) or '(no error event)'}"
                 ),
                 duration_seconds=elapsed,
                 session_id=session_id,

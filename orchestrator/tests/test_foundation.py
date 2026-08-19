@@ -19,7 +19,7 @@ import worktrees as wt
 import config
 from adapters.base import AgentResult, _dispatch_key, classify_failure, subprocess_env
 from adapters.copilot import _parse_json_lines
-from adapters.codex import _thread_id
+from adapters.codex import _codex_failure, _thread_id
 from config import AgentSpec
 from state import event, initial_state
 
@@ -36,6 +36,7 @@ def test_every_transport_is_registered():
     assert "direct:codex" in registered
     assert "direct:copilot" in registered
     assert "direct:ollama" in registered
+    assert "direct:local_llm" in registered
     assert "maestro" in registered
 
 
@@ -43,6 +44,7 @@ def test_dispatch_key_separates_transport_from_vendor():
     assert _dispatch_key("direct", "claude") == "direct:claude"
     assert _dispatch_key("direct", "codex") == "direct:codex"
     assert _dispatch_key("direct", "copilot") == "direct:copilot"
+    assert _dispatch_key("direct", "local_llm") == "direct:local_llm"
     # maestro and stub speak to any vendor themselves.
     assert _dispatch_key("maestro", "codex") == "maestro"
     assert _dispatch_key("stub", "claude") == "stub"
@@ -99,6 +101,93 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     assert argv[argv.index("--local-provider") + 1] == "ollama"
     assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
     assert "--oss" in argv
+
+
+def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
+    captured: dict[str, object] = {}
+    model = "local/model"
+    secret = "must-not-appear-in-argv"
+    monkeypatch.setattr("config.CUSTOM_API_BASE", "http://local.test/v1/")
+    monkeypatch.setattr("config.CUSTOM_API_KEY", secret)
+    monkeypatch.setattr("config.CUSTOM_API_MODEL_NAME", model)
+    monkeypatch.setattr("adapters.local_llm._advertised_wire_api", lambda *_: "responses")
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        captured.update(argv=argv, input=input, cwd=cwd, timeout=timeout)
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text("LOCAL_LLM_ADAPTER_OK", encoding="utf-8")
+        stdout = '{"type":"thread.started","thread_id":"local-session"}\n'
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Return the requested marker.",
+        spec=AgentSpec(backend="local_llm", model="", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="local-llm-probe",
+        invocation="direct",
+    )
+
+    argv = captured["argv"]
+    overrides = [argv[index + 1] for index, value in enumerate(argv) if value == "-c"]
+    assert result.ok is True
+    assert result.text == "LOCAL_LLM_ADAPTER_OK"
+    assert result.session_id == "local-session"
+    assert argv[argv.index("--model") + 1] == model
+    assert 'model_provider="local_llm"' in overrides
+    assert 'model_providers.local_llm.base_url="http://local.test/v1"' in overrides
+    assert 'model_providers.local_llm.env_key="CUSTOM_API_KEY"' in overrides
+    assert 'model_providers.local_llm.wire_api="responses"' in overrides
+    assert "--oss" not in argv
+    assert "--local-provider" not in argv
+    assert secret not in " ".join(argv)
+
+
+def test_local_llm_adapter_bridges_chat_completions_only_server(monkeypatch):
+    captured: dict[str, object] = {}
+    monkeypatch.setattr("config.CUSTOM_API_BASE", "http://local.test/v1")
+    monkeypatch.setattr("config.CUSTOM_API_KEY", "secret")
+    monkeypatch.setattr("config.CUSTOM_API_MODEL_NAME", "local/model")
+    monkeypatch.setattr("adapters.local_llm._advertised_wire_api", lambda *_: "chat_completions")
+
+    class FakeBridge:
+        def __enter__(self):
+            captured["bridge_started"] = True
+            return "http://127.0.0.1:54321/v1"
+
+        def __exit__(self, *_):
+            captured["bridge_stopped"] = True
+
+    monkeypatch.setattr("adapters.local_llm.responses_bridge", lambda *_: FakeBridge())
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        captured["argv"] = argv
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text("BRIDGED", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"bridge-session"}\n', ""
+        )
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+
+    result = adapters.run_agent(
+        "Return OK.",
+        spec=AgentSpec(backend="local_llm", model="", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="local-llm-incompatible",
+        invocation="direct",
+    )
+
+    overrides = [
+        captured["argv"][index + 1]
+        for index, value in enumerate(captured["argv"])
+        if value == "-c"
+    ]
+    assert result.ok is True
+    assert result.text == "BRIDGED"
+    assert captured["bridge_started"] is True
+    assert captured["bridge_stopped"] is True
+    assert 'model_providers.local_llm.base_url="http://127.0.0.1:54321/v1"' in overrides
 
 
 def test_copilot_adapter_builds_noninteractive_command(monkeypatch):
@@ -237,6 +326,18 @@ def test_codex_error_events_do_not_hide_the_session_id():
     assert _thread_id(stdout) == "abc-123"
 
 
+def test_codex_failure_uses_the_structured_turn_error():
+    stdout = "\n".join(
+        [
+            '{"type":"item.completed","item":{"type":"error","message":"warning"}}',
+            '{"type":"error","message":"upstream rejected the request"}',
+            '{"type":"turn.failed","error":{"message":"System message must be at the beginning."}}',
+        ]
+    )
+
+    assert _codex_failure(stdout) == "System message must be at the beginning."
+
+
 def test_codex_session_id_is_absent_rather_than_invented():
     assert _thread_id("") == ""
     assert _thread_id('{"type":"turn.completed"}') == ""
@@ -245,6 +346,8 @@ def test_codex_session_id_is_absent_rather_than_invented():
 def test_subprocess_env_removes_python_overrides(monkeypatch):
     monkeypatch.setenv("PYTHONHOME", "C:/bad-python")
     monkeypatch.setenv("PYTHONPATH", "C:/bad-python/site-packages")
+    monkeypatch.setenv("NO_PROXY", "localhost")
+    monkeypatch.setattr("config.CUSTOM_API_BASE", "http://192.168.1.11:3001/v1")
 
     env = subprocess_env()
 
@@ -255,6 +358,8 @@ def test_subprocess_env_removes_python_overrides(monkeypatch):
     assert env["PYTHONUTF8"] == "1"
     assert env["PYTHONIOENCODING"] == "utf-8"
     assert env["PATH"].split(os.pathsep)[0] == local_bin
+    assert env["NO_PROXY"].split(",") == ["localhost", "192.168.1.11"]
+    assert "192.168.1.11" in env["no_proxy"].split(",")
 
 
 def test_stub_records_calls_and_replays_scripted_replies(stub):

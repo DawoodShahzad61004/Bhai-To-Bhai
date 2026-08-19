@@ -24,6 +24,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
+from urllib.parse import urlsplit
 
 import config
 from config import AgentSpec
@@ -106,7 +107,8 @@ class Backend(Protocol):
 #
 #   transport (config.INVOCATION) -- HOW the CLI is reached: direct subprocess,
 #                                    through `maestro delegate`, or not at all.
-#   vendor    (AgentSpec.backend) -- WHICH CLI/provider: claude, codex, copilot, or ollama.
+#   vendor    (AgentSpec.backend) -- WHICH CLI/provider: claude, codex, copilot,
+#                                    ollama, or local_llm.
 #
 # The direct transport needs one adapter per vendor, so it registers under
 # "direct:<vendor>". `maestro` and `stub` speak to any vendor and register under
@@ -181,6 +183,15 @@ def subprocess_env() -> dict[str, str]:
     path_parts = [part for part in env.get("PATH", "").split(os.pathsep) if part]
     if local_bin not in path_parts:
         env["PATH"] = os.pathsep.join([local_bin, *path_parts])
+
+    # A LAN-hosted model server must not be sent through a parent shell's HTTP
+    # proxy. Keep existing exclusions and add only the configured API host.
+    custom_api_host = urlsplit(config.CUSTOM_API_BASE).hostname
+    if custom_api_host:
+        for name in ("NO_PROXY", "no_proxy"):
+            exclusions = [part.strip() for part in env.get(name, "").split(",") if part.strip()]
+            if custom_api_host not in exclusions:
+                env[name] = ",".join([*exclusions, custom_api_host])
     return env
 
 
@@ -320,7 +331,7 @@ def _load_builtin_backends() -> None:
 
     importlib.import_module("adapters.stub")
 
-    for module in ("claude", "codex", "copilot", "ollama", "maestro"):
+    for module in ("claude", "codex", "copilot", "ollama", "local_llm", "maestro"):
         try:
             importlib.import_module(f"adapters.{module}")
         except Exception as exc:  # pragma: no cover - defensive
