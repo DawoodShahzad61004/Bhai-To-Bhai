@@ -139,6 +139,7 @@ def run_codex(
     custom_provider_base_url: str = "",
     custom_provider_env_key: str = "",
     backend_label: str = "Codex",
+    disable_memories: bool = False,
 ) -> AgentResult:
     """One Codex-backed turn. Returns a result; never raises.
 
@@ -218,6 +219,8 @@ def run_codex(
             "-c",
             "model_reasoning_effort=none",
         ]
+    if disable_memories:
+        argv += ["--disable", "memories"]
     for extra_dir in extra_dirs:
         argv += ["--add-dir", extra_dir]
     argv += [

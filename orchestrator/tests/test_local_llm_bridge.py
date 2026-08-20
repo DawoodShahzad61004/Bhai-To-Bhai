@@ -11,6 +11,7 @@ from adapters.local_llm_bridge import (
     responses_bridge,
     responses_to_chat,
 )
+from config import MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL
 
 
 def test_responses_request_becomes_chat_messages_and_tools():
@@ -68,21 +69,99 @@ def test_responses_request_becomes_chat_messages_and_tools():
 
     assert chat["model"] == "local/model"
     assert chat["stream"] is False
-    assert chat["messages"][0] == {
-        "role": "system",
-        "content": "Use the repository tools.\n\nStay concise.",
-    }
-    assert chat["messages"][1] == {"role": "user", "content": "Inspect it."}
-    assert chat["messages"][2]["tool_calls"][0]["id"] == "call-1"
-    assert chat["messages"][3] == {
+    assert chat["messages"][0] == {"role": "user", "content": "Inspect it."}
+    assert chat["messages"][1]["tool_calls"][0]["id"] == "call-1"
+    assert chat["messages"][2] == {
         "role": "tool",
         "tool_call_id": "call-1",
         "content": "contents",
     }
     flat_name = chat["tools"][0]["function"]["name"]
     assert len(chat["tools"]) == 1
-    assert chat["messages"][2]["tool_calls"][0]["function"]["name"] == flat_name
+    assert chat["messages"][1]["tool_calls"][0]["function"]["name"] == flat_name
     assert names[flat_name] == ("repo", "read_file", "function")
+
+
+def test_codex_harness_context_is_removed_without_losing_round_trip_history():
+    harness_context = (
+        "<recommended_plugins>plugins</recommended_plugins>\n"
+        "# AGENTS.md instructions\nrepository rules\n"
+        "<environment_context>workspace metadata</environment_context>"
+    )
+    chat, _ = responses_to_chat(
+        {
+            "model": "local/model",
+            "instructions": "Codex CLI defaults and tool guidance.",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [{"type": "input_text", "text": "Harness memory."}],
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": harness_context}],
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Create main.py."}],
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call-1",
+                    "name": "shell_command",
+                    "arguments": '{"command":"Get-ChildItem"}',
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call-1",
+                    "output": "README.md",
+                },
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "shell_command",
+                    "description": "Run a command.",
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            ],
+        }
+    )
+
+    assert chat["messages"] == [
+        {"role": "user", "content": "Create main.py."},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {
+                        "name": "shell_command",
+                        "arguments": '{"command":"Get-ChildItem"}',
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call-1", "content": "README.md"},
+    ]
+
+
+def test_user_message_that_mentions_agent_rules_is_not_harness_context():
+    chat, _ = responses_to_chat(
+        {
+            "model": "local/model",
+            "input": "Read AGENTS.md instructions before editing.",
+        }
+    )
+
+    assert chat["messages"] == [
+        {"role": "user", "content": "Read AGENTS.md instructions before editing."}
+    ]
 
 
 def test_chat_tool_call_becomes_codex_response_items():
@@ -150,7 +229,7 @@ def test_compact_request_preserves_latest_task_and_tool_schema():
     assert len(json.dumps(compact)) < 12_000
     assert compact["messages"][-1]["content"] == "LATEST_TASK"
     assert compact["tools"][0]["function"]["name"] == "shell_command"
-    assert compact["max_tokens"] == 512
+    assert compact["max_tokens"] == MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL
 
 
 def test_loopback_bridge_serves_responses_sse(monkeypatch):

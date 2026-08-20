@@ -167,9 +167,9 @@ AGENTS = {
     "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
-    "planner": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=600,),
-    "reviewer": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=600,),
-    "supervisor": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=600,),
+    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
 
 # The coding subagents dispatched inside a wave. These are the only agents that
@@ -205,8 +205,8 @@ MAX_CODING_AGENT_COUNT = 5
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
     # ("auto", "copilot"),
-    # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
-    ("gemini-3.1-flash-lite", "gemini"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    # ("gemini-3.1-flash-lite", "gemini"),
     # ("gpt-oss:120b-cloud", "ollama"),
     # ("gpt-oss:20b-cloud", "ollama"),
     # ("gemma4:31b-cloud", "ollama"),

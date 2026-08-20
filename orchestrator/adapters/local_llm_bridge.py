@@ -34,7 +34,14 @@ _SERVER_MANAGED_TOOLS = {
     "web_search",
     "web_search_preview",
 }
-_COMPACT_REQUEST_CHARS = 8_000
+_CODEX_HARNESS_CONTEXT_PREFIXES = (
+    "<environment_context>",
+    "<permissions instructions>",
+    "<recommended_plugins>",
+    "<skills_instructions>",
+    "# AGENTS.md instructions",
+)
+_COMPACT_REQUEST_CHARS = 10_000
 
 
 class BridgeRequestError(ValueError):
@@ -74,6 +81,16 @@ def _tool_output(output: Any) -> str:
         if text:
             return text
     return json.dumps(output, ensure_ascii=False)
+
+
+def _is_codex_harness_context(content: str) -> bool:
+    """Identify the synthetic user context Codex prepends to each model call."""
+    stripped = content.lstrip()
+    return (
+        stripped.startswith(_CODEX_HARNESS_CONTEXT_PREFIXES)
+        and "<environment_context>" in stripped
+        and "</environment_context>" in stripped
+    )
 
 
 def _flat_tool_name(namespace: str | None, name: str, used: set[str]) -> str:
@@ -169,16 +186,12 @@ def responses_to_chat(
 
     chat_tools, tool_names = _chat_tools(payload.get("tools"), allowed_tool_names)
     reverse_names = {value: key for key, value in tool_names.items()}
-    system_parts: list[str] = []
     messages: list[dict[str, Any]] = []
-    instructions = payload.get("instructions")
-    if isinstance(instructions, str) and instructions:
-        system_parts.append(instructions)
 
     input_items = payload.get("input", [])
     if isinstance(input_items, str):
         input_items = [{"type": "message", "role": "user", "content": input_items}]
-    if not isinstance(input_items, list):
+    elif not isinstance(input_items, list):
         raise BridgeRequestError("Codex sent a non-array Responses input field.")
 
     for item in input_items:
@@ -189,8 +202,8 @@ def responses_to_chat(
             role = item.get("role", "user")
             content = _text_content(item.get("content"))
             if role in ("developer", "system"):
-                if content:
-                    system_parts.append(content)
+                continue
+            if role == "user" and _is_codex_harness_context(content):
                 continue
             if role not in ("system", "user", "assistant"):
                 role = "user"
@@ -235,8 +248,6 @@ def responses_to_chat(
                 }
             )
 
-    if system_parts:
-        messages.insert(0, {"role": "system", "content": "\n\n".join(system_parts)})
     chat: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
     if chat_tools:
         chat["tools"] = chat_tools
@@ -418,9 +429,20 @@ def chat_to_response_events(
 
 
 def _post_chat(base_url: str, api_key: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    # Serialize once so the DEBUG log and the HTTP request describe the exact
+    # same payload.  Do not truncate this log: it is intentionally the full
+    # request that the local model receives after Codex's Responses envelope
+    # has been translated to Chat Completions.
+    request_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    logger.debug(
+        "Local LLM outbound Chat Completions payload (%d bytes):\n%s",
+        len(request_body),
+        request_body.decode("utf-8"),
+    )
+
     request = Request(
         f"{base_url.rstrip('/')}/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
+        data=request_body,
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -484,9 +506,23 @@ class _BridgeHandler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length))
+            raw_body = self.rfile.read(length)
+            payload = json.loads(raw_body)
             if not isinstance(payload, dict):
                 raise BridgeRequestError("Responses request body must be an object.")
+
+            # This is the complete Responses request emitted by the Codex
+            # harness.  It includes Codex-added instructions, input/history,
+            # tool definitions, tool results, tool-choice settings, and every
+            # other field present on the wire before bridge translation.
+            # Keep it at DEBUG because it can be very large and may contain
+            # repository/context contents.  It is intentionally not truncated.
+            logger.debug(
+                "Codex -> local LLM bridge raw Responses payload (%d bytes):\n%s",
+                len(raw_body),
+                raw_body.decode("utf-8", errors="replace"),
+            )
+
             chat, names = responses_to_chat(payload, self.server.allowed_tool_names)
             try:
                 upstream = _post_chat(

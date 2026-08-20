@@ -111,6 +111,9 @@ def run(
             custom_provider_base_url=provider_base_url,
             custom_provider_env_key=_API_KEY_ENV,
             backend_label="Local LLM",
+            # Codex's background memory writers choose their own cloud-model
+            # names and otherwise send those maintenance jobs to this provider.
+            disable_memories=True,
         )
 
     if _advertised_wire_api(base_url, spec.deadline_seconds) == "chat_completions":
