@@ -32,7 +32,7 @@ _SERVER_MANAGED_TOOLS = {
     "web_search",
     "web_search_preview",
 }
-_COMPACT_REQUEST_CHARS = 12_000
+_COMPACT_REQUEST_CHARS = 8_000
 
 
 class BridgeRequestError(ValueError):
@@ -277,14 +277,14 @@ def compact_chat_request(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(content, str):
             continue
         if index == latest_user:
-            limit = 50_000
+            limit = 5_000
         elif message.get("role") == "system":
-            limit = 20_500
+            limit = 2_500
         else:
-            limit = 10_000
+            limit = 1_000
         message["content"] = _compact_text(content, limit)
     compact["messages"] = messages
-    compact["max_tokens"] = min(int(payload.get("max_tokens") or 512), 512)
+    compact["max_tokens"] = min(int(payload.get("max_tokens") or 1024), 1024)
 
     encoded = json.dumps(compact, ensure_ascii=False)
     if len(encoded) <= _COMPACT_REQUEST_CHARS:
@@ -302,7 +302,16 @@ def compact_chat_request(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_context_overflow(error: UpstreamError) -> bool:
-    body = error.body.decode("utf-8", errors="replace").lower()
+    """Return True for context-window errors and log server-reported token counts.
+
+    The bridge cannot know the exact token count from the JSON request alone because
+    tokenization is model-specific.  When the upstream server rejects the request for
+    context length, however, servers such as vLLM usually include the exact token
+    counts in the error message.  Extract those values here so the log shows the
+    actual request size rather than only character counts.
+    """
+    raw_body = error.body.decode("utf-8", errors="replace")
+    body = raw_body.lower()
     return "maximum context length" in body or "context_length" in body
 
 
@@ -533,6 +542,32 @@ class _BridgeHandler(BaseHTTPRequestHandler):
             self.wfile.write(f"event: {kind}\ndata: {data}\n\n".encode("utf-8"))
             self.wfile.flush()
 
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        path = self.path.split("?", 1)[0].rstrip("/")
+
+        if path != "/v1/models":
+            self._json_error(404, "The bridge only exposes GET /v1/models.")
+            return
+
+        body = json.dumps(
+            {
+                "object": "list",
+                "data": [
+                    {
+                        "id": "QuantTrio/Qwen3.6-27B-AWQ",
+                        "object": "model",
+                        "created": 0,
+                        "owned_by": "local",
+                    }
+                ],
+            }
+        ).encode("utf-8")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 def _allowed_codex_tools(tools: tuple[str, ...]) -> set[str] | None:
     if not tools:
