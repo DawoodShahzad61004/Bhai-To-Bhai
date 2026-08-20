@@ -21,6 +21,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 from uuid import uuid4
 
+from config import MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL
+
 logger = logging.getLogger(__name__)
 
 _TOOL_NAME = re.compile(r"[^a-zA-Z0-9_-]")
@@ -284,7 +286,7 @@ def compact_chat_request(payload: dict[str, Any]) -> dict[str, Any]:
             limit = 1_000
         message["content"] = _compact_text(content, limit)
     compact["messages"] = messages
-    compact["max_tokens"] = min(int(payload.get("max_tokens") or 1024), 1024)
+    compact["max_tokens"] = min(int(payload.get("max_tokens") or MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL), MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL)
 
     encoded = json.dumps(compact, ensure_ascii=False)
     if len(encoded) <= _COMPACT_REQUEST_CHARS:
