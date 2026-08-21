@@ -108,7 +108,7 @@ class Backend(Protocol):
 #   transport (config.INVOCATION) -- HOW the CLI is reached: direct subprocess,
 #                                    through `maestro delegate`, or not at all.
 #   vendor    (AgentSpec.backend) -- WHICH CLI/provider: claude, codex, copilot,
-#                                    ollama, or local_llm.
+#                                    gemini, ollama, or local_llm.
 #
 # The direct transport needs one adapter per vendor, so it registers under
 # "direct:<vendor>". `maestro` and `stub` speak to any vendor and register under
@@ -201,6 +201,7 @@ def run_with_deadline(
     input: str | None,
     cwd: str,
     timeout: float,
+    env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
     """`subprocess.run`, but a deadline that actually stops the process.
 
@@ -220,6 +221,9 @@ def run_with_deadline(
     what actually closes those handles and lets the drain finish.
     """
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    env = subprocess_env()
+    if env_overrides:
+        env.update(env_overrides)
     process = subprocess.Popen(
         argv,
         stdin=subprocess.PIPE if input is not None else None,
@@ -229,7 +233,7 @@ def run_with_deadline(
         encoding="utf-8",
         errors="replace",
         cwd=cwd,
-        env=subprocess_env(),
+        env=env,
         creationflags=creationflags,
     )
     try:
@@ -331,7 +335,7 @@ def _load_builtin_backends() -> None:
 
     importlib.import_module("adapters.stub")
 
-    for module in ("claude", "codex", "copilot", "ollama", "local_llm", "maestro"):
+    for module in ("claude", "codex", "copilot", "gemini", "ollama", "local_llm", "maestro"):
         try:
             importlib.import_module(f"adapters.{module}")
         except Exception as exc:  # pragma: no cover - defensive

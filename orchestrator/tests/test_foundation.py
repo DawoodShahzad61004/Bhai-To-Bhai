@@ -101,6 +101,7 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     assert argv[argv.index("--local-provider") + 1] == "ollama"
     assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
     assert "--oss" in argv
+    assert "--disable" not in argv
 
 
 def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
@@ -126,6 +127,7 @@ def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
         cwd=os.getcwd(),
         tag="local-llm-probe",
         invocation="direct",
+        resume_session="previous-local-session",
     )
 
     argv = captured["argv"]
@@ -138,6 +140,9 @@ def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
     assert 'model_providers.local_llm.base_url="http://local.test/v1"' in overrides
     assert 'model_providers.local_llm.env_key="CUSTOM_API_KEY"' in overrides
     assert 'model_providers.local_llm.wire_api="responses"' in overrides
+    assert argv[argv.index("--disable") + 1] == "memories"
+    assert argv[argv.index("resume") + 1] == "previous-local-session"
+    assert argv.index("--disable") < argv.index("resume")
     assert "--oss" not in argv
     assert "--local-provider" not in argv
     assert secret not in " ".join(argv)
@@ -188,6 +193,7 @@ def test_local_llm_adapter_bridges_chat_completions_only_server(monkeypatch):
     assert captured["bridge_started"] is True
     assert captured["bridge_stopped"] is True
     assert 'model_providers.local_llm.base_url="http://127.0.0.1:54321/v1"' in overrides
+    assert captured["argv"][captured["argv"].index("--disable") + 1] == "memories"
 
 
 def test_copilot_adapter_builds_noninteractive_command(monkeypatch):

@@ -108,6 +108,7 @@ INVOCATION = os.getenv("INVOCATION", "direct")
 CLAUDE_BIN = os.getenv("CLAUDE_BIN", "claude")
 CODEX_BIN = os.getenv("CODEX_BIN", "codex")
 COPILOT_BIN = os.getenv("COPILOT_BIN", "copilot")
+GEMINI_BIN = os.getenv("GEMINI_BIN", "gemini")
 # Maestro is installed repo-locally (ADR-007), so it is NOT on PATH. Resolution
 # order is: this setting -> project-local node_modules -> PATH.
 MAESTRO_BIN = os.getenv("MAESTRO_BIN", str(PROJECT_ROOT / "node_modules" / ".bin" / "maestro"))
@@ -120,6 +121,8 @@ CLAUDE_PERMISSION_MODE = os.getenv("CLAUDE_PERMISSION_MODE", "bypassPermissions"
 # anything beyond it should still be refused.
 CODEX_SANDBOX = os.getenv("CODEX_SANDBOX", "workspace-write")
 
+GEMINI_APPROVAL_MODE = "yolo"
+
 # An arbitrary OpenAI-compatible server reached through Codex's custom-provider
 # surface. Codex remains the coding-agent runtime; these values only redirect
 # its inference calls. The API key is passed by environment-variable name and
@@ -127,6 +130,7 @@ CODEX_SANDBOX = os.getenv("CODEX_SANDBOX", "workspace-write")
 CUSTOM_API_BASE = os.getenv("CUSTOM_API_BASE", "")
 CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "")
 CUSTOM_API_MODEL_NAME = os.getenv("CUSTOM_API_MODEL_NAME", "")
+MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL = 1024
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT ROSTER
@@ -141,7 +145,7 @@ class AgentSpec:
     socket open while it generates is never idle. A limit has to name its unit.
     """
 
-    backend: str  # "claude" | "codex" | "copilot" | "ollama" | "local_llm"
+    backend: str  # "claude" | "codex" | "gemini" | "copilot" | "ollama" | "local_llm"
     model: str  # "" defers to whatever the CLI itself selects
     deadline_seconds: int
     # Dollar ceiling for one invocation. 0 leaves it uncapped. Honoured by the
@@ -157,15 +161,15 @@ class AgentSpec:
 # on this machine and is disabled in ~/.maestro/cli-tools.json, so the tiers are
 # expressed as haiku vs sonnet on Claude Code. Any entry can be switched to
 # `backend="codex"` or `backend="copilot"` — the adapter layer makes them interchangeable.
-AGENTS: dict[str, AgentSpec] = {
+AGENTS = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
-    "merger": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
-    # ── Larger model: judgment work ──────────────────────────────────────────
-    "planner": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
-    "reviewer": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
-    "supervisor": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
+    "requirements": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
+    "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
+    "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
+    # ── Stronger model: judgment work ────────────────────────────────────────
+    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
 
 # The coding subagents dispatched inside a wave. These are the only agents that
@@ -202,16 +206,17 @@ SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
     # ("auto", "copilot"),
     ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    # ("gemini-3.1-flash-lite", "gemini"),
     # ("gpt-oss:120b-cloud", "ollama"),
-    ("gpt-oss:20b-cloud", "ollama"),
-    ("gemma4:31b-cloud", "ollama"),
-    ("gemma4:cloud", "ollama"),
-    ("nemotron-3-nano:30b-cloud", "ollama"),
+    # ("gpt-oss:20b-cloud", "ollama"),
+    # ("gemma4:31b-cloud", "ollama"),
+    # ("gemma4:cloud", "ollama"),
+    # ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
     # ("muse-glimmer:latest", "ollama"),
     # ("devstral:24b-small-2505-q4_K_M", "ollama"),
-    ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
+    # ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
     # ("qwen3:14b-q4_K_M", "ollama"),
     # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
     # ("qwen3.5:4b", "ollama"),
