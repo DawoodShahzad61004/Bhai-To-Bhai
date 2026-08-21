@@ -442,3 +442,39 @@
 | **Relevance to Project** | Completes the implementation story behind `docs/Decisions.md` ADR-029 and records the fixed regression as `docs/Bugs.md` #45. |
 
 ---
+
+## 38. Windows subprocess-tree tracing is worth treating as first-class evidence, not ad hoc debugging
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the 2026-08-18 process-lifecycle tracing work established about debugging Windows agent subprocesses |
+| **Date** | 2026-08-18 |
+| **Findings** | `orchestrator/process_trace.py` and its focused tests were added to make Windows process-tree behavior observable rather than inferred from hang symptoms. The goal was not another timeout mechanism — `run_with_deadline()` already existed — but a deterministic trace of parent/child lifecycles, exits, and descendant cleanup so future "orphaned process" questions can be answered from evidence instead of from Task Manager snapshots after the fact. The implementation was kept outside the adapters themselves so it can be reused across subprocess investigations without perturbing the normal execution path. |
+| **Conclusion** | On Windows, "did the deadline fire?" and "which descendant still held the pipes?" are different questions and both matter. A reusable trace utility is cheaper than repeatedly rediscovering the same process-tree facts from logs that were never designed to capture them. |
+| **Relevance to Project** | Supports the adapter/runtime debugging story around `run_with_deadline()`, gives future orphan-process investigations a dedicated evidence tool, and is part of the Aug 18 implementation record alongside the Copilot and local-LLM adapter work. |
+
+---
+
+## 39. Copilot's JSONL transport has two separate failure boundaries: event-shape parsing and stage-schema compliance
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the Aug 18 Copilot follow-up established after the initial Aug 17 stderr-classification fix |
+| **Date** | 2026-08-18 |
+| **Findings** | The first failure was purely transport-local: the live CLI's successful final reply arrived as `{"type":"assistant.message","data":{"content":"..."}}`, but `_parse_json_lines()` only searched top-level fields such as `content`, `message`, and `response`. Once that nested parsing bug was fixed, a second and more architectural boundary became visible: `--output-format json` guarantees that the event stream is JSONL, not that `data.content` itself obeys the orchestrator stage's JSON schema. A requirements turn could therefore succeed at the transport layer yet still return plain prose that `extract_json()` correctly rejects. |
+| **Conclusion** | "The CLI emitted JSON" is not a single success condition. Copilot integration has to be reasoned about in two layers: event extraction from the vendor stream, and payload compliance with the orchestrator's own stage contract. Fixing the first can expose the second rather than contradicting it. |
+| **Relevance to Project** | Produces `docs/Bugs.md` #46–#47, justifies the Aug 18 regression tests for the real nested event shape, and sharpens the contract boundary shared by every adapter: transport success and stage success are related but distinct. |
+
+---
+
+## 40. A local OpenAI-compatible server can preserve the Codex harness if the missing Responses layer is bridged narrowly and honestly
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the Aug 18 local-LLM implementation and validation established about using a Chat Completions-only local server under Codex |
+| **Date** | 2026-08-18 (implementation session), with the commit recorded on 2026-08-19 as `a17303d` |
+| **Findings** | The original capability gap from topic 36 was real: Codex custom providers expect Responses semantics, while the configured LAN server initially advertised only `/v1/chat/completions`. The successful implementation path was not "replace Codex with ChatOpenAI"; it was to keep Codex's coding-agent runtime and add a narrow compatibility bridge in `local_llm_bridge.py` that: (1) consolidates system/developer instructions at the beginning of the chat transcript, because the upstream proxy required that ordering; (2) translates tools, including namespaced tool history, into the shape the chat backend accepts; (3) synthesizes the minimal Responses event subset Codex consumes; and (4) compacts the request envelope enough to stay within the upstream 4,096-token context limit. The resulting backend preserved filesystem, shell, sandbox, and session behavior while redirecting inference to the local server. |
+| **Conclusion** | A Chat Completions-only local endpoint is not automatically incompatible with a Responses-based agent runtime, but the missing semantics have to be bridged explicitly and minimally. The right abstraction boundary is "Codex remains the agent, the bridge only translates the wire contract," not "any OpenAI-compatible endpoint can replace the agent runtime directly." |
+| **Relevance to Project** | Implements the separate direct-local path planned in topic 36, supports ADR-033, closes `docs/Bugs.md` #44, and explains why the final solution kept the Codex harness instead of falling back to a plain model client. |
+
+---

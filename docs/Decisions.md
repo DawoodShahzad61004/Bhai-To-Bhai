@@ -440,5 +440,34 @@
 | **Chosen Solution** | Defer implementation and preserve separate routes. Probe endpoint behavior without logging credentials, then choose a direct adapter that still returns the non-raising `AgentResult` contract and does not assume Chat Completions compatibility with Codex's Responses API path. |
 | **Rationale** | A model API supplies inference but not the file, shell, sandbox, session, and verification behavior the coding-agent harness provides. Conflating the two would hide transport incompatibilities and make a failed local endpoint look like a working coding-agent backend. |
 | **Impact** | The direct local adapter is planned, not shipped. The current Ollama bridge remains available for Codex-backed runs, while `Bugs.md` #44 records the missing capability and the required probe matrix. |
+| **Status (2026-08-18)** | **Implemented as planned, while preserving the separation this ADR required.** See ADR-033 for the shipped `direct:local_llm` backend and the narrow Chat Completions->Responses bridge. |
+
+---
+
+## ADR-032 · Make Graphify the repository's default durable knowledge gate and retire the repo-local Maestro packaging experiment
+
+| Field | Detail |
+|---|---|
+| **Decision** | Use Graphify's persisted graph (`graphify-out/graph.json`) plus `graphify query`, `graphify path`, and `graphify explain` as the project's default knowledge-retrieval layer. Remove the repo-local `maestro-flow` npm dependency and strengthen Graphify-first instructions in the repository guidance instead of depending on a repo-bundled Maestro search setup. |
+| **Date** | 2026-08-18 |
+| **Context** | The August 17 work had already made Graphify the preferred knowledge graph in the repository instructions, but the repo still carried a temporary local `maestro-flow` packaging experiment plus generated `.workflow/` state and copied Maestro documentation. The next day the user explicitly asked to remove those active repo-local mentions and have Graphify become the sole documented project-knowledge mechanism. |
+| **Options Considered** | Keep bundling `maestro-flow` locally and document both knowledge paths; remove the local package and keep only historical references; or keep the optional adapter code but make Graphify the only repository-default knowledge gate while leaving any external Maestro binary opt-in and unbundled. |
+| **Chosen Solution** | Make Graphify the repository default, remove the repo-local package from `package.json`/`package-lock.json`, strengthen Graphify-first instructions in `AGENTS.md`, `CLAUDE.md`, and requirements prompts, and leave the direct adapter surface separate from any repo-managed knowledge-search workflow. |
+| **Rationale** | The repository already had a persistent graph and queryable evidence trail. Keeping two competing repo-default knowledge systems would create configuration drift and stale instructions, while the local packaging experiment was not the production workflow controller anyway. Graphify is repository-native, inspectable in Git, and aligned with the project's "knowledge first, source verification second" gate. |
+| **Impact** | Repository guidance now points to Graphify as the durable project knowledge base. The historical `.workflow/` snapshot remains part of the Aug 18 record, but `package.json` no longer bundles `maestro-flow`. The optional `orchestrator/adapters/maestro.py` transport remains in code for users who provide their own binary, but it is no longer presented as a repo-managed knowledge system. |
+
+---
+
+## ADR-033 · Implement `direct:local_llm` as a separate Codex-harness backend with a local Chat Completions→Responses bridge
+
+| Field | Detail |
+|---|---|
+| **Decision** | Ship a distinct `direct:local_llm` backend that keeps Codex as the coding-agent runtime while redirecting inference to a configurable OpenAI-compatible local server. Where the server only offers `/v1/chat/completions`, bridge that protocol into the minimal `/v1/responses` subset Codex actually consumes rather than replacing Codex with a plain model client. |
+| **Date** | 2026-08-18 (committed as `a17303d` on 2026-08-19) |
+| **Context** | ADR-031 correctly separated the desired capability from the existing Ollama bridge, but by Aug 18 the direct local path was needed in production rather than as a note. The first implementation attempt proved the missing boundary explicitly: Codex custom providers require Responses semantics, while the configured LAN server advertised Chat Completions only. A plain ChatOpenAI fallback would have removed Codex's filesystem, shell, sandbox, session, and verification harness, which is exactly the capability the orchestrator needs from its coding agents. |
+| **Options Considered** | Keep the capability gap open until the server supports `/v1/responses`; fall back to a plain model client such as `ChatOpenAI`; teach the existing Ollama backend to consume arbitrary local endpoints; or add a separate direct backend that preserves Codex and bridges only the protocol mismatch. |
+| **Chosen Solution** | Add `orchestrator/adapters/local_llm.py` plus `orchestrator/adapters/local_llm_bridge.py`, extend `adapters/codex.py` for custom providers, and keep `backend="local_llm"` distinct from `backend="ollama"`. The bridge consolidates system/developer instructions at the front of the chat transcript, translates tool names consistently, synthesizes the Responses event subset Codex expects, and compacts the request envelope enough for the observed 4,096-token upstream limit. |
+| **Rationale** | The orchestrator needs Codex's agent loop more than it needs a direct SDK call. Bridging the transport mismatch keeps file access, shell execution, sandboxing, session capture, and downstream evidence checks unchanged while still enabling a local server. A separate backend preserves architectural honesty: "local endpoint via Codex harness" and "Ollama via Codex harness" are related techniques, not the same capability. |
+| **Impact** | `CUSTOM_API_BASE`, `CUSTOM_API_KEY`, and `CUSTOM_API_MODEL_NAME` now configure a real backend. Focused bridge/adapter tests were added, and the full orchestrator suite later reached 231 passing tests with the bridge in place. `Bugs.md` #44 is now closed as an implemented capability, while the remaining risk moves to model quality, server latency, and context-window limits rather than missing transport support. |
 
 ---
