@@ -160,12 +160,12 @@ class AgentSpec:
 AGENTS: dict[str, AgentSpec] = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
     "requirements": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
-    "wave_orchestrator": AgentSpec(backend="copilot", model="auto", deadline_seconds=900),
+    "wave_orchestrator": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
     "merger": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
     # ── Larger model: judgment work ──────────────────────────────────────────
-    "planner": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=600),
-    "reviewer": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=600),
-    "supervisor": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=600),
+    "planner": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
+    "reviewer": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
+    "supervisor": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900),
 }
 
 # The coding subagents dispatched inside a wave. These are the only agents that
@@ -200,27 +200,15 @@ MAX_CODING_AGENT_COUNT = 5
 # is the only safe entry for that backend, not a specific model string.
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
-    ("auto", "copilot"),
+    # ("auto", "copilot"),
     ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
     # ("gpt-oss:120b-cloud", "ollama"),
     ("gpt-oss:20b-cloud", "ollama"),
-    # ("mistral-large-3:675b-cloud", "ollama"),
-    # ("gemma4:31b-cloud", "ollama"),
-    # ("gemma4:cloud", "ollama"),
-    # ("qwen3.5:397b-cloud", "ollama"),
-    # ("qwen3.5:cloud", "ollama"),
+    ("gemma4:31b-cloud", "ollama"),
+    ("gemma4:cloud", "ollama"),
     ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
-    ("minimax-m3:cloud", "ollama"),
-    ("minimax-m2.7:cloud", "ollama"),
-    # ("kimi-k2.6:cloud", "ollama"),
-    # ("kimi-k2.7-code:cloud", "ollama"),
-    # ("kimi-k3:cloud", "ollama"),
-    # ("deepseek-v4-pro:cloud", "ollama"),
-    # ("deepseek-v4-flash:cloud", "ollama"),
-    # ("glm-5.1:cloud", "ollama"),
-    # ("glm-5.2:cloud", "ollama"),
     # ("muse-glimmer:latest", "ollama"),
     # ("devstral:24b-small-2505-q4_K_M", "ollama"),
     ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
@@ -232,7 +220,8 @@ SMALL_MEDIUM_MODELS = [
 ]
 EXPERT_MODELS = [
     # ("sonnet", "claude"), 
-    ("", "codex"),
+    # ("", "codex"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
