@@ -1,4 +1,4 @@
-## System Overview
+﻿## System Overview
 
 `Bhai-To-Bhai` is a LangGraph controller for a six-stage software-delivery pipeline that operates on an external Git repository. It coordinates existing coding-agent CLIs, persists each run as artifacts and checkpoints, isolates parallel coding tasks in Git worktrees, and accepts work only after merge and review evidence has been evaluated.
 
@@ -199,7 +199,7 @@ Transport and vendor are separate choices. Supported invocation modes are direct
 
 The roster is configurable per stage. The current working configuration reflects the Aug 17 operational experiment: Copilot handles requirements automatically, Ollama handles wave orchestration, Codex handles merge/planning/review/supervision, and the planner may choose from the active small/medium and expert menus. Coding slots retain independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides plus legacy shared fallbacks. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier.
 
-Any role's `backend` may be set to `"ollama"` with a locally-hosted model as `model`, which `adapters/ollama.py` runs through the Codex harness (ADR-028). This was exercised on 2026-08-11 as a zero-marginal-cost fallback during a Claude weekly rate-limit exhaustion. It is reliable for single-shot structured-output stages (requirements, planning-shaped JSON) but not yet proven reliable for coding-agent dispatch itself — see `Bugs.md` #40–#41 and `Research.md` topics 32–33. There is deliberately no per-harness switch for it: a short-lived `OLLAMA_HARNESS` option that could route through Claude Code instead of Codex was removed the same day it failed in production, since Claude Code's `--model` flag has no mechanism for accepting an arbitrary local model tag (`Bugs.md` #39).
+Any role's `backend` may be set to `"ollama"` with a locally-hosted model as `model`, which `adapters/ollama.py` runs through the Codex harness (ADR-028). This was exercised on 2026-08-11 as a zero-marginal-cost fallback during a Claude weekly rate-limit exhaustion. It is reliable for single-shot structured-output stages (requirements, planning-shaped JSON) but not yet proven reliable for coding-agent dispatch itself â€” see `Bugs.md` #40â€“#41 and `Research.md` topics 32â€“33. There is deliberately no per-harness switch for it: a short-lived `OLLAMA_HARNESS` option that could route through Claude Code instead of Codex was removed the same day it failed in production, since Claude Code's `--model` flag has no mechanism for accepting an arbitrary local model tag (`Bugs.md` #39).
 
 ## Persistence, Recovery, and Audit
 
@@ -219,7 +219,7 @@ The orchestrator has **221 collected tests across 10 test files**. They cover co
 
 `orchestrator/run_logs/live_probe_20260807_194239.debug.log` records a real Claude adapter probe: one turn, structured output parsed, session id captured, approximately 4.8 seconds, and `$0.067745`. Two full live runs against real target repositories were diagnosed read-only on 2026-08-08 (`Research.md` topic 24): one failed at worktree setup against an uncommitted target repository, the other completed and was accepted by the supervisor but contained a latent rendering defect the pipeline's checks did not cover. On 2026-08-10, `run-20260810-162135` proved the new path-reference and direct-learning flow in a paid smoke run: the planner chose three Haiku coding agents, all three task prompts used artifact paths and the append-learning command, reviewer rework fixed an over-line-limit `data.js`, and the supervisor accepted the run. Later pricing-tool runs exposed two operational limits: a stale `sonnet-5` menu entry caused an immediate agent error (`Bugs.md` #37, fixed by using live aliases), and a single-Sonnet plan then hit the user's weekly Claude limit before producing usable wave output (`Bugs.md` #38). There has not yet been a paid six-agent end-to-end run that is both live and defect-free; worktree merge, rework, replan, and recovery remain primarily validated by the stub-backed suite.
 
-Known open findings are tracked in `docs/Bugs.md` #26–#28, #32–#33, #35, #38, #40–#44. #36's project-scope artifact gap is fixed; #42 remains dependent on Copilot/GitHub service health, #43 tracks subscription-gated Ollama Cloud roster entries, and #44 records the planned direct local OpenAI-compatible adapter. The current Ollama backend remains a Codex harness bridge, not that future adapter.
+Known open findings are tracked in `docs/Bugs.md` #26â€“#28, #32â€“#33, #35, #38, #40â€“#44. #36's project-scope artifact gap is fixed; #42 remains dependent on Copilot/GitHub service health, #43 tracks subscription-gated Ollama Cloud roster entries, and #44 records the planned direct local OpenAI-compatible adapter. The current Ollama backend remains a Codex harness bridge, not that future adapter.
 
 ## Technology Stack
 
@@ -237,45 +237,45 @@ The runtime dependency list is intentionally small. Agents are external subproce
 
 ## Changelog
 
-### 2026-08-17 — Copilot adapter added and run memory moved into the target repository
+### 2026-08-17 â€” Copilot adapter added and run memory moved into the target repository
 
 Commit `d71c20e` added `orchestrator/adapters/copilot.py`, automatic backend registration, `COPILOT_BIN`, preflight recognition, generalized planner prompts, and foundation coverage. The adapter is non-raising and preserves stderr-only Copilot authentication/service failures, but the live smoke attempt was blocked by GitHub 503 responses, so production entitlement is not yet proven (`Bugs.md` #42, `Decisions.md` ADR-030).
 
-Commit `1fa0c73` moved shared run memory into the target repository's `runs/` directory while retaining per-run plans, tasks, reviews, and events. It added legacy migration, first-run artifact initialization, precise local excludes, append-only/idempotent choices, locked cross-run learnings, and target-repository path propagation across the flow. The suite now collects 221 tests; current static validation passes, while this Windows checkout's full pytest attempt is blocked by temporary-directory ACL errors. A direct local OpenAI-compatible adapter remains planned separately from the Ollama-via-Codex bridge (`Bugs.md` #43–#44, `Decisions.md` ADR-029 and ADR-031).
+Commit `1fa0c73` moved shared run memory into the target repository's `runs/` directory while retaining per-run plans, tasks, reviews, and events. It added legacy migration, first-run artifact initialization, precise local excludes, append-only/idempotent choices, locked cross-run learnings, and target-repository path propagation across the flow. The suite now collects 221 tests; current static validation passes, while this Windows checkout's full pytest attempt is blocked by temporary-directory ACL errors. A direct local OpenAI-compatible adapter remains planned separately from the Ollama-via-Codex bridge (`Bugs.md` #43â€“#44, `Decisions.md` ADR-029 and ADR-031).
 
 ---
 
-### 2026-07-31 — Target architecture documented
+### 2026-07-31 â€” Target architecture documented
 
 The initial documents defined cross-agent routing, canonical context, resumable vendor sessions, worktree isolation, deterministic checks, and auditability before production code existed.
 
 ---
 
-### 2026-08-03 — Maestro selected and handoff mechanics specified
+### 2026-08-03 â€” Maestro selected and handoff mechanics specified
 
 Maestro became the external-agent delegation layer; durable entry-time handoff reconstruction and a configured budget ledger became the intended continuity mechanisms.
 
 ---
 
-### 2026-08-04 — Preflight and learning sandbox added
+### 2026-08-04 â€” Preflight and learning sandbox added
 
 The first production-track file was `orchestrator/preflight.py`. A separate LangGraph tutorial track was opened to learn routing and supervision without coupling experiments to the real system.
 
 ---
 
-### 2026-08-05 — Tutorial graph executed end to end
+### 2026-08-05 â€” Tutorial graph executed end to end
 
 Running the sandbox exposed routing, termination, transport, logging, and artifact-verification failures that later became explicit production constraints.
 
 ---
 
-### 2026-08-06 — Real CLI adapters proven in the sandbox
+### 2026-08-06 â€” Real CLI adapters proven in the sandbox
 
 Claude Code and Codex were invoked directly and concurrently. The experiments established stdin prompt delivery, explicit final-answer channels, wall-clock deadlines, non-raising adapter boundaries, and filesystem evidence over self-report.
 
 ---
 
-### 2026-08-07 — Six-stage production orchestrator implemented
+### 2026-08-07 â€” Six-stage production orchestrator implemented
 
 The design was researched with ChatGPT and Claude, specified in temporary pipeline notes, and implemented as the complete `orchestrator/` runtime: requirements, planner, wave orchestrator, merger, reviewer, supervisor, adapters, Git worktrees, artifacts, semantic routing, checkpoint/resume support, bounds, and audit logging.
 
@@ -283,15 +283,15 @@ The implementation commit is recorded by Git as `Workflow implemented` with **8,
 
 ---
 
-### 2026-08-08 — Windows-adapter regressions and vendor session resume fixed; two live runs diagnosed
+### 2026-08-08 â€” Windows-adapter regressions and vendor session resume fixed; two live runs diagnosed
 
 Two Windows-specific defects in the adapter layer were fixed: Maestro binary resolution in `preflight.py` finally adopted the precedence `adapters/maestro.py` already used, and a new scrubbed subprocess environment (`adapters/base.py::subprocess_env()`) closed a `_bz2` import failure traced to inherited Python environment variables crossing a Windows console-script launcher boundary. Vendor session resume, previously non-functional on both Codex (a session id was captured but the session itself was discarded via `--ephemeral`) and Claude Code (`--no-session-persistence` returned a session id `--resume` then rejected outright), was proven broken empirically on both and fixed on both, so the reviewer's rework loop can now actually resume the agent that made a mistake rather than cold-starting or failing. Two real runs against external target repositories were separately diagnosed read-only, surfacing an unborn-repository worktree-setup failure and a browser-visible HTML defect the reviewer's checks did not cover. The test suite grew from 189 to 193 tests.
 
 ---
 
-### 2026-08-09 — Dual coding slots added; Windows CLI deadlines made process-tree safe; parallel-run gaps recorded
+### 2026-08-09 â€” Dual coding slots added; Windows CLI deadlines made process-tree safe; parallel-run gaps recorded
 
-Commit `4a123eb` (`Implement double coding subagents`) added two independently configurable coding slots and stable A/B assignment by task index, rebalanced five of six orchestration roles from Codex back to Claude while leaving planning on Codex, and moved all three vendor adapters onto the shared `run_with_deadline()` helper. On Windows, the helper creates a new process group and uses `taskkill /F /T /PID` after a timeout so the npm `.cmd` wrapper and its `node.exe` descendants release inherited pipes; this closes the hang that left requirements runs permanently silent after their nominal 300-second deadline (`Bugs.md` #34). The full suite grew to 197 passing tests. A nine-task parallel stress run separately confirmed two open design gaps: a rejected attempt resets the whole wave's integrated work, and task worktrees cannot directly access the canonical run artifacts, which are pasted into prompts and remain run-scoped (`Bugs.md` #35–#36). Commit `28b3aa4` then stored two temporary Bhai Digital Studio prompts, including a MongoDB/Express parallel-dispatch stress case, for repeatable manual runs.
+Commit `4a123eb` (`Implement double coding subagents`) added two independently configurable coding slots and stable A/B assignment by task index, rebalanced five of six orchestration roles from Codex back to Claude while leaving planning on Codex, and moved all three vendor adapters onto the shared `run_with_deadline()` helper. On Windows, the helper creates a new process group and uses `taskkill /F /T /PID` after a timeout so the npm `.cmd` wrapper and its `node.exe` descendants release inherited pipes; this closes the hang that left requirements runs permanently silent after their nominal 300-second deadline (`Bugs.md` #34). The full suite grew to 197 passing tests. A nine-task parallel stress run separately confirmed two open design gaps: a rejected attempt resets the whole wave's integrated work, and task worktrees cannot directly access the canonical run artifacts, which are pasted into prompts and remain run-scoped (`Bugs.md` #35â€“#36). Commit `28b3aa4` then stored two temporary Bhai Digital Studio prompts, including a MongoDB/Express parallel-dispatch stress case, for repeatable manual runs.
 
 ---
 
@@ -305,8 +305,16 @@ Live runs confirmed both the success path and remaining boundaries. `run-2026081
 
 ---
 
-### 2026-08-11 — Ollama adapter added as a zero-cost fallback; production evidence that the limit is model capability, not the pipeline
+### 2026-08-11 â€” Ollama adapter added as a zero-cost fallback; production evidence that the limit is model capability, not the pipeline
 
-Hitting Claude's weekly rate limit at the very start of the session (`run-20260811-144518`, `-145041`) motivated `orchestrator/adapters/ollama.py`: bare `ollama run` has no file/shell/sandbox/session tooling, so it routes every `backend="ollama"` dispatch through Codex's existing agent-loop machinery via `run_codex(local_provider="ollama")`, with `-c model_reasoning_effort=none` because Codex otherwise assumes reasoning-capable models and Ollama's non-thinking models reject that mode. A same-day config option letting this routing choose Claude Code's harness instead of Codex's was proven broken in production within hours (`run-20260811-174803`: Claude Code's `--model` flag cannot accept an arbitrary local model tag) and removed outright rather than repaired — Codex is now the only Ollama harness (ADR-028, `Bugs.md` #39).
+Hitting Claude's weekly rate limit at the very start of the session (`run-20260811-144518`, `-145041`) motivated `orchestrator/adapters/ollama.py`: bare `ollama run` has no file/shell/sandbox/session tooling, so it routes every `backend="ollama"` dispatch through Codex's existing agent-loop machinery via `run_codex(local_provider="ollama")`, with `-c model_reasoning_effort=none` because Codex otherwise assumes reasoning-capable models and Ollama's non-thinking models reject that mode. A same-day config option letting this routing choose Claude Code's harness instead of Codex's was proven broken in production within hours (`run-20260811-174803`: Claude Code's `--model` flag cannot accept an arbitrary local model tag) and removed outright rather than repaired â€” Codex is now the only Ollama harness (ADR-028, `Bugs.md` #39).
 
-The adapter itself works: two runs completed the requirements stage cleanly through Ollama-via-Codex, at 142–347s depending on model size, with cosmetic (non-blocking) Codex/Ollama model-metadata warnings on every call. It does not yet make locally-hosted models reliable coding agents. Given real multi-turn coding-task dispatch rather than single-shot JSON generation, both Devstral and Qwen 2.5 Coder reported false task completion with zero files changed, and one run's Qwen agent both refused tool use outright and left a fabricated success entry in the run's shared `learnings.md` — a new failure class, since it is the first case in this project of a false claim entering the shared cross-agent evidence channel rather than only a model's own turn (`Bugs.md` #40–#41, `Research.md` topics 32–33). None of this was accepted by the pipeline: the reviewer's evidence-over-claims discipline (ADR-019/ADR-020) caught every instance by comparing claims against Git-observed files and by running the code rather than reading the report. The session's own conclusion, recorded in the repository's `Ollama Coding Agent Working.md`, is that the ceiling is model scale on the available hardware rather than a defect in the orchestrator — a ~70B-class coding-finetuned model is the untested next step. The suite grew from 197 to **209 tests** (new Ollama-adapter tests added, three since-removed Claude-harness tests subtracted).
+The adapter itself works: two runs completed the requirements stage cleanly through Ollama-via-Codex, at 142â€“347s depending on model size, with cosmetic (non-blocking) Codex/Ollama model-metadata warnings on every call. It does not yet make locally-hosted models reliable coding agents. Given real multi-turn coding-task dispatch rather than single-shot JSON generation, both Devstral and Qwen 2.5 Coder reported false task completion with zero files changed, and one run's Qwen agent both refused tool use outright and left a fabricated success entry in the run's shared `learnings.md` â€” a new failure class, since it is the first case in this project of a false claim entering the shared cross-agent evidence channel rather than only a model's own turn (`Bugs.md` #40â€“#41, `Research.md` topics 32â€“33). None of this was accepted by the pipeline: the reviewer's evidence-over-claims discipline (ADR-019/ADR-020) caught every instance by comparing claims against Git-observed files and by running the code rather than reading the report. The session's own conclusion, recorded in the repository's `Ollama Coding Agent Working.md`, is that the ceiling is model scale on the available hardware rather than a defect in the orchestrator â€” a ~70B-class coding-finetuned model is the untested next step. The suite grew from 197 to **209 tests** (new Ollama-adapter tests added, three since-removed Claude-harness tests subtracted).
+
+---
+
+### 2026-08-17 - Copilot adapter added; `runs/` artifacts moved into the target repository
+
+The August 17 chat record shows two architecture-level changes. First, the orchestrator gained a Copilot adapter in the same overall adapter shape as the existing backends. That work added `orchestrator/adapters/copilot.py`, registered Copilot in the adapter base, updated config and planner prompt wording, extended preflight logic, and added focused coverage in `orchestrator/tests/test_foundation.py`.
+
+Second, shared run artifacts were moved from the controller/root repository into the target repository so multiple runs could reuse the same context, choices, and learnings. The chat records the move to `target_repo/runs/` for shared artifacts and then the broader target-repository layout for plans, tasks, reviews, and events. Artifact handling and downstream consumers were updated around that change, and the user-supplied summary notes that test coverage expanded across foundation, requirements, planner, reviewer, supervisor, merger, and wave orchestration.

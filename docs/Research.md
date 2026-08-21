@@ -10,42 +10,6 @@
 
 ---
 
-## 34. Copilot direct execution is wired and testable, but live authentication and service availability remain separate risks
-
-| Field | Detail |
-|---|---|
-| **Topic** | What the 2026-08-17 Copilot adapter work established, and what the first live smoke attempt did not establish |
-| **Date** | 2026-08-17 |
-| **Findings** | `orchestrator/adapters/copilot.py` adds `direct:copilot` behind the shared non-raising `AgentResult` contract. It builds a non-interactive `copilot -p` invocation with JSON output, optional model, resume, and `--add-dir` arguments; uses the common Windows-safe deadline and scrubbed subprocess environment; parses JSONL events; and is auto-registered by `adapters/base.py`. Focused foundation tests and `compileall` covered the implementation, but no successful live Copilot turn was available. The direct smoke attempt found an authentication token that could not be validated, GitHub OAuth/CLI user-login requests returning HTTP 503, exit code 0, and empty stdout. The adapter was corrected to preserve stderr and classify that stderr as `agent_error` instead of reporting misleading `no_output`. |
-| **Conclusion** | The adapter boundary and failure classification are covered locally; Copilot entitlement and GitHub service health still need an independent live probe before the backend can be called production-proven. |
-| **Relevance to Project** | Supports `docs/Decisions.md` ADR-030 and records the remaining external failure in `docs/Bugs.md` #42. |
-
----
-
-## 35. Target-repository run artifacts now provide project-scoped shared memory while preserving per-run audit records
-
-| Field | Detail |
-|---|---|
-| **Topic** | What the 2026-08-17 artifact-boundary change fixed about cross-run continuity and concurrent evidence |
-| **Date** | 2026-08-17 |
-| **Findings** | `RunArtifacts` now separates a run directory from a target-repository shared directory. Each target owns `runs/context.md`, `runs/learnings.md`, its lock, and `runs/user_choices.md`; plans, task contracts, reviews, and events remain under run-specific paths. `prepare()` migrates the legacy flat layout safely, creates valid empty shared files on the first run, and writes precise local excludes. `context.md` is a current project snapshot, `learnings.md` is a locked append-only cross-run channel, and `user_choices.md` is append-only and idempotent by run marker. Production nodes and direct-agent path grants were updated to use the target repository consistently. |
-| **Conclusion** | The project-scope half of `Bugs.md` #36 is fixed without collapsing audit isolation: shared knowledge persists by target, while plans, tasks, reviews, and events remain attributable to one run. |
-| **Relevance to Project** | Establishes the implementation recorded in `docs/Decisions.md` ADR-029 and updates the artifact model in `docs/Architecture.md`. |
-
----
-
-## 36. A future direct local OpenAI-compatible adapter must remain distinct from the Ollama-via-Codex bridge
-
-| Field | Detail |
-|---|---|
-| **Topic** | Boundary and probe requirements for the local LLM adapter identified after the 2026-08-17 Copilot and Ollama review |
-| **Date** | 2026-08-17 |
-| **Findings** | The production Ollama backend is a harness bridge: `adapters/ollama.py` delegates to `run_codex(local_provider="ollama")`; it does not consume `CUSTOM_API_BASE` and does not provide a direct OpenAI-compatible client. The production dependency set does not include `openai` or `langchain-openai`, while the tutorial's `ChatOpenAI` path is isolated learning code. A direct adapter therefore needs endpoint probes for `/v1/models`, `/v1/chat/completions`, and `/v1/responses`, followed by a deliberate choice of protocol; Chat Completions compatibility must not be assumed to imply Codex Responses compatibility. It must preserve the existing non-raising `AgentResult` contract and explicit error taxonomy. |
-| **Conclusion** | A local LLM adapter is needed, but it is planned work rather than a hidden extension of the current Ollama path. Probe the server and implement a separate backend only after its supported response protocol is known. |
-| **Relevance to Project** | Supports `docs/Decisions.md` ADR-031 and records the open boundary in `docs/Bugs.md` #44. |
-
----
-
 ## 2. Survey of existing cross-agent orchestration frameworks
 
 | Field | Detail |
@@ -428,5 +392,53 @@
 | **Findings** | Across the day's eight runs, a clear line separates two kinds of dispatch. Single-shot structured-JSON stages (requirements survey/finalization, in `run-20260811-145310` and `-172704`) succeeded, modulo the schema-content issues in topic 32. Multi-turn coding-agent dispatches — file edits, running/verifying code, self-assessing completion, across the reviewer's rework loop — failed repeatedly and in escalating ways, catalogued in full in `Bugs.md` #41: `run-20260811-151455`'s T-002 reported `done` with zero files changed; `run-20260811-180041`'s attempt 0 did the same, attempt 1 produced two real, reviewer-caught logic bugs, and attempt 2 combined an explicit tool-use refusal ("I don't have the ability to directly access, read, or modify files on a filesystem") with a fabricated `learnings.md` entry claiming success — written into the run's own shared audit channel, not merely spoken in the model's turn. The author's own conclusion, recorded verbatim in the repository's `Ollama Coding Agent Working.md`: the strongest locally-hostable models available on the hardware in use (Devstral 24B, Qwen 2.5 Coder 14B) cannot reliably produce agentic coding output, and the limitation is attributed to model scale rather than to the pipeline — a ~70B-class coding-finetuned model is floated as the untested next step. |
 | **Conclusion** | This reproduces, in production and against real coding tasks, the exact failure shape the sandbox findings (`Research.md` topics 13, 14, 22) predicted from a toy multi-agent demo: a model can satisfy every mechanical completion signal — a fluent report, a well-formed reply, an apparently successful turn — while having done none of the actual work, and the gap is only visible by comparing claims against filesystem/Git evidence, never by trusting the model's own account of itself. The new and more serious variant found here is the fabricated `learnings.md` entry: earlier findings (`Bugs.md` #15, #22) established that an agent's *self-report* cannot be trusted, but this is the first recorded case in this project of a model writing a false claim into the *shared, cross-agent* evidence channel — the same channel `Research.md` topic 30/ADR-026 built specifically so agents could coordinate through it. |
 | **Relevance to Project** | Confirms that the orchestrator's evidence-over-claims design (ADR-019, ADR-020, and the reviewer's run-the-code-don't-read-the-report discipline) is doing exactly the job it was built for — every one of these failures was caught, not missed, and no run was falsely accepted. It sharpens an open question for `learnings.md`'s design specifically: the file is currently trusted-by-construction once written (any agent, of any tier, can append and any later reader treats the entry as fact), and this session is the first concrete evidence that a low-capability writer can poison that channel with a false entry. Whether that needs a tier-aware trust marker, independent verification before an entry is treated as fact, or is simply an accepted risk of using small local models for coding-agent roles is unresolved and belongs with any future work on `Bugs.md` #41. |
+
+---
+
+## 34. Copilot direct execution is wired and testable, but live authentication and service availability remain separate risks
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the 2026-08-17 Copilot adapter work established, and what the first live smoke attempt did not establish |
+| **Date** | 2026-08-17 |
+| **Findings** | `orchestrator/adapters/copilot.py` adds `direct:copilot` behind the shared non-raising `AgentResult` contract. It builds a non-interactive `copilot -p` invocation with JSON output, optional model, resume, and `--add-dir` arguments; uses the common Windows-safe deadline and scrubbed subprocess environment; parses JSONL events; and is auto-registered by `adapters/base.py`. Focused foundation tests and `compileall` covered the implementation, but no successful live Copilot turn was available. The direct smoke attempt found an authentication token that could not be validated, GitHub OAuth/CLI user-login requests returning HTTP 503, exit code 0, and empty stdout. The adapter was corrected to preserve stderr and classify that stderr as `agent_error` instead of reporting misleading `no_output`. |
+| **Conclusion** | The adapter boundary and failure classification are covered locally; Copilot entitlement and GitHub service health still need an independent live probe before the backend can be called production-proven. |
+| **Relevance to Project** | Supports `docs/Decisions.md` ADR-030 and records the remaining external failure in `docs/Bugs.md` #42. |
+
+---
+
+## 35. Target-repository run artifacts now provide project-scoped shared memory while preserving per-run audit records
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the 2026-08-17 artifact-boundary change fixed about cross-run continuity and concurrent evidence |
+| **Date** | 2026-08-17 |
+| **Findings** | `RunArtifacts` now separates a run directory from a target-repository shared directory. Each target owns `runs/context.md`, `runs/learnings.md`, its lock, and `runs/user_choices.md`; plans, task contracts, reviews, and events remain under run-specific paths. `prepare()` migrates the legacy flat layout safely, creates valid empty shared files on the first run, and writes precise local excludes. `context.md` is a current project snapshot, `learnings.md` is a locked append-only cross-run channel, and `user_choices.md` is append-only and idempotent by run marker. Production nodes and direct-agent path grants were updated to use the target repository consistently. |
+| **Conclusion** | The project-scope half of `Bugs.md` #36 is fixed without collapsing audit isolation: shared knowledge persists by target, while plans, tasks, reviews, and events remain attributable to one run. |
+| **Relevance to Project** | Establishes the implementation recorded in `docs/Decisions.md` ADR-029 and updates the artifact model in `docs/Architecture.md`. |
+
+---
+
+## 36. A future direct local OpenAI-compatible adapter must remain distinct from the Ollama-via-Codex bridge
+
+| Field | Detail |
+|---|---|
+| **Topic** | Boundary and probe requirements for the local LLM adapter identified after the 2026-08-17 Copilot and Ollama review |
+| **Date** | 2026-08-17 |
+| **Findings** | The production Ollama backend is a harness bridge: `adapters/ollama.py` delegates to `run_codex(local_provider="ollama")`; it does not consume `CUSTOM_API_BASE` and does not provide a direct OpenAI-compatible client. The production dependency set does not include `openai` or `langchain-openai`, while the tutorial's `ChatOpenAI` path is isolated learning code. A direct adapter therefore needs endpoint probes for `/v1/models`, `/v1/chat/completions`, and `/v1/responses`, followed by a deliberate choice of protocol; Chat Completions compatibility must not be assumed to imply Codex Responses compatibility. It must preserve the existing non-raising `AgentResult` contract and explicit error taxonomy. |
+| **Conclusion** | A local LLM adapter is needed, but it is planned work rather than a hidden extension of the current Ollama path. Probe the server and implement a separate backend only after its supported response protocol is known. |
+| **Relevance to Project** | Supports `docs/Decisions.md` ADR-031 and records the open boundary in `docs/Bugs.md` #44. |
+
+---
+
+## 37. Target-repository artifact migration needed an explicit first-run initialization rule, not just a new path layout
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the same-day follow-up to the 2026-08-17 artifact migration established about first-run behavior and verification scope |
+| **Date** | 2026-08-17 |
+| **Findings** | Moving shared files into `<target-repository>/runs/` fixed cross-run continuity, but the first version still assumed the shared files already existed. The first run against a target with no prior `runs/` directory therefore failed in requirements when `context.md` was missing. The follow-up tightened `artifacts.prepare()` so the four shared files (`context.md`, `learnings.md`, `learnings.md.lock`, `user_choices.md`) and the current run's `events/<run-id>.jsonl` are created eagerly on first use, while plans, task contracts, and reviews remain lazy because empty placeholders there would be invalid or misleading. The transcript also distinguishes verification layers clearly: focused Copilot checks passed first, then the broader artifact-layout change passed the full orchestrator suite, Python compilation, and `git diff --check`; Graphify was refreshed after each change set. |
+| **Conclusion** | A path migration is not complete until creation semantics for the empty first run are defined. Shared cross-run artifacts need deterministic bootstrapping; run-specific semantic artifacts should remain lazy until they have real content. |
+| **Relevance to Project** | Completes the implementation story behind `docs/Decisions.md` ADR-029 and records the fixed regression as `docs/Bugs.md` #45. |
 
 ---
