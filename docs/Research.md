@@ -478,3 +478,51 @@
 | **Relevance to Project** | Implements the separate direct-local path planned in topic 36, supports ADR-033, closes `docs/Bugs.md` #44, and explains why the final solution kept the Codex harness instead of falling back to a plain model client. |
 
 ---
+
+## 41. Copilot can recover a structured-output miss cheaply by reusing the same session for one tool-free format-repair turn
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the Aug 19-20 Copilot follow-up established after transport parsing itself was already fixed |
+| **Date** | 2026-08-20 |
+| **Findings** | Once `assistant.message -> data.content` parsing was fixed, the remaining Copilot failure shape was no longer "could not read the reply" but "the reply is prose instead of the requested JSON object." The Aug 20 adapter change proved a narrow repair path: if the first Copilot turn completed successfully, produced a session id, and returned substantive text that still violates the required JSON contract, the adapter can resume that exact Copilot session, disable effective tool use, forbid re-inspection/re-execution, and ask only for the final result reformatted as the required object. That keeps the parser strict — the second reply must still contain the required top-level keys — while avoiding a second expensive repository survey. The same change also moved Copilot from `--allow-all-tools` to a translated least-privilege tool allow/deny model, which matters because a format-repair turn should not be able to mutate the repository just because the first turn could inspect it. |
+| **Conclusion** | For a session-capable CLI, the cheapest recovery from a prose-first structured-output miss is usually a bounded same-session repair turn, not a full rerun and not a looser parser. Transport success and stage success remain distinct, but a shared session lets the second attempt reuse the first attempt's actual work instead of paying for it again. |
+| **Relevance to Project** | Supports the Aug 20 strengthening of ADR-030, closes `docs/Bugs.md` #47, and clarifies that Copilot's remaining open risk is service/authentication availability (`docs/Bugs.md` #42), not the lack of any structured-output recovery path. |
+
+---
+
+## 42. Gemini CLI is viable as a direct adapter when treated as its own subprocess transport rather than as "just another model API"
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the Aug 20 Gemini integration established about using Gemini in the orchestrator's existing adapter architecture |
+| **Date** | 2026-08-20 |
+| **Findings** | Gemini's `stream-json` mode exposes exactly the two vendor-side facts the orchestrator needs from a direct adapter: an init event containing a resumable session id and a final result event containing status plus usage metadata. Those events are not shaped like Claude/Codex/Copilot output, and Gemini's auth path is also distinct: the adapter reads `GEMINI_API_KEY` from the controller `.env`, marks the workspace trusted for headless execution, and injects those settings as process-local environment overrides through the shared deadline helper rather than mutating global process state. The integration therefore required a real adapter and a small generalization of `run_with_deadline()`, not just another entry in `config.AGENTS`. The same-day run evidence also showed that model availability is an operational problem separate from adapter viability: a planner/coding roster can still name a Gemini model that the current account/API no longer accepts, which is a menu drift issue rather than proof that the direct adapter path is wrong. |
+| **Conclusion** | A vendor CLI belongs behind its own adapter even when it looks superficially similar to other JSON-emitting CLIs. The right reuse point is the shared subprocess/deadline/result boundary, not the vendor-specific argv, auth, or event schema. |
+| **Relevance to Project** | Supports ADR-034, explains the Aug 20 `base.py` environment-override change, and records why Gemini became a first-class backend instead of being forced through the Local LLM or Copilot paths. |
+
+---
+
+## 43. A tiny local custom-provider deployment cannot be treated as if every Codex subsystem deserves the same context budget as the actual task
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the Aug 20 Local LLM payload investigation established about Codex custom-provider traffic versus the actual user task |
+| **Date** | 2026-08-20 |
+| **Findings** | Two independent sources of waste were established from raw bridge logs. First, Codex's background memory-writing jobs launched separate provider requests under their own cloud-model name (`gpt-5.6-luna`) and forwarded huge maintenance payloads that had nothing to do with the orchestrator's current task. Second, even on the real task turns, the bridge was forwarding large chunks of synthetic Codex harness scaffolding — `<environment_context>`, recommended plugins, AGENTS-derived instructions, and similar repo/runtime metadata — as if they were genuine user task content. The bridge fix proved that filtering this structure at the boundary is both safe and high-leverage: the focused payload case documented in the Aug 20 chat record fell from 401,771 raw characters to 6,501 after the final harness-context stripping pass, while still preserving the actual task plus tool-call/tool-result history. The paired `--disable memories` change in `local_llm.py` addresses the other half by preventing Codex's maintenance jobs from hitting the custom provider at all. |
+| **Conclusion** | Small local-provider deployments need hard boundary discipline. It is not enough to "compact the prompt"; you must decide which parts of the harness contract the upstream local model truly needs to see and disable the subsystems that should never reach it. |
+| **Relevance to Project** | Supports ADR-033's Aug 20 status update, closes `docs/Bugs.md` #48-#49, and explains why the current Local LLM path is documented as useful for smaller-context roles rather than as a drop-in replacement for every Codex-backed stage. |
+
+---
+
+## 44. The Aug 20 local-model planner failure was an output-contract failure first, with bridge warnings only as secondary defects
+
+| Field | Detail |
+|---|---|
+| **Topic** | What the read-only Aug 20 planner diagnosis established about the failing Local LLM-backed planner run |
+| **Date** | 2026-08-20 |
+| **Findings** | The raw planner log showed the model reading `context.md` and `user_choices.md`, then replying only with the sentence `Now let me check the existing project structure to understand what's already there.` Because that sentence contained neither a tool call nor the required JSON object, Codex ended the turn and `planner/node.py` later failed when `extract_json()` found nothing parseable. Two other defects were present nearby but were not the immediate cause: `/v1/models` metadata fallback warnings and `OutputTextDelta without active item` from the bridge's SSE event ordering. Those are real bridge mismatches, but the run would still have failed the planner stage even if they were absent, because the final planner reply itself violated the stage contract. The recommended fix was one bounded same-session repair retry: resume the returned session id, disable tools, ask only for the required JSON plan, parse once more, and then fail normally if the repair reply is still invalid. That recommendation was diagnostic only; no code was changed in the read-only investigation. |
+| **Conclusion** | A successful subprocess turn is not planner success. The planner's contract is "valid plan JSON," and any design or diagnosis that treats non-empty exit-code-0 prose as success is reasoning at the wrong layer. |
+| **Relevance to Project** | Produces `docs/Bugs.md` #50, sharpens ADR-033's remaining risk boundary, and preserves the important distinction that the Local LLM planner failure was not "caused by the bridge warnings" even though those warnings still deserve separate cleanup. |
+
+---
