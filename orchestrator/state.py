@@ -58,6 +58,31 @@ def upsert_wave_results(
             records.append(update)
     return records
 
+
+def latest_task_verdicts(
+    wave_results: list[dict[str, Any]] | None, wave: int
+) -> dict[str, dict[str, str]]:
+    """The most recently recorded keep/rework call per task in one wave.
+
+    Scans every attempt's record for `wave` in list order — attempts append in
+    ascending order, per `upsert_wave_results` above — and folds each record's
+    `task_verdicts` in, so a later attempt's call for a task wins and a task
+    never yet reviewed is simply absent. Each value is `{"verdict": "keep" |
+    "rework", "reason": str}`.
+
+    Shared by the reviewer (to tell a task apart that was already accepted in
+    an earlier round from one it still has to judge) and the wave orchestrator
+    (to decide which tasks to redispatch on a rework and which to leave
+    merged as-is).
+    """
+    verdicts: dict[str, dict[str, str]] = {}
+    for record in wave_results or []:
+        if record.get("wave") != wave:
+            continue
+        verdicts.update(record.get("task_verdicts") or {})
+    return verdicts
+
+
 # The two feedback edges from the drawing, named. A verdict is one of these and
 # never free text, so a router can act on it without parsing prose.
 ReviewVerdict = Literal["approved", "rework"]
@@ -103,6 +128,11 @@ class WaveResult(TypedDict):
     merge_conflicts: NotRequired[list[str]]
     review_verdict: NotRequired[str]
     review_comments: NotRequired[str]
+    # Per task: {task_id: {"verdict": "keep" | "rework", "reason": str}}. Only
+    # tasks this attempt actually reviewed appear here — see
+    # `latest_task_verdicts` for how a task's call from an earlier attempt of
+    # the same wave is recovered.
+    task_verdicts: NotRequired[dict[str, dict[str, str]]]
 
 
 class PipelineState(TypedDict):

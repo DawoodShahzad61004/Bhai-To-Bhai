@@ -48,6 +48,33 @@ def plan_reply(task_specs):
     )
 
 
+def approved_reply(*task_ids: str, assessment: str = "fine") -> str:
+    """A reviewer reply keeping every named task_id.
+
+    Extra task_ids beyond what a given review call actually needed a verdict
+    for are harmless — the reviewer only reads entries for tasks it asked
+    about — so one reply naming every task_id in a multi-wave plan is safe to
+    reuse across every wave's review in the same test.
+    """
+    return json.dumps(
+        {
+            "assessment": assessment,
+            "task_verdicts": [{"task_id": t, "verdict": "keep", "reason": ""} for t in task_ids],
+            "learnings": "",
+        }
+    )
+
+
+def rework_reply(*task_ids: str, assessment: str = "not acceptable", reason: str = "not acceptable") -> str:
+    return json.dumps(
+        {
+            "assessment": assessment,
+            "task_verdicts": [{"task_id": t, "verdict": "rework", "reason": reason} for t in task_ids],
+            "learnings": "",
+        }
+    )
+
+
 def writing_agent(filename: str):
     """A coding subagent that actually writes into its worktree.
 
@@ -193,7 +220,7 @@ def test_finalise_leaves_an_already_stopped_run_alone():
 
 def test_a_full_run_with_both_gates_on(pipeline, stub, git_repo):
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", []), ("T-002", "DOCS.md", ["T-001"])]))
-    stub.set_text("reviewer", json.dumps({"verdict": "approved", "assessment": "fine", "problems": []}))
+    stub.set_text("reviewer", approved_reply("T-001", "T-002"))
     stub.set_text("supervisor", json.dumps({"verdict": "accepted", "assessment": "all met", "unmet": []}))
 
     final = run(pipeline)
@@ -211,7 +238,7 @@ def test_a_full_run_with_both_gates_on(pipeline, stub, git_repo):
 
 def test_two_independent_tasks_share_one_wave(pipeline, stub, git_repo):
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", []), ("T-002", "DOCS.md", [])]))
-    stub.set_text("reviewer", json.dumps({"verdict": "approved", "assessment": "fine", "problems": []}))
+    stub.set_text("reviewer", approved_reply("T-001", "T-002"))
     stub.set_text("supervisor", json.dumps({"verdict": "accepted", "assessment": "ok", "unmet": []}))
 
     final = run(pipeline)
@@ -226,7 +253,7 @@ def test_two_independent_tasks_share_one_wave(pipeline, stub, git_repo):
 def test_the_events_log_replays_the_whole_run(pipeline, stub):
     """A run has to be reconstructable after the fact from what it wrote."""
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", [])]))
-    stub.set_text("reviewer", json.dumps({"verdict": "approved", "assessment": "fine", "problems": []}))
+    stub.set_text("reviewer", approved_reply("T-001"))
     stub.set_text("supervisor", json.dumps({"verdict": "accepted", "assessment": "ok", "unmet": []}))
 
     final = run(pipeline)
@@ -257,12 +284,11 @@ def test_the_review_rework_loop_re_runs_the_same_wave(pipeline, stub, git_repo):
 
     verdicts = iter(
         [
-            {"verdict": "rework", "assessment": "too short", "problems": ["NOTES.md is empty"],
-             "rework_instructions": "Write actual content."},
-            {"verdict": "approved", "assessment": "better", "problems": []},
+            rework_reply("T-001", assessment="too short", reason="NOTES.md is empty. Write actual content."),
+            approved_reply("T-001", assessment="better"),
         ]
     )
-    stub.set_reply("reviewer", lambda prompt: AgentResult(ok=True, text=json.dumps(next(verdicts))))
+    stub.set_reply("reviewer", lambda prompt: AgentResult(ok=True, text=next(verdicts)))
 
     final = run(pipeline)
 
@@ -277,7 +303,7 @@ def test_the_review_rework_loop_re_runs_the_same_wave(pipeline, stub, git_repo):
 
 def test_the_supervisor_replan_loop_returns_to_the_planner(pipeline, stub):
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", [])]))
-    stub.set_text("reviewer", json.dumps({"verdict": "approved", "assessment": "fine", "problems": []}))
+    stub.set_text("reviewer", approved_reply("T-001"))
 
     verdicts = iter(
         [
@@ -301,11 +327,7 @@ def test_an_exhausted_rework_budget_stops_the_run_as_bounded(pipeline, stub, mon
     """Stopped-because-bounded, never recorded as stopped-because-done."""
     monkeypatch.setattr("config.MAX_REWORK_ROUNDS", 1)
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", [])]))
-    stub.set_text(
-        "reviewer",
-        json.dumps({"verdict": "rework", "assessment": "no", "problems": ["still wrong"],
-                    "rework_instructions": "Fix it."}),
-    )
+    stub.set_text("reviewer", rework_reply("T-001", assessment="no", reason="still wrong. Fix it."))
 
     final = run(pipeline)
 
@@ -317,7 +339,7 @@ def test_an_exhausted_rework_budget_stops_the_run_as_bounded(pipeline, stub, mon
 def test_an_exhausted_replan_budget_stops_the_run_as_bounded(pipeline, stub, monkeypatch):
     monkeypatch.setattr("config.MAX_REPLAN_ROUNDS", 1)
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", [])]))
-    stub.set_text("reviewer", json.dumps({"verdict": "approved", "assessment": "fine", "problems": []}))
+    stub.set_text("reviewer", approved_reply("T-001"))
     stub.set_text(
         "supervisor",
         json.dumps({"verdict": "replan", "assessment": "no", "unmet": ["nothing works"],
@@ -349,7 +371,7 @@ def test_with_the_reviewer_off_a_wave_is_accepted_on_merge(pipeline, stub, git_r
 
 def test_with_the_supervisor_off_the_run_ends_at_the_last_wave(pipeline, stub):
     stub.set_text("planner", plan_reply([("T-001", "NOTES.md", [])]))
-    stub.set_text("reviewer", json.dumps({"verdict": "approved", "assessment": "fine", "problems": []}))
+    stub.set_text("reviewer", approved_reply("T-001"))
 
     final = run(pipeline, supervisor=False)
 

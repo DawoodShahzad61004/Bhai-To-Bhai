@@ -25,7 +25,8 @@ import artifacts as art
 import config
 import worktrees as wt
 from logging_config import get_logger
-from state import PipelineState, event
+from merger.merge import merge_wave
+from state import PipelineState, event, latest_task_verdicts
 from wave_orchestrator.dispatch import run_wave
 
 logger = get_logger(__name__)
@@ -73,19 +74,53 @@ def _coding_agents_from(state: PipelineState) -> list[config.AgentSpec]:
     ]
 
 
-def _revert_rejected_attempt(state: PipelineState, branch: str) -> None:
-    """Undo a rejected wave, as the notes specify: the work is reverted/deleted.
+def _task_outcome(state: PipelineState, wave: int, task_id: str) -> dict | None:
+    """The most recently recorded outcome dict for one task in one wave.
 
-    Two halves, and the second is easy to miss. The worktrees are destroyed, so
-    the next attempt starts from a clean checkout rather than re-finding the
-    partial state that was just rejected. And the integration branch is reset to
-    where it stood before this wave merged — because the reviewer runs *after*
-    the merger, so a rejected wave has already been integrated by the time
-    anyone says it is wrong. Without the reset, the retry branches from its own
-    rejected output and its "changes" are measured against them.
+    Supplies `merge_wave`'s task dicts during a rebuild replay (see
+    `_rebuild_after_rework` below), so conflict-resolution context — the
+    task's own `report` — is the real thing, not a bare synthetic stand-in.
+    """
+    outcome = None
+    for record in state.get("wave_results") or []:
+        if record.get("wave") != wave:
+            continue
+        for task in record.get("tasks") or []:
+            if task.get("task_id") == task_id:
+                outcome = task
+    return outcome
 
-    Each task branch survives both steps, so the rejected attempt stays
-    inspectable afterwards.
+
+def _rebuild_after_rework(
+    state: PipelineState,
+    branch: str,
+    *,
+    wave_index: int,
+    kept_ids: list[str],
+    artifacts,
+) -> tuple[bool, str]:
+    """Undo a rejected attempt at task granularity: keep what was accepted, discard the rest.
+
+    Previously this reset the whole wave's integration result on any rework,
+    including tasks that had already succeeded (docs/Bugs.md #35). Now only
+    the rejected tasks' contribution is removed.
+
+    Two halves. Every worktree from the just-finished attempt is destroyed —
+    a kept task's worktree is done and nothing else will ever clean it up
+    (wt.cleanup() is never called from production code); a rejected task's
+    worktree is about to be recreated fresh anyway, which wt.create() already
+    handles for a leftover path. Then the integration branch is reset all the
+    way back to where this wave started (`wave_base_sha`) — because the
+    reviewer runs *after* the merger, so a rejected attempt has already been
+    integrated by the time anyone says part of it is wrong — and every
+    currently-"keep" task's branch is re-merged into it, in the wave's
+    original task order, by calling the same `merge_wave` the merger node
+    itself uses. That reuse is deliberate: it is exactly what turns "keep task
+    A, discard task B" into a real git operation without inventing a second
+    conflict-resolution path.
+
+    Each task's own branch survives this untouched either way, so a rejected
+    attempt stays inspectable afterwards, same as before.
     """
     stale = state.get("active_worktrees") or []
     if stale:
@@ -96,12 +131,35 @@ def _revert_rejected_attempt(state: PipelineState, branch: str) -> None:
                 wt.remove(state["target_repo"], path)
 
     base_sha = state.get("wave_base_sha", "")
-    if base_sha:
-        result = wt.reset_branch(state["target_repo"], branch, base_sha)
-        if not result.ok:
-            logger.warning(
-                "[%s] could not reset %s to %s: %s", AGENT, branch, base_sha[:8], result.stderr
-            )
+    if not base_sha:
+        return True, ""
+    reset = wt.reset_branch(state["target_repo"], branch, base_sha)
+    if not reset.ok:
+        message = f"could not reset {branch} to {base_sha[:8]}: {reset.stderr}"
+        logger.warning("[%s] %s", AGENT, message)
+        return False, message
+
+    if not kept_ids:
+        return True, ""
+
+    kept_tasks = [_task_outcome(state, wave_index, task_id) for task_id in kept_ids]
+    kept_tasks = [task for task in kept_tasks if task]
+    logger.info(
+        "[%s] rebuilding %s with %d kept task(s): %s",
+        AGENT, branch, len(kept_tasks), ", ".join(kept_ids),
+    )
+    report = merge_wave(
+        target_repo=state["target_repo"],
+        into=branch,
+        tasks=kept_tasks,
+        context_path=str(artifacts.context),
+        artifacts_dir=str(artifacts.shared_dir),
+    )
+    if not report.ok:
+        message = f"could not rebuild kept work onto {branch}: {report.detail}"
+        logger.error("[%s] %s", AGENT, message)
+        return False, message
+    return True, ""
 
 
 def wave_orchestrator_node(state: PipelineState) -> dict:
@@ -119,15 +177,14 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         }
 
     attempt = _attempt_number(state, wave_index)
-    task_ids = waves[wave_index]
+    wave_task_ids = waves[wave_index]
     by_id = {task["task_id"]: task for task in state.get("tasks") or []}
-    tasks = [by_id[task_id] for task_id in task_ids if task_id in by_id]
 
-    if not tasks:
+    if not any(task_id in by_id for task_id in wave_task_ids):
         return {
             "status": "failed",
             "stop_reason": (
-                f"Wave {wave_index} names tasks {task_ids} and none of them is in the plan."
+                f"Wave {wave_index} names tasks {wave_task_ids} and none of them is in the plan."
             ),
             "events": [event("wave_failed", agent=AGENT, wave=wave_index, error_kind="no_tasks")],
         }
@@ -142,10 +199,42 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
             "events": [event("wave_failed", agent=AGENT, wave=wave_index, error_kind="git")],
         }
 
-    rework_comments = ""
+    # On a rework, only tasks not currently "kept" get redispatched — a task's
+    # latest recorded verdict across every attempt of this wave so far decides
+    # that (docs/Bugs.md #35: this used to be the whole wave, unconditionally).
+    # No verdicts recorded at all (ENABLE_REVIEWER off, or a checkpoint from
+    # before this existed) degrades to the old "redispatch everything" — every
+    # task's lookup simply misses "keep".
+    task_ids = wave_task_ids
+    rework_comments: dict[str, str] = {}
     if state.get("review_verdict") == "rework":
-        rework_comments = state.get("review_comments", "")
-        _revert_rejected_attempt(state, base)
+        wave_level_fallback = state.get("review_comments", "")
+        verdicts = latest_task_verdicts(state.get("wave_results") or [], wave_index)
+        kept_ids = [tid for tid in wave_task_ids if verdicts.get(tid, {}).get("verdict") == "keep"]
+        task_ids = [tid for tid in wave_task_ids if tid not in kept_ids]
+        rework_comments = {
+            tid: verdicts.get(tid, {}).get("reason") or wave_level_fallback for tid in task_ids
+        }
+        rebuilt_ok, rebuild_error = _rebuild_after_rework(
+            state, base, wave_index=wave_index, kept_ids=kept_ids, artifacts=artifacts
+        )
+        if not rebuilt_ok:
+            return {
+                "status": "failed",
+                "stop_reason": f"Could not rebuild the integration branch after rework: {rebuild_error}",
+                "events": [event("wave_failed", agent=AGENT, wave=wave_index, error_kind="rebuild_failed")],
+            }
+
+    tasks = [by_id[task_id] for task_id in task_ids if task_id in by_id]
+    if not tasks:
+        return {
+            "status": "failed",
+            "stop_reason": (
+                f"Wave {wave_index} attempt {attempt} has nothing left to dispatch — every "
+                "task is either already kept or missing from the plan."
+            ),
+            "events": [event("wave_failed", agent=AGENT, wave=wave_index, error_kind="no_tasks")],
+        }
 
     # Where this wave started, so a later rework can put the branch back. Captured
     # on the first attempt only — a rework must return to the wave's own starting
@@ -176,6 +265,10 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
     # run_wave's docstring for why a bare per-wave index cannot honour a roster
     # the planner ordered deliberately (e.g. experts first, small/medium after).
     agent_offset = sum(len(wave) for wave in waves[:wave_index])
+    # Each task's permanent position within the wave, not its position in this
+    # (possibly narrowed) dispatch — see run_wave's docstring for why that
+    # distinction matters once a rework can dispatch a subset.
+    task_slots = {task_id: wave_task_ids.index(task_id) for task_id in task_ids}
 
     outcomes = run_wave(
         tasks,
@@ -185,6 +278,7 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         run_dir=state["run_dir"],
         coding_agents=_coding_agents_from(state),
         agent_offset=agent_offset,
+        task_slots=task_slots,
         rework_comments=rework_comments,
         sessions=_sessions_from(state, wave_index) if rework_comments else {},
     )

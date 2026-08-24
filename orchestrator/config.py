@@ -130,7 +130,7 @@ GEMINI_APPROVAL_MODE = "yolo"
 CUSTOM_API_BASE = os.getenv("CUSTOM_API_BASE", "")
 CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "")
 CUSTOM_API_MODEL_NAME = os.getenv("CUSTOM_API_MODEL_NAME", "")
-MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL = 1024
+MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL = 2048
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT ROSTER
@@ -163,11 +163,11 @@ class AgentSpec:
 # `backend="codex"` or `backend="copilot"` — the adapter layer makes them interchangeable.
 AGENTS = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="local_llm", model="QuantTrio/Qwen3.6-27B-AWQ", deadline_seconds=900,),
-    "wave_orchestrator": AgentSpec(backend="codex", model="", deadline_seconds=900,),
-    "merger": AgentSpec(backend="codex", model="", deadline_seconds=900,),
+    "requirements": AgentSpec(backend="claude", model="haiku", deadline_seconds=900,),
+    "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
+    "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
-    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "planner": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
     "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
     "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
@@ -206,25 +206,19 @@ SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
     ("auto", "copilot"),
     ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
-    ("gemini-3.1-flash-lite", "gemini"),
+    # ("gemini-3.1-flash-lite", "gemini"),
     # ("gpt-oss:120b-cloud", "ollama"),
     ("gpt-oss:20b-cloud", "ollama"),
     # ("gemma4:31b-cloud", "ollama"),
     ("gemma4:cloud", "ollama"),
-    # ("nemotron-3-nano:30b-cloud", "ollama"),
+    ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
-    # ("muse-glimmer:latest", "ollama"),
-    # ("devstral:24b-small-2505-q4_K_M", "ollama"),
-    # ("qwen2.5-coder:14b-instruct-q4_K_M", "ollama"),
-    ("qwen3:14b-q4_K_M", "ollama"),
-    # ("qwen2.5-coder:7b-instruct-q4_K_M", "ollama"),
-    # ("qwen3.5:4b", "ollama"),
-    # ("qwen3:14b", "ollama"),
+    ("qwen3.5:4b", "ollama"),
     # ("qwen3:8b", "ollama"),
 ]
 EXPERT_MODELS = [
-    # ("sonnet", "claude"), 
+    ("sonnet", "claude"), 
     ("", "codex"),
 ]
 

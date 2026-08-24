@@ -243,35 +243,41 @@ def run_wave(
     run_dir: str,
     coding_agents: list[config.AgentSpec],
     agent_offset: int = 0,
-    rework_comments: str = "",
+    task_slots: dict[str, int] | None = None,
+    rework_comments: dict[str, str] | None = None,
     sessions: dict[str, str] | None = None,
 ) -> list[TaskOutcome]:
     """Dispatch every task in a wave, up to MAX_PARALLEL_TASKS at a time.
 
     Tasks rotate through `coding_agents` — sized and cast by the planner, see
     planner/waves.normalise_coding_agents, capped at
-    config.MAX_CODING_AGENT_COUNT. The assignment is `(agent_offset + index) %
-    len(coding_agents)`, not a bare `index % len(coding_agents)`: this function
-    is called once per wave and always sees that wave's own tasks starting at
-    index 0, so a bare index would restart at slot 0 on every wave and could
-    never honour a roster the planner deliberately ordered — e.g. the expert
-    tier first for a judgment-heavy wave 0, small/medium after for a mechanical
-    wave 1 — since wave 1 would then reuse wave 0's slots by coincidence of
-    position rather than continue past them. `agent_offset` is the count of
-    tasks dispatched in every wave before this one (wave_orchestrator_node
-    computes it from `state["waves"]`), so the slot index keeps advancing
-    across the whole run instead of resetting.
+    config.MAX_CODING_AGENT_COUNT. The assignment is `(agent_offset +
+    task_slots[task_id]) % len(coding_agents)`, keyed by task_id rather than
+    the task's position in `tasks`: a rework may now dispatch only a subset of
+    the wave (task-level rework, docs/Bugs.md #35), so a task's index within
+    THIS call is no longer necessarily its permanent position. `task_slots`
+    defaults a missing task_id to its `tasks`-list index, which reproduces the
+    old bare-`index` behaviour exactly whenever the full wave is dispatched in
+    its original order — a first attempt, or any caller that doesn't pass one.
 
-    Both `agent_offset` and each task's position in `tasks` are stable across
-    attempts — a wave's own task order is derived from the plan and does not
-    change on rework — so a task's rework still lands on whichever slot did it
-    the first time.
+    `agent_offset` is the count of tasks dispatched in every wave before this
+    one (wave_orchestrator_node computes it from `state["waves"]`), so the
+    slot index keeps advancing across the whole run instead of resetting —
+    e.g. the expert tier first for a judgment-heavy wave 0, small/medium after
+    for a mechanical wave 1, rather than wave 1 reusing wave 0's slots by
+    coincidence of position.
+
+    `rework_comments` maps task_id to that task's own reviewer feedback, so a
+    rework that only touches some of the wave's tasks briefs each one on its
+    own problem rather than broadcasting one shared note to every task.
 
     `sessions` maps task_id to the vendor session that attempted it last time, so
     a rework reaches the same agent rather than briefing a fresh one — which is
     what makes "here is what you got wrong" refer to anything.
     """
     sessions = sessions or {}
+    slots = task_slots or {}
+    comments = rework_comments or {}
     if not tasks:
         return []
     if not coding_agents:
@@ -287,7 +293,9 @@ def run_wave(
     )
 
     def _call(index: int, task: dict[str, Any]) -> TaskOutcome:
-        agent = coding_agents[(agent_offset + index) % len(coding_agents)]
+        task_id = task["task_id"]
+        slot = slots.get(task_id, index)
+        agent = coding_agents[(agent_offset + slot) % len(coding_agents)]
         return run_task(
             task,
             agent=agent,
@@ -295,8 +303,8 @@ def run_wave(
             run_id=run_id,
             base=base,
             run_dir=run_dir,
-            rework_comments=rework_comments,
-            resume_session=sessions.get(task["task_id"], ""),
+            rework_comments=comments.get(task_id, ""),
+            resume_session=sessions.get(task_id, ""),
         )
 
     outcomes: list[TaskOutcome] = []

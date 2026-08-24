@@ -12,17 +12,23 @@ from reviewer import reviewer_node
 from state import initial_state
 
 APPROVED = {
-    "verdict": "approved",
     "assessment": "Both tasks are implemented and consistent with the requirements.",
-    "problems": [],
+    "task_verdicts": [{"task_id": "T-001", "verdict": "keep", "reason": ""}],
     "learnings": "The blueprint registry lives in app/__init__.py.",
 }
 
 REWORK = {
-    "verdict": "rework",
     "assessment": "The endpoint exists but returns plain text.",
-    "problems": ["`app/health.py:24` returns a string, not JSON"],
-    "rework_instructions": "Return jsonify({'status': 'ok'}) with content-type application/json.",
+    "task_verdicts": [
+        {
+            "task_id": "T-001",
+            "verdict": "rework",
+            "reason": (
+                "`app/health.py:24` returns a string, not JSON. Return "
+                "jsonify({'status': 'ok'}) with content-type application/json."
+            ),
+        }
+    ],
     "learnings": "",
 }
 
@@ -233,11 +239,20 @@ def test_an_unreadable_verdict_is_not_treated_as_approval(review_state, stub):
     assert "nothing has been approved" in result["stop_reason"]
 
 
-def test_a_verdict_outside_the_closed_set_is_not_treated_as_approval(review_state, stub):
-    stub.set_text("reviewer", json.dumps({"verdict": "looks fine", "assessment": "ok"}))
+def test_a_task_verdict_outside_the_closed_set_defaults_to_rework(review_state, stub):
+    """A per-task verdict the pipeline doesn't recognise is not a "keep"."""
+    stub.set_text(
+        "reviewer",
+        json.dumps(
+            {
+                "assessment": "ok",
+                "task_verdicts": [{"task_id": "T-001", "verdict": "looks fine", "reason": ""}],
+            }
+        ),
+    )
     result = reviewer_node(review_state)
-    assert result["status"] == "failed"
-    assert "could not be read" in result["stop_reason"]
+    assert result["review_verdict"] == "rework"
+    assert result["wave_results"][0]["task_verdicts"]["T-001"]["verdict"] == "rework"
 
 
 def test_a_failed_review_agent_stops_the_run(review_state, stub):
@@ -247,6 +262,156 @@ def test_a_failed_review_agent_stops_the_run(review_state, stub):
     result = reviewer_node(review_state)
     assert result["status"] == "failed"
     assert "usage limit" in result["stop_reason"]
+
+
+# ── Per-task verdicts (docs/Bugs.md #35) ────────────────────────────────────
+
+
+@pytest.fixture
+def two_task_review_state(review_state):
+    state = {**review_state}
+    state["tasks"] = review_state["tasks"] + [
+        {
+            "task_id": "T-002",
+            "title": "Add /health/ready",
+            "description": "Create app/ready.py",
+            "acceptance": "returns 200",
+        }
+    ]
+    state["wave_results"] = [
+        {
+            **review_state["wave_results"][0],
+            "task_ids": ["T-001", "T-002"],
+            "tasks": review_state["wave_results"][0]["tasks"]
+            + [
+                {
+                    "task_id": "T-002",
+                    "ok": True,
+                    "report": "Added the readiness endpoint.",
+                    "claimed_files": ["app/ready.py"],
+                    "changed_files": ["app/ready.py"],
+                    "session_id": "sess-2",
+                }
+            ],
+        }
+    ]
+    return state
+
+
+def test_one_rejected_task_among_kept_ones_derives_a_wave_level_rework(
+    two_task_review_state, stub
+):
+    stub.set_text(
+        "reviewer",
+        json.dumps(
+            {
+                "assessment": "T-001 is fine; T-002 is broken.",
+                "task_verdicts": [
+                    {"task_id": "T-001", "verdict": "keep", "reason": ""},
+                    {"task_id": "T-002", "verdict": "rework", "reason": "returns 500"},
+                ],
+                "learnings": "",
+            }
+        ),
+    )
+
+    result = reviewer_node(two_task_review_state)
+
+    assert result["review_verdict"] == "rework"
+    record = result["wave_results"][0]["task_verdicts"]
+    assert record["T-001"]["verdict"] == "keep"
+    assert record["T-002"]["verdict"] == "rework"
+    # T-001's own feedback never leaks into T-002's — and vice versa.
+    assert result["review_comments"] == "- T-002: returns 500"
+
+
+def test_all_tasks_kept_derives_approved(two_task_review_state, stub):
+    stub.set_text(
+        "reviewer",
+        json.dumps(
+            {
+                "assessment": "Both are fine.",
+                "task_verdicts": [
+                    {"task_id": "T-001", "verdict": "keep", "reason": ""},
+                    {"task_id": "T-002", "verdict": "keep", "reason": ""},
+                ],
+                "learnings": "",
+            }
+        ),
+    )
+
+    result = reviewer_node(two_task_review_state)
+
+    assert result["review_verdict"] == "approved"
+
+
+def test_a_failed_task_is_forced_to_rework_regardless_of_the_model(
+    two_task_review_state, stub
+):
+    """A task with nothing mergeable is never a judgement call."""
+    two_task_review_state["wave_results"][0]["tasks"][1]["ok"] = False
+    two_task_review_state["wave_results"][0]["tasks"][1]["error_kind"] = "no_changes"
+    stub.set_text(
+        "reviewer",
+        json.dumps(
+            {
+                "assessment": "T-001 is fine.",
+                # The model is not even asked about T-002 (it never merged), but
+                # even if it tried to weigh in, the failed status wins.
+                "task_verdicts": [
+                    {"task_id": "T-001", "verdict": "keep", "reason": ""},
+                    {"task_id": "T-002", "verdict": "keep", "reason": "looks fine to me"},
+                ],
+                "learnings": "",
+            }
+        ),
+    )
+
+    result = reviewer_node(two_task_review_state)
+
+    assert result["review_verdict"] == "rework"
+    assert result["wave_results"][0]["task_verdicts"]["T-002"]["verdict"] == "rework"
+
+
+def test_the_prompt_asks_a_verdict_only_for_tasks_that_actually_merged(
+    two_task_review_state, stub
+):
+    two_task_review_state["wave_results"][0]["tasks"][1]["ok"] = False
+    stub.set_text("reviewer", json.dumps(APPROVED))
+
+    reviewer_node(two_task_review_state)
+
+    prompt = stub.calls[0]["prompt"]
+    assert "excluded" in prompt
+
+
+def test_a_task_kept_in_an_earlier_attempt_is_named_as_context_not_rejudged(
+    two_task_review_state, stub
+):
+    # Simulate attempt 1 of this wave, where T-001 was already kept in attempt 0.
+    two_task_review_state["wave_results"] = [
+        {
+            "wave": 0,
+            "attempt": 0,
+            "task_ids": ["T-001"],
+            "merged": True,
+            "tasks": two_task_review_state["wave_results"][0]["tasks"][:1],
+            "task_verdicts": {"T-001": {"verdict": "keep", "reason": ""}},
+        },
+        {
+            "wave": 0,
+            "attempt": 1,
+            "task_ids": ["T-002"],
+            "merged": True,
+            "tasks": two_task_review_state["wave_results"][0]["tasks"][1:],
+        },
+    ]
+    stub.set_text("reviewer", json.dumps(APPROVED))
+
+    reviewer_node(two_task_review_state)
+
+    assert "T-001" in stub.calls[0]["prompt"]
+    assert "already accepted in an earlier attempt" in stub.calls[0]["prompt"].lower()
 
 
 def test_reaching_the_reviewer_with_no_wave_stops_the_run(tmp_path):
