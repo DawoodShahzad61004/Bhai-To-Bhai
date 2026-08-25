@@ -243,6 +243,24 @@ The runtime dependency list is intentionally small. Agents are external subproce
 
 ## Changelog
 
+### 2026-08-25 - Coding agent finish guard and enhanced status JSON handling
+
+Commit `acf2eba` ("Implement coding agent finish guard and enhance status JSON handling across adapters") implemented a generic continuation-nudge loop in `orchestrator/adapters/base.py::run_agent()` that addresses the root cause of Bugs.md #21/#23: every vendor CLI ends its turn the moment it replies, tool call or not, which lets small/local models send plan-out-loud narration ("Now I need to update X") that becomes the complete turn and blocks the required {status, files_changed, ...} JSON from ever existing.
+
+The solution is transport-agnostic. `run_agent()` now loops after each backend() call: if `expects_status_json=True` and the reply passes `ok=True` and contains no valid {status, files_changed} object, and the result includes a `session_id` (so the backend can resume), the adapter calls the backend again on the same session with only the nudge message "Continue — you have not sent the final status JSON yet" — bounded by `config.MAX_CODING_AGENT_CONTINUATION_ATTEMPTS` (default 5) so a model that never converges does not loop forever.
+
+New config parameters: `ENABLE_CODING_AGENT_FINISH_GUARD` (bool, default True) and `MAX_CODING_AGENT_CONTINUATION_ATTEMPTS` (int, default 5). Only `wave_orchestrator/dispatch.py`'s coding-subagent call site sets `expects_status_json=config.ENABLE_CODING_AGENT_FINISH_GUARD`; reviewer and supervisor turns never do, since they reply in their own shapes. The loop fires identically whether the agent is dispatched to Codex, Copilot, Gemini, Claude Code, Ollama, `direct:local_llm`, or the stub transport.
+
+The `CODING_FRAME` prompt was enhanced in `orchestrator/wave_orchestrator/prompts.py` with two changes: a new preamble explicit that narration-only replies end the turn and block the JSON from ever being sent, so all explanation must accompany the tool call that does the work; and a new required `finish_reason` field ("stop" if you reached JSON naturally, "length" if truncated by max_tokens) letting a truncated response report honestly as "blocked" instead of misread as "done".
+
+Regression tests in `orchestrator/tests/test_foundation.py` prove the loop fires consistently across backends — local_llm, ollama, and codex tests each confirm narration-only first replies are nudged to the final JSON on the second call. Tests in `orchestrator/tests/test_wave_orchestrator.py` verify the brief forbids narration, defines finish_reason, and that all wave-dispatch calls set `expects_status_json=True`. An additional test confirms the guard is entirely config-driven: monkeypatching `ENABLE_CODING_AGENT_FINISH_GUARD=False` prevents the nudge loop from firing at all, accepting narration on the first call.
+
+Bug #51, found the same day, was separately identified: a blind `git add -A` in dispatch can commit stray build artifacts (e.g., `__pycache__/*.pyc`) that collide with untracked artifacts of the same name in the shared integration checkout, aborting the merge. This is distinct from the finish-guard work and remains open for a targeted `.gitignore` strengthening or `git ls-files` filtering rather than an adapter change.
+
+The full suite grows to 245 tests (244 passing + one pre-existing, unrelated copilot failure). All existing stub-backed tests updated to include the new `finish_reason` field in their mock replies.
+
+---
+
 ### 2026-08-24 - Reviewer rework becomes task-level; roster shifted back toward Claude/Gemini
 
 Commit `f606fca` ("Wave-specific rework reset is removed and the reviewer now decides what to keep and what to delete") replaced wave-wide rework with per-task rework, closing `Bugs.md` #35. `orchestrator/reviewer/prompts.py` and `reviewer/node.py` now request and derive a `task_verdicts` map (keep/rework plus reason) per task that merged in the current attempt; a task that never merged is force-marked rework in code. `orchestrator/state.py`'s `WaveResult` gained `task_verdicts`, folded through the existing `(wave, attempt)` upsert reducer, plus a `latest_task_verdicts()` helper. `orchestrator/wave_orchestrator/node.py` replaces `_revert_rejected_attempt()` (unconditional wave-wide reset) with `_rebuild_after_rework()`: reset integration to `wave_base_sha`, then replay only the kept tasks' merges back in via the existing `merger.merge.merge_wave()`, and dispatch only the rejected tasks on the next attempt. `orchestrator/wave_orchestrator/dispatch.py` was fixed alongside this so a narrowed dispatch list can't silently break roster-slot assignment (now keyed by each task's permanent position via `task_slots`) or collapse per-task rework feedback into one broadcast comment. See `Decisions.md` ADR-035 for why reset-then-replay was chosen over a targeted `git revert`.
