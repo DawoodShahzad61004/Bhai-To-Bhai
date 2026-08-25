@@ -171,9 +171,6 @@ def run_codex(
             error_message="The Codex custom provider configuration is incomplete or invalid.",
         )
 
-    handle, last_message = tempfile.mkstemp(prefix="codex-", suffix=".txt")
-    os.close(handle)
-
     # Everything up to the subcommand belongs to `exec` and must be placed before
     # it: `codex exec resume` has no --cd and no --sandbox of its own, so moving
     # these after `resume` makes the invocation unparseable. Verified against
@@ -223,6 +220,9 @@ def run_codex(
         argv += ["--disable", "memories"]
     for extra_dir in extra_dirs:
         argv += ["--add-dir", extra_dir]
+
+    handle, last_message = tempfile.mkstemp(prefix="codex-", suffix=".txt")
+    os.close(handle)
     argv += [
         # The final answer is collected from this file rather than parsed out of
         # stdout: `codex exec` streams its reasoning there with no marker around
@@ -342,9 +342,7 @@ def run_codex(
         )
         logger.info("[%s] reply: %s", tag, text[:_CONSOLE_EXCERPT])
         logger.debug("[%s] full reply:\n%s", tag, _debug_block(text))
-        return AgentResult(
-            ok=True, text=text, duration_seconds=elapsed, session_id=session_id
-        )
+        return AgentResult(ok=True, text=text, duration_seconds=elapsed, session_id=session_id)
     finally:
         try:
             os.unlink(last_message)

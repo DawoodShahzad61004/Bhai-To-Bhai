@@ -41,11 +41,11 @@ ENABLE_SUPERVISOR = True
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
-# Controller-side run identity and legacy artifact source. 
-RUNS_DIR = str(BASE_DIR / "runs")
+# Controller-side run identity and legacy artifact source.
+RUNS_DIR = BASE_DIR / "runs"
 
 # One .debug.log per run, kept for after-the-fact inspection.
-RUN_LOGS_DIR = str(BASE_DIR / "run_logs")
+RUN_LOGS_DIR = BASE_DIR / "run_logs"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -124,31 +124,45 @@ MAX_CODING_AGENT_COUNT = 5
 
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
-    ("auto", "copilot"),
-    # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    # ("auto", "copilot"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
     # ("gemini-3.1-flash-lite", "gemini"),
     # ("gpt-oss:120b-cloud", "ollama"),
-    ("gpt-oss:20b-cloud", "ollama"),
-    ("gemma4:31b-cloud", "ollama"),
-    ("gemma4:cloud", "ollama"),
-    ("nemotron-3-nano:30b-cloud", "ollama"),
+    # ("gpt-oss:20b-cloud", "ollama"),
+    # ("gemma4:31b-cloud", "ollama"),
+    # ("gemma4:cloud", "ollama"),
+    # ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
-    ("qwen3.5:4b", "ollama"),
+    # ("qwen3.5:4b", "ollama"),
     # ("qwen3:8b", "ollama"),
 ]
 EXPERT_MODELS = [
     # ("sonnet", "claude"), 
-    ("", "codex"),
+    # ("", "codex"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TERMINATION BOUNDS
 # ═══════════════════════════════════════════════════════════════════════════════
-MAX_REWORK_ROUNDS = 2
-MAX_REPLAN_ROUNDS = 1
+MAX_REWORK_ROUNDS = 3
+MAX_REPLAN_ROUNDS = 2
 MAX_WAVES = 20
 MAX_PARALLEL_TASKS = 3
+
+# A coding subagent's own turn can end one message short of the required status
+# JSON (CODING_FRAME's {status, files_changed, ...}), because every vendor CLI
+# ends the turn the moment it replies, tool call or not — small/local models in
+# particular tend to narrate ("Now I need to update X") instead of emitting the
+# final object. dispatch.py's coding-subagent call reads ENABLE_ below rather
+# than hardcoding the guard on, so both knobs live in one place: ENABLE_ is
+# whether a coding turn is held to that contract at all, and MAX_ATTEMPTS is,
+# once held to it, how many times adapters.run_agent() may resume that same
+# session — on whichever backend is doing the coding — and nudge it to finish
+# before the narration is accepted as the turn's result.
+ENABLE_CODING_AGENT_FINISH_GUARD = True
+MAX_CODING_AGENT_CONTINUATION_ATTEMPTS = 5
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -173,7 +187,7 @@ GIT_TIMEOUT_SECONDS = 120
 # GRAPH
 # ═══════════════════════════════════════════════════════════════════════════════
 RECURSION_LIMIT = 150
-CHECKPOINT_DIR = str(BASE_DIR / "checkpoints")
+CHECKPOINT_DIR = BASE_DIR / "checkpoints"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -191,6 +191,12 @@ def run_task(
         # The shared artifact directory is in the target checkout, not in this
         # task's isolated worktree, so the agent still needs explicit access.
         extra_dirs=(str(artifacts.shared_dir),),
+        # Only the coding subagents reply in CODING_FRAME's {status,
+        # files_changed, ...} shape, so only this call site asks run_agent()
+        # to keep nudging for it — on whichever backend this agent turns out
+        # to be dispatched to. The on/off value itself is config.py's alone
+        # (config.ENABLE_CODING_AGENT_FINISH_GUARD), not a literal here.
+        expects_status_json=config.ENABLE_CODING_AGENT_FINISH_GUARD,
     )
 
     outcome.session_id = result.session_id

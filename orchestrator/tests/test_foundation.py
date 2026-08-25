@@ -113,10 +113,15 @@ def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
     monkeypatch.setattr("config.CUSTOM_API_MODEL_NAME", model)
     monkeypatch.setattr("adapters.local_llm._advertised_wire_api", lambda *_: "responses")
 
+    # A status-JSON reply (not bare narration) so the adapter's finish-condition
+    # guard accepts this as a completed turn on the first call, keeping this a
+    # single-dispatch probe of argv construction rather than of the guard itself.
+    reply = '{"status": "done", "files_changed": ["marker"], "summary": "LOCAL_LLM_ADAPTER_OK"}'
+
     def fake_run_with_deadline(argv, *, input, cwd, timeout):
         captured.update(argv=argv, input=input, cwd=cwd, timeout=timeout)
         output_path = Path(argv[argv.index("--output-last-message") + 1])
-        output_path.write_text("LOCAL_LLM_ADAPTER_OK", encoding="utf-8")
+        output_path.write_text(reply, encoding="utf-8")
         stdout = '{"type":"thread.started","thread_id":"local-session"}\n'
         return subprocess.CompletedProcess(argv, 0, stdout, "")
 
@@ -133,7 +138,7 @@ def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
     argv = captured["argv"]
     overrides = [argv[index + 1] for index, value in enumerate(argv) if value == "-c"]
     assert result.ok is True
-    assert result.text == "LOCAL_LLM_ADAPTER_OK"
+    assert result.text == reply
     assert result.session_id == "local-session"
     assert argv[argv.index("--model") + 1] == model
     assert 'model_provider="local_llm"' in overrides
@@ -146,6 +151,83 @@ def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
     assert "--oss" not in argv
     assert "--local-provider" not in argv
     assert secret not in " ".join(argv)
+
+
+def test_local_llm_adapter_is_nudged_by_the_generic_completion_guard(monkeypatch):
+    """The continuation-nudge guard (#21/#23) lives in adapters.run_agent(),
+    not in any one vendor adapter, so it applies to the local-model backend too
+    — the one most prone to plan-out-loud replies — even though this adapter
+    itself has no idea the guard exists. Prove the reply is nudged, not
+    accepted, on a first narration-only turn."""
+    monkeypatch.setattr("config.CUSTOM_API_BASE", "http://local.test/v1/")
+    monkeypatch.setattr("config.CUSTOM_API_KEY", "secret")
+    monkeypatch.setattr("config.CUSTOM_API_MODEL_NAME", "local/model")
+    monkeypatch.setattr("adapters.local_llm._advertised_wire_api", lambda *_: "responses")
+
+    replies = [
+        "Now I need to update test_calc.py.",
+        '{"status": "done", "files_changed": ["test_calc.py"], "summary": "added tests"}',
+    ]
+    calls: list[dict[str, object]] = []
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        calls.append({"argv": argv, "input": input})
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text(replies[len(calls) - 1], encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"local-sess"}\n', ""
+        )
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Do the task.",
+        spec=AgentSpec(backend="local_llm", model="", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="local-llm-nudge-probe",
+        invocation="direct",
+        expects_status_json=True,
+    )
+
+    assert len(calls) == 2
+    assert result.ok is True
+    assert result.text == replies[1]
+    second_argv = calls[1]["argv"]
+    assert second_argv[second_argv.index("resume") + 1] == "local-sess"
+
+
+def test_ollama_adapter_is_nudged_by_the_generic_completion_guard(monkeypatch):
+    """Same as the local_llm case above: the guard runs a layer above this
+    adapter, in adapters.run_agent(), so Ollama's small/medium models — also
+    among the most prone to plan-out-loud replies — get it for free too."""
+    replies = [
+        "Now I need to update test_calc.py.",
+        '{"status": "done", "files_changed": ["test_calc.py"], "summary": "added tests"}',
+    ]
+    calls: list[dict[str, object]] = []
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        calls.append({"argv": argv, "input": input})
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text(replies[len(calls) - 1], encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"ollama-sess"}\n', ""
+        )
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Do the task.",
+        spec=AgentSpec(backend="ollama", model="qwen3.5:4b", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="ollama-nudge-probe",
+        invocation="direct",
+        expects_status_json=True,
+    )
+
+    assert len(calls) == 2
+    assert result.ok is True
+    assert result.text == replies[1]
+    second_argv = calls[1]["argv"]
+    assert second_argv[second_argv.index("resume") + 1] == "ollama-sess"
 
 
 def test_local_llm_adapter_bridges_chat_completions_only_server(monkeypatch):
@@ -347,6 +429,106 @@ def test_codex_failure_uses_the_structured_turn_error():
 def test_codex_session_id_is_absent_rather_than_invented():
     assert _thread_id("") == ""
     assert _thread_id('{"type":"turn.completed"}') == ""
+
+
+def test_codex_nudges_a_narration_only_reply_until_the_status_json_arrives(monkeypatch):
+    """The guard from #21/#23: a reply with no tool call ends Codex's own turn
+    (CODING_FRAME says so verbatim), which can strand the agent one message short
+    of the required status JSON. adapters.run_agent() must resume that same
+    session with a continuation nudge rather than accepting the narration as a
+    finished turn — exercised here through the codex backend, but the loop
+    itself is generic (see the local_llm/ollama tests above for the same guard
+    on other backends)."""
+    replies = [
+        "Good, learnings.md is created. Now I need to update test_calc.py.",
+        '{"status": "done", "files_changed": ["test_calc.py"], "summary": "added tests"}',
+    ]
+    calls: list[dict[str, object]] = []
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        calls.append({"argv": argv, "input": input})
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text(replies[len(calls) - 1], encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"sess-1"}\n', ""
+        )
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Do the task.",
+        spec=AgentSpec(backend="codex", model="", deadline_seconds=30),
+        system_prompt="System rules.",
+        cwd=os.getcwd(),
+        tag="codex-nudge-probe",
+        invocation="direct",
+        expects_status_json=True,
+    )
+
+    assert len(calls) == 2
+    assert result.ok is True
+    assert result.text == replies[1]
+    assert result.session_id == "sess-1"
+    second_argv = calls[1]["argv"]
+    assert second_argv[second_argv.index("resume") + 1] == "sess-1"
+    assert calls[1]["input"] == "Continue — you have not sent the final status JSON yet. Finish the task, then reply with the required JSON object and nothing else."
+
+
+def test_codex_gives_up_after_max_continuation_attempts(monkeypatch):
+    """A model that never produces the status JSON must not be nudged forever."""
+    calls: list[dict[str, object]] = []
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        calls.append({"argv": argv, "input": input})
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text("still narrating", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"sess-2"}\n', ""
+        )
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Do the task.",
+        spec=AgentSpec(backend="codex", model="", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="codex-nudge-giveup-probe",
+        invocation="direct",
+        expects_status_json=True,
+    )
+
+    # One first attempt plus config.MAX_CODING_AGENT_CONTINUATION_ATTEMPTS nudges, then give up.
+    assert len(calls) == config.MAX_CODING_AGENT_CONTINUATION_ATTEMPTS + 1
+    assert result.ok is True
+    assert result.text == "still narrating"
+
+
+def test_codex_does_not_nudge_a_reply_outside_the_coding_frame(monkeypatch):
+    """Reviewer/supervisor turns may also be Codex-backed but reply in their
+    own shape, never CODING_FRAME's {status, files_changed, ...}. Without
+    `expects_status_json`, adapters.run_agent() must accept a narration-shaped
+    reply as-is rather than endlessly nudging it toward a contract it never
+    had."""
+    calls: list[dict[str, object]] = []
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        calls.append({"argv": argv, "input": input})
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text('{"verdict": "approved"}', encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"sess-3"}\n', ""
+        )
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Review the wave.",
+        spec=AgentSpec(backend="codex", model="", deadline_seconds=30),
+        cwd=os.getcwd(),
+        tag="codex-reviewer-probe",
+        invocation="direct",
+    )
+
+    assert len(calls) == 1
+    assert result.ok is True
+    assert result.text == '{"verdict": "approved"}'
 
 
 def test_subprocess_env_removes_python_overrides(monkeypatch):

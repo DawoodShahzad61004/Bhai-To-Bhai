@@ -29,8 +29,33 @@ from urllib.parse import urlsplit
 import config
 from config import AgentSpec
 from logging_config import get_logger
+import parsing
 
 logger = get_logger(__name__)
+
+# CODING_FRAME's contract (wave_orchestrator/prompts.py) is a single JSON object
+# with these two keys always present. A reply that lacks them is a mid-task
+# narration a CLI's own turn boundary cut short, not a finished turn — every
+# vendor CLI here ends its turn the moment the model replies, tool call or not,
+# and small/local models in particular tend to think out loud instead of
+# emitting the final object.
+_CONTINUATION_NUDGE = (
+    "Continue — you have not sent the final status JSON yet. Finish the task, "
+    "then reply with the required JSON object and nothing else."
+)
+
+
+def _is_final_status_report(text: str) -> bool:
+    """Whether `text` is the {status, files_changed, ...} object, not narration."""
+    parsed = parsing.extract_json(text)
+    if not parsed.ok or not parsed.value:
+        return False
+    payload = parsed.value
+    return bool(
+        parsing.one_of(payload, "status", ("done", "blocked"))
+        and parsing.require_list(payload, "files_changed") is not None
+    )
+
 
 # Failure classes a caller may usefully branch on. Kept closed so a router can
 # match exhaustively rather than grepping message text.
@@ -263,6 +288,7 @@ def run_agent(
     resume_session: str = "",
     invocation: str | None = None,
     extra_dirs: tuple[str, ...] = (),
+    expects_status_json: bool = False,
 ) -> AgentResult:
     """Run one agent turn. Returns a result; never raises.
 
@@ -279,6 +305,19 @@ def run_agent(
     worktree, so an agent told only their absolute paths still needs this — both
     vendor CLIs gate file access to `cwd` plus whatever `--add-dir` names,
     independently of permission mode or sandbox policy.
+
+    `expects_status_json` marks a turn bound by CODING_FRAME's `{status,
+    files_changed, ...}` contract. Only the coding subagents (dispatch.py) pass
+    this, and dispatch.py reads its value from config.ENABLE_CODING_AGENT_
+    FINISH_GUARD rather than hardcoding it — that one config.py setting is the
+    only place the guard is turned on or off. It is not a per-vendor concern:
+    whichever backend a coding subagent happens to be dispatched to — Codex, a
+    local Ollama model, a custom local server, Claude Code, Copilot, Gemini — a
+    reply that is not that exact object is treated as an unfinished coding turn
+    and re-prompted with a continuation nudge on the same session, rather than
+    accepted as the turn's result. A reviewer's or supervisor's
+    differently-shaped reply never sets this, so it is never nudged toward a
+    contract it never had.
     """
     transport = invocation or config.INVOCATION
     key = _dispatch_key(transport, spec.backend)
@@ -302,17 +341,51 @@ def run_agent(
         spec.model or "(cli default)",
         spec.deadline_seconds,
     )
-    result = backend(
-        prompt,
-        spec=spec,
-        system_prompt=system_prompt,
-        cwd=cwd,
-        tag=tag,
-        tools=tools,
-        json_schema=json_schema,
-        resume_session=resume_session,
-        extra_dirs=extra_dirs,
-    )
+
+    turn_prompt, turn_system_prompt, turn_resume = prompt, system_prompt, resume_session
+    max_attempts = config.MAX_CODING_AGENT_CONTINUATION_ATTEMPTS
+    result: AgentResult | None = None
+    for attempt in range(max_attempts + 1):
+        result = backend(
+            turn_prompt,
+            spec=spec,
+            system_prompt=turn_system_prompt,
+            cwd=cwd,
+            tag=tag,
+            tools=tools,
+            json_schema=json_schema,
+            resume_session=turn_resume,
+            extra_dirs=extra_dirs,
+        )
+        # A turn's own CLI ends the moment the model replies, tool call or not
+        # (CODING_FRAME says so verbatim), which is exactly what lets a reply
+        # that is only narration — "Now I need to update X" with no tool call
+        # attached — end the session before the required status JSON, or the
+        # work it describes, ever exists. Resuming on the same session id and
+        # nudging it is what recovers that turn instead of reporting a false
+        # "done" or a "no_changes" failure for a task the agent never actually
+        # finished attempting.
+        if (
+            not expects_status_json
+            or not result.ok
+            or _is_final_status_report(result.text)
+            or not result.session_id
+            or attempt == max_attempts
+        ):
+            break
+        logger.info(
+            "[%s] reply was not the final status JSON (turn %d/%d) — nudging session=%s to continue",
+            tag,
+            attempt + 1,
+            max_attempts,
+            result.session_id[:8],
+        )
+        turn_prompt, turn_system_prompt, turn_resume = (
+            _CONTINUATION_NUDGE,
+            "",
+            result.session_id,
+        )
+
     if result.ok:
         logger.info("[%s] %s", tag, result.summary())
     else:

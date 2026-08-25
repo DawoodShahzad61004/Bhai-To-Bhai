@@ -27,13 +27,27 @@ Windows shell safety rules for this pipeline:
 - For paths with spaces, use PowerShell `-LiteralPath` or quote the complete   path; do not pass a split path such as `Marker-PDF Report.md` as two arguments.
 - If a patch/write helper cannot create a file after two attempts, switch to a   native PowerShell write. In Windows PowerShell 5.1, use `-Encoding UTF8` or   `[System.IO.File]::WriteAllText(..., [System.Text.UTF8Encoding]::new($false))`;   do not use `utf8NoBOM`, which only exists in newer PowerShell.
 
+Never send a message that contains only narration. Because your turn ends the \
+moment you reply, a message like "Now I need to update X" with no tool call \
+attached IS your reply — the turn ends there whether or not the work described \
+actually happened. Any explanation of what you are about to do must be included \
+in the same message as the tool call that does it. The only text-only message \
+you ever send is the final JSON object below, once every change is already made.
+
 When you are done, reply with a single JSON object and nothing else:
 {{
   "status": "done" | "blocked",
   "summary": "<what you actually changed, file by file>",
   "files_changed": ["<path>"],
-  "blocked_reason": "<only when status is blocked: what stopped you>"
+  "blocked_reason": "<only when status is blocked: what stopped you>",
+  "finish_reason": "stop" | "length"
 }}
+
+"finish_reason" is "stop" if you reached this JSON naturally, having finished \
+everything you set out to do. It is "length" if you are being forced to wrap up \
+early because you are almost out of room to respond — in that case, prefer \
+setting "status" to "blocked" and using "blocked_reason" to say what was left, \
+rather than claiming "done" for work you did not finish.
 
 Report "done" only for work you actually performed. If you could not complete the \
 task, say "blocked" and why. A claim of completion for something you did not do \

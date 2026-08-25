@@ -259,7 +259,12 @@ def test_a_blocked_agent_is_not_counted_as_done(wave_state, stub):
         AgentResult(
             ok=True,
             text=json.dumps(
-                {"status": "blocked", "summary": "", "blocked_reason": "No database URL"}
+                {
+                    "status": "blocked",
+                    "summary": "",
+                    "files_changed": [],
+                    "blocked_reason": "No database URL",
+                }
             ),
         ),
     )
@@ -506,3 +511,104 @@ def test_the_roster_offset_advances_across_waves_instead_of_resetting(git_repo, 
     assert calls["task-T-003"]["spec"].model == "haiku"
     assert calls["task-T-004"]["spec"].model == "haiku"
     assert calls["task-T-005"]["spec"].model == "haiku"
+
+
+# ── The coding-turn finish contract ──────────────────────────────────────────
+#
+# Bugs.md #21/#23: a coding subagent's own CLI ends its turn the instant it
+# replies, tool call or not, which lets a plan-out-loud message like "Now I
+# need to update X" become the whole turn. These tests cover the brief itself
+# (CODING_FRAME bans narration-only replies and defines finish_reason) and the
+# one call site that must ask adapters.run_agent() to enforce it. The guard
+# itself lives in run_agent(), not in any one vendor adapter, so it applies no
+# matter which backend a coding subagent is dispatched to — proved here on the
+# plain stub transport, which every backend flows through identically.
+
+
+def test_the_brief_forbids_a_narration_only_reply(wave_state, stub):
+    stub.set_reply("task-T-001", writing_agent("app/health.py"))
+    stub.set_reply("task-T-002", writing_agent("NOTES.md"))
+
+    wave_orchestrator_node(wave_state)
+
+    system_prompt = stub.calls[0]["system_prompt"]
+    assert "Never send a message that contains only narration" in system_prompt
+    assert "same message as the tool call" in system_prompt
+
+
+def test_the_brief_defines_finish_reason_and_ties_length_to_a_truncated_reply(wave_state, stub):
+    stub.set_reply("task-T-001", writing_agent("app/health.py"))
+    stub.set_reply("task-T-002", writing_agent("NOTES.md"))
+
+    wave_orchestrator_node(wave_state)
+
+    system_prompt = stub.calls[0]["system_prompt"]
+    assert '"finish_reason": "stop" | "length"' in system_prompt
+    # The field exists so a truncated tool_call block (max_tokens too small)
+    # is reported as an honest "blocked", not misread as a finished "done".
+    assert '"length"' in system_prompt
+    assert "almost out of room to respond" in system_prompt
+
+
+def test_a_narration_only_reply_is_nudged_regardless_of_which_backend_replied(wave_state, stub):
+    """The continuation-nudge guard is not Codex-specific: it lives in
+    adapters.run_agent() itself, so it fires on whichever backend a coding
+    subagent happens to be dispatched to. Proved here on the plain stub
+    transport — no codex.py involved at all — by scripting a narration-only
+    first reply and a proper status JSON second reply, and checking the task
+    dispatch calls the backend twice rather than accepting the narration."""
+    workdir_holder: dict[str, str] = {}
+    replies: list[str] = []
+
+    def reply(prompt: str) -> AgentResult:
+        replies.append(prompt)
+        if len(replies) == 1:
+            marker = "## Working directory\n\n"
+            start = prompt.index(marker) + len(marker)
+            workdir_holder["path"] = prompt[start:].splitlines()[0].strip()
+            return AgentResult(
+                ok=True, text="Now I need to update app/health.py.", session_id="sess-nudge"
+            )
+        target = __import__("pathlib").Path(workdir_holder["path"]) / "app/health.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("written by the stub\n", encoding="utf-8")
+        return AgentResult(
+            ok=True,
+            text=json.dumps(
+                {"status": "done", "summary": "Created app/health.py", "files_changed": ["app/health.py"]}
+            ),
+            session_id="sess-nudge",
+        )
+
+    stub.set_reply("task-T-001", reply)
+    stub.set_reply("task-T-002", writing_agent("NOTES.md"))
+
+    result = wave_orchestrator_node(wave_state)
+
+    assert len(replies) == 2
+    assert "final status JSON" in replies[1]
+    tasks = {t["task_id"]: t for t in result["wave_results"][0]["tasks"]}
+    assert tasks["T-001"]["ok"] is True
+
+
+def test_the_finish_guard_is_switched_off_through_config_alone(wave_state, stub, monkeypatch):
+    """dispatch.py never hardcodes the guard on: it reads
+    config.ENABLE_CODING_AGENT_FINISH_GUARD, so flipping that one setting is
+    the only way to turn the guard off, with no code change anywhere else.
+    With it False, a narration-only reply must be accepted as the task's
+    result on the first call — no nudge, no second call."""
+    monkeypatch.setattr("config.ENABLE_CODING_AGENT_FINISH_GUARD", False)
+    replies: list[str] = []
+
+    def reply(prompt: str) -> AgentResult:
+        replies.append(prompt)
+        return AgentResult(
+            ok=True, text="Now I need to update app/health.py.", session_id="sess-off"
+        )
+
+    stub.set_reply("task-T-001", reply)
+    stub.set_reply("task-T-002", writing_agent("NOTES.md"))
+
+    wave_orchestrator_node(wave_state)
+
+    assert len(replies) == 1

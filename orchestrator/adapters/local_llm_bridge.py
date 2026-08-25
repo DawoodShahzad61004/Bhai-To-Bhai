@@ -453,7 +453,16 @@ def _post_chat(base_url: str, api_key: str, payload: dict[str, Any], timeout: fl
     try:
         opener = build_opener(ProxyHandler({}))
         with opener.open(request, timeout=max(0.1, timeout)) as response:
-            result = json.load(response)
+            response_body = response.read()
+        # Mirrors the outbound log above: the exact bytes the local model
+        # returned, before this module translates them back to Responses
+        # events, so the model's actual generated text is visible at DEBUG.
+        logger.debug(
+            "Local LLM inbound Chat Completions reply (%d bytes):\n%s",
+            len(response_body),
+            response_body.decode("utf-8", errors="replace"),
+        )
+        result = json.loads(response_body)
     except HTTPError as exc:
         raise UpstreamError(exc.code, exc.read()) from exc
     except (URLError, OSError) as exc:
