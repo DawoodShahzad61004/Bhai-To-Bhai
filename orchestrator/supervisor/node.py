@@ -103,7 +103,7 @@ def _replan_text(payload: dict) -> str:
 
 def supervisor_node(state: PipelineState) -> dict:
     """Assess the finished result against the original requirements."""
-    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
     replan_count = state.get("replan_count", 0)
     waves = state.get("waves") or []
 

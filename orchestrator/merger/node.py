@@ -28,7 +28,7 @@ AGENT = "merger"
 
 def merger_node(state: PipelineState) -> dict:
     """Merge the current wave's branches into the integration branch."""
-    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
     target = state["target_repo"]
     wave_index = state.get("current_wave", 0)
 

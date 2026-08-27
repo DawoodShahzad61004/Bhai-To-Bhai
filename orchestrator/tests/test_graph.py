@@ -111,12 +111,10 @@ def writing_agent(filename: str):
 def pipeline(git_repo, tmp_path, stub, monkeypatch):
     """A ready-to-run pipeline over a real repo, with the common agents scripted."""
     monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
-    run_dir = art.prepare(tmp_path / "run")
     state = initial_state(
         run_id="g1",
         goal="Add two markdown files",
         target_repo=str(git_repo),
-        run_dir=str(run_dir.run_dir),
     )
     stub.set_text("requirements", json.dumps(SURVEY))
     stub.set_reply("task-T-001", writing_agent("NOTES.md"))
@@ -269,7 +267,7 @@ def test_the_events_log_replays_the_whole_run(pipeline, stub):
     ]
     # And the same story is on disk, written as it happened.
     on_disk = art.prepare(
-        pipeline["run_dir"], pipeline["target_repo"]
+        pipeline["run_id"], pipeline["target_repo"]
     ).events.read_text(encoding="utf-8")
     assert "wave_started" in on_disk
     assert "supervisor_verdict" in on_disk

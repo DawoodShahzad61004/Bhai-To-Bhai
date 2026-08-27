@@ -42,13 +42,12 @@ def _writer(filename: str, body: str):
 
 @pytest.fixture
 def state(git_repo, tmp_path):
-    run_dir = art.prepare(tmp_path / "run")
-    art.write_text(run_dir.context, "# Context")
+    artifacts = art.prepare("rv", git_repo)
+    art.write_text(artifacts.context, "# Context")
     s = initial_state(
         run_id="rv",
         goal="g",
         target_repo=str(git_repo),
-        run_dir=str(run_dir.run_dir),
     )
     s["context"] = "# Context"
     s["tasks"] = [
@@ -187,7 +186,7 @@ def test_the_rewind_is_recorded_in_the_event_log(state, stub, git_repo):
 
     planner_node({**state, **first, "replan_count": 1, "supervisor_comments": "no"})
 
-    events = art.prepare(state["run_dir"], state["target_repo"]).events.read_text(
+    events = art.prepare(state["run_id"], state["target_repo"]).events.read_text(
         encoding="utf-8"
     )
     assert "replan_rewind" in events

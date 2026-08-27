@@ -144,7 +144,6 @@ def run_task(
     target_repo: str,
     run_id: str,
     base: str,
-    run_dir: str,
     rework_comments: str,
     resume_session: str,
 ) -> TaskOutcome:
@@ -170,7 +169,7 @@ def run_task(
         outcome.worktree = str(workdir)
         outcome.branch = base
 
-    artifacts = art.prepare(run_dir, target_repo)
+    artifacts = art.prepare(run_id, target_repo)
     result = run_agent(
         coding_prompt(
             task=task,
@@ -246,7 +245,6 @@ def run_wave(
     target_repo: str,
     run_id: str,
     base: str,
-    run_dir: str,
     coding_agents: list[config.AgentSpec],
     agent_offset: int = 0,
     task_slots: dict[str, int] | None = None,
@@ -308,7 +306,6 @@ def run_wave(
             target_repo=target_repo,
             run_id=run_id,
             base=base,
-            run_dir=run_dir,
             rework_comments=comments.get(task_id, ""),
             resume_session=sessions.get(task_id, ""),
         )

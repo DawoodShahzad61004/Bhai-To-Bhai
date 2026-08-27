@@ -131,7 +131,7 @@ def _rework_text(task_verdicts: dict[str, dict[str, str]]) -> str:
 
 def reviewer_node(state: PipelineState) -> dict:
     """Review the merged wave against its task files and the original context."""
-    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
     wave_index = state.get("current_wave", 0)
     results = state.get("wave_results") or []
 

@@ -45,21 +45,23 @@ def stub():
 
 @pytest.fixture
 def run_dir(tmp_path):
-    """An empty artifact directory for one run."""
-    return artifacts_module.prepare(tmp_path / "run")
+    """An empty artifact store for one run, sibling to a throwaway target."""
+    target = tmp_path / "target"
+    target.mkdir(exist_ok=True)
+    return artifacts_module.prepare("testrun", target)
 
 
 @pytest.fixture
 def state(tmp_path, run_dir):
-    """A fresh pipeline state pointed at a throwaway target repository."""
-    target = tmp_path / "target"
-    target.mkdir(exist_ok=True)
-    artifacts_module.prepare(run_dir.run_dir, target)
+    """A fresh pipeline state pointed at a throwaway target repository.
+
+    Shares `run_dir`'s target and run id, so the two fixtures resolve to the
+    same artifact store when a test asks for both.
+    """
     return initial_state(
-        run_id="testrun",
+        run_id=run_dir.run_id,
         goal="Add a health-check endpoint",
-        target_repo=str(target),
-        run_dir=str(run_dir.run_dir),
+        target_repo=str(tmp_path / "target"),
     )
 
 

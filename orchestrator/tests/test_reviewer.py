@@ -35,13 +35,12 @@ REWORK = {
 
 @pytest.fixture
 def review_state(tmp_path):
-    run_dir = art.prepare(tmp_path / "run", tmp_path)
-    art.write_text(run_dir.context, "# Context\nThe endpoint must return JSON.")
+    artifacts = art.prepare("rv1", tmp_path)
+    art.write_text(artifacts.context, "# Context\nThe endpoint must return JSON.")
     state = initial_state(
         run_id="rv1",
         goal="Add a health endpoint",
         target_repo=str(tmp_path),
-        run_dir=str(run_dir.run_dir),
     )
     state["context"] = "# Context\nThe endpoint must return JSON."
     state["current_wave"] = 0
@@ -97,7 +96,7 @@ def test_the_review_is_written_as_markdown(review_state, stub):
 
     notes = art.read_text(
         art.prepare(
-            review_state["run_dir"], review_state["target_repo"]
+            review_state["run_id"], review_state["target_repo"]
         ).review_file(0, 0)
     )
     assert "**Verdict:** rework" in notes
@@ -117,7 +116,7 @@ def test_findings_reach_the_learnings_file(review_state, stub):
     stub.set_text("reviewer", json.dumps(APPROVED))
     reviewer_node(review_state)
     learnings = art.read_text(
-        art.prepare(review_state["run_dir"], review_state["target_repo"]).learnings
+        art.prepare(review_state["run_id"], review_state["target_repo"]).learnings
     )
     assert "app/__init__.py" in learnings
 
@@ -164,6 +163,15 @@ def test_the_brief_scopes_judgement_to_this_wave(review_state, stub):
     assert "Scope your judgement to THIS wave" in stub.calls[0]["prompt"]
 
 
+def test_the_reviewer_is_granted_the_shared_artifact_directory(review_state, stub):
+    """The shared store lives outside the target checkout (ADR-037); without
+    this grant the reviewer cannot reach context.md at all."""
+    stub.set_text("reviewer", json.dumps(APPROVED))
+    reviewer_node(review_state)
+    artifacts = art.prepare(review_state["run_id"], review_state["target_repo"])
+    assert str(artifacts.shared_dir) in stub.calls[0]["extra_dirs"]
+
+
 # ── Rework ───────────────────────────────────────────────────────────────────
 
 
@@ -208,7 +216,7 @@ def test_an_exhausted_bound_records_what_was_left_undone(review_state, stub, mon
     reviewer_node({**review_state, "rework_count": 1})
 
     learnings = art.read_text(
-        art.prepare(review_state["run_dir"], review_state["target_repo"]).learnings
+        art.prepare(review_state["run_id"], review_state["target_repo"]).learnings
     )
     assert "could not be brought to an acceptable state" in learnings
     assert "Return jsonify" in learnings
@@ -415,8 +423,7 @@ def test_a_task_kept_in_an_earlier_attempt_is_named_as_context_not_rejudged(
 
 
 def test_reaching_the_reviewer_with_no_wave_stops_the_run(tmp_path):
-    run_dir = art.prepare(tmp_path / "run")
-    empty = initial_state(run_id="x", goal="g", target_repo=str(tmp_path), run_dir=str(run_dir.run_dir))
+    empty = initial_state(run_id="x", goal="g", target_repo=str(tmp_path))
     result = reviewer_node(empty)
     assert result["status"] == "failed"
     assert "no wave to review" in result["stop_reason"]

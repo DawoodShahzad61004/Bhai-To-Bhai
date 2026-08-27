@@ -29,16 +29,15 @@ REPLAN = {
 
 @pytest.fixture
 def final_state(tmp_path):
-    run_dir = art.prepare(tmp_path / "run", tmp_path)
-    art.write_text(run_dir.context, "# Context\nHealth check must probe the database.")
-    art.write_text(run_dir.user_choices, "# User choices\n- Must return JSON")
-    art.write_json(run_dir.plan, {"summary": "Add the endpoint, then its tests."})
+    artifacts = art.prepare("sv1", tmp_path)
+    art.write_text(artifacts.context, "# Context\nHealth check must probe the database.")
+    art.write_text(artifacts.user_choices, "# User choices\n- Must return JSON")
+    art.write_json(artifacts.plan, {"summary": "Add the endpoint, then its tests."})
 
     state = initial_state(
         run_id="sv1",
         goal="Add a health endpoint",
         target_repo=str(tmp_path),
-        run_dir=str(run_dir.run_dir),
     )
     state["context"] = "# Context\nHealth check must probe the database."
     state["waves"] = [["T-001"], ["T-002"]]
@@ -97,7 +96,7 @@ def test_the_assessment_is_written_as_markdown(final_state, stub):
 
     notes = art.read_text(
         art.prepare(
-            final_state["run_dir"], final_state["target_repo"]
+            final_state["run_id"], final_state["target_repo"]
         ).supervisor_file(0)
     )
     assert "**Verdict:** replan" in notes
@@ -116,7 +115,7 @@ def test_findings_reach_the_learnings_file(final_state, stub):
     stub.set_text("supervisor", json.dumps(ACCEPTED))
     supervisor_node(final_state)
     learnings = art.read_text(
-        art.prepare(final_state["run_dir"], final_state["target_repo"]).learnings
+        art.prepare(final_state["run_id"], final_state["target_repo"]).learnings
     )
     assert "app/ops/" in learnings
 
@@ -131,7 +130,7 @@ def test_the_brief_points_at_the_requirements_and_the_user_choices(final_state, 
 
     supervisor_node(final_state)
 
-    artifacts = art.prepare(final_state["run_dir"], final_state["target_repo"])
+    artifacts = art.prepare(final_state["run_id"], final_state["target_repo"])
     call = stub.calls[0]
     assert str(artifacts.context) in call["prompt"]
     assert str(artifacts.user_choices) in call["prompt"]
@@ -216,7 +215,7 @@ def test_an_exhausted_bound_records_what_was_left_unmet(final_state, stub, monke
     supervisor_node({**final_state, "replan_count": 1})
 
     learnings = art.read_text(
-        art.prepare(final_state["run_dir"], final_state["target_repo"]).learnings
+        art.prepare(final_state["run_id"], final_state["target_repo"]).learnings
     )
     assert "The goal was not reached" in learnings
     assert "database probe" in learnings

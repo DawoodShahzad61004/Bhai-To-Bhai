@@ -43,13 +43,12 @@ TASKS = [
 @pytest.fixture
 def wave_state(git_repo, tmp_path):
     """A run positioned at wave 0 of a two-task plan, against a real repo."""
-    run_dir = art.prepare(tmp_path / "run", git_repo)
-    art.write_text(run_dir.context, "# Context\nAdd a health endpoint.")
+    artifacts = art.prepare("r1", git_repo)
+    art.write_text(artifacts.context, "# Context\nAdd a health endpoint.")
     state = initial_state(
         run_id="r1",
         goal="Add a health endpoint",
         target_repo=str(git_repo),
-        run_dir=str(run_dir.run_dir),
     )
     state["tasks"] = list(TASKS)
     state["waves"] = [["T-001", "T-002"]]
@@ -166,7 +165,7 @@ def test_the_brief_tells_agents_how_to_record_a_finding_directly(wave_state, stu
 
     wave_orchestrator_node(wave_state)
 
-    artifacts = art.prepare(wave_state["run_dir"], wave_state["target_repo"])
+    artifacts = art.prepare(wave_state["run_id"], wave_state["target_repo"])
     call = stub.calls[0]
     assert str(artifacts.learnings) in call["prompt"]
     assert "append-learning" in call["prompt"]
@@ -181,7 +180,7 @@ def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_st
     import sys
 
     script = str(__import__("pathlib").Path(art.__file__).resolve())
-    artifacts = art.prepare(wave_state["run_dir"], wave_state["target_repo"])
+    artifacts = art.prepare(wave_state["run_id"], wave_state["target_repo"])
 
     def reply(prompt: str) -> AgentResult:
         marker = "## Working directory\n\n"
@@ -471,14 +470,13 @@ def test_the_roster_offset_advances_across_waves_instead_of_resetting(git_repo, 
     three small/medium entries that follow — not the first three entries
     overall, which would repeat the two experts.
     """
-    run_dir = art.prepare(tmp_path / "offset-run")
-    art.write_text(run_dir.context, "# Context\nRoster offset test.")
+    artifacts = art.prepare("r2", git_repo)
+    art.write_text(artifacts.context, "# Context\nRoster offset test.")
 
     state = initial_state(
         run_id="r2",
         goal="roster offset test",
         target_repo=str(git_repo),
-        run_dir=str(run_dir.run_dir),
     )
     state["tasks"] = [
         {**TASKS[0], "task_id": "T-001", "wave": 0},

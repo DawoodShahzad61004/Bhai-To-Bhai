@@ -41,9 +41,6 @@ ENABLE_SUPERVISOR = True
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
-# Controller-side run identity and legacy artifact source.
-RUNS_DIR = BASE_DIR / "runs"
-
 # One .debug.log per run, kept for after-the-fact inspection.
 RUN_LOGS_DIR = BASE_DIR / "run_logs"
 
@@ -104,7 +101,7 @@ AGENTS = {
     "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
-    "planner": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
+    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
     "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
     "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
@@ -120,27 +117,27 @@ CODING_AGENT_B = AgentSpec(
     deadline_seconds=900,
 )
 
-MAX_CODING_AGENT_COUNT = 5
+MAX_CODING_AGENT_COUNT = 3
 
 SMALL_MEDIUM_MODELS = [
     # ("haiku", "claude"),
-    # ("auto", "copilot"),
+    ("auto", "copilot"),
     ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
     # ("gemini-3.1-flash-lite", "gemini"),
     # ("gpt-oss:120b-cloud", "ollama"),
-    # ("gpt-oss:20b-cloud", "ollama"),
+    ("gpt-oss:20b-cloud", "ollama"),
     # ("gemma4:31b-cloud", "ollama"),
-    # ("gemma4:cloud", "ollama"),
-    # ("nemotron-3-nano:30b-cloud", "ollama"),
+    ("gemma4:cloud", "ollama"),
+    ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
-    # ("qwen3.5:4b", "ollama"),
+    ("qwen3.5:4b", "ollama"),
     # ("qwen3:8b", "ollama"),
 ]
 EXPERT_MODELS = [
     # ("sonnet", "claude"), 
-    # ("", "codex"),
-    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    ("", "codex"),
+    # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -161,7 +158,7 @@ MAX_PARALLEL_TASKS = 3
 # once held to it, how many times adapters.run_agent() may resume that same
 # session — on whichever backend is doing the coding — and nudge it to finish
 # before the narration is accepted as the turn's result.
-ENABLE_CODING_AGENT_FINISH_GUARD = True
+ENABLE_CODING_AGENT_FINISH_GUARD = False
 MAX_CODING_AGENT_CONTINUATION_ATTEMPTS = 5
 
 
@@ -181,6 +178,16 @@ TASK_BRANCH_TEMPLATE = "bhai/{run}/{task}"
 INTEGRATION_BRANCH_TEMPLATE = "bhai/{run}/integration"
 # Seconds any single git command may take.
 GIT_TIMEOUT_SECONDS = 120
+
+# Where project-scoped shared memory and per-run audit records live: a sibling
+# of the target repository, matching WORKTREE_DIR_NAME's own idiom. Not inside
+# the target's working tree — a target project can already own a `runs/`
+# directory of its own, and untracked state inside a repo does not survive
+# ordinary Git hygiene (`git clean`, a fresh clone). See Decisions.md ADR-037.
+ARTIFACT_DIR_NAME = ".bhai-artifacts"
+# Absolute override for the rare case where the target's parent is not
+# writable. Empty means "use the sibling default".
+ARTIFACT_ROOT = os.getenv("BHAI_ARTIFACT_ROOT", "")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -164,7 +164,7 @@ def _rebuild_after_rework(
 
 def wave_orchestrator_node(state: PipelineState) -> dict:
     """Dispatch the current wave's tasks, each in its own worktree."""
-    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
     target = state["target_repo"]
     wave_index = state.get("current_wave", 0)
     waves = state.get("waves") or []
@@ -275,7 +275,6 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         target_repo=target,
         run_id=state["run_id"],
         base=base,
-        run_dir=state["run_dir"],
         coding_agents=_coding_agents_from(state),
         agent_offset=agent_offset,
         task_slots=task_slots,

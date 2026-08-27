@@ -38,13 +38,12 @@ def _commit_on_branch(repo: Path, run_id: str, task_id: str, filename: str, body
 
 @pytest.fixture
 def merge_state(git_repo, tmp_path):
-    run_dir = art.prepare(tmp_path / "run", git_repo)
-    art.write_text(run_dir.context, "# Context\nBuild the thing.")
+    artifacts = art.prepare("m1", git_repo)
+    art.write_text(artifacts.context, "# Context\nBuild the thing.")
     state = initial_state(
         run_id="m1",
         goal="Build the thing",
         target_repo=str(git_repo),
-        run_dir=str(run_dir.run_dir),
     )
     state["context"] = "# Context\nBuild the thing."
     state["current_wave"] = 0
@@ -177,6 +176,8 @@ def test_a_conflict_dispatches_the_merge_agent_with_the_files_named(
     prompt = stub.calls[0]["prompt"]
     assert "shared.txt" in prompt
     assert "conflict markers" in prompt
+    artifacts = art.prepare(merge_state["run_id"], merge_state["target_repo"])
+    assert str(artifacts.shared_dir) in stub.calls[0]["extra_dirs"]
     wt.git(git_repo, "checkout", "bhai/m1/integration")
     assert (git_repo / "shared.txt").read_text(encoding="utf-8") == "alpha\nbeta\n"
 
@@ -297,7 +298,7 @@ def test_merge_agent_findings_reach_the_learnings_file(merge_state, git_repo, st
     merger_node(merge_state)
 
     learnings = art.read_text(
-        art.prepare(merge_state["run_dir"], merge_state["target_repo"]).learnings
+        art.prepare(merge_state["run_id"], merge_state["target_repo"]).learnings
     )
     assert "serialise them" in learnings
 

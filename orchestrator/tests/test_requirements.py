@@ -11,6 +11,7 @@ from langgraph.types import Command
 
 import artifacts as art
 import parsing
+import worktrees as wt
 from adapters.base import AgentResult
 from requirements import (
     requirements_clarify_node,
@@ -84,7 +85,7 @@ def test_the_agent_is_given_read_only_tools(state, stub, monkeypatch):
 
 def test_the_survey_is_pointed_at_durable_project_memory(state, stub, monkeypatch):
     monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
-    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
     art.write_text(artifacts.context, "prior context")
     art.append_learning(artifacts, "reviewer", "prior finding")
     art.append_user_choices(artifacts, "older-run", "## Earlier choice\n\nUse JSON.")
@@ -108,14 +109,10 @@ def test_first_survey_memory_paths_exist_before_agent_dispatch(tmp_path, monkeyp
         run_id="first-run",
         goal="Inspect a new repository",
         target_repo=str(target),
-        run_dir=str(tmp_path / "controller" / "first-run"),
     )
 
     def inspect_then_reply(prompt, **kwargs):
-        artifacts = art.RunArtifacts(
-            run_dir=(tmp_path / "controller" / "first-run").resolve(),
-            shared_dir=(target / "runs").resolve(),
-        )
+        artifacts = art.RunArtifacts(run_id="first-run", root=wt.artifact_root(target))
         for path in (
             artifacts.context,
             artifacts.learnings,
@@ -131,7 +128,7 @@ def test_first_survey_memory_paths_exist_before_agent_dispatch(tmp_path, monkeyp
 
     result = requirements_survey_node(state)
 
-    assert result["context_path"] == str((target / "runs" / "context.md").resolve())
+    assert result["context_path"] == str(wt.artifact_root(target) / "shared" / "context.md")
 
 
 def test_unasked_questions_are_recorded_as_a_learning(state, stub, monkeypatch):
@@ -142,10 +139,41 @@ def test_unasked_questions_are_recorded_as_a_learning(state, stub, monkeypatch):
     requirements_survey_node(state)
 
     learnings = art.read_text(
-        art.prepare(state["run_dir"], state["target_repo"]).learnings
+        art.prepare(state["run_id"], state["target_repo"]).learnings
     )
     assert "database connection" in learnings
     assert "assumptions" in learnings
+
+
+def test_the_survey_is_granted_the_shared_artifact_directory(state, stub, monkeypatch):
+    """The shared store lives outside the target checkout (ADR-037); without
+    this grant the agent cannot reach context.md/user_choices.md/learnings.md
+    at all, regardless of what its own cwd happens to be."""
+    monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", False)
+    stub.set_text("requirements", json.dumps(SURVEY))
+
+    requirements_survey_node(state)
+
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
+    assert str(artifacts.shared_dir) in stub.calls[0]["extra_dirs"]
+
+
+def test_the_finalise_call_is_also_granted_the_shared_artifact_directory(state, stub, monkeypatch):
+    monkeypatch.setattr("config.INTERACTIVE_REQUIREMENTS", True)
+    stub.set_reply(
+        "requirements",
+        lambda prompt: AgentResult(ok=True, text=json.dumps(SURVEY), session_id="sess-x"),
+    )
+    stub.set_text("requirements-finalise", json.dumps(FINAL))
+
+    graph = _graph()
+    thread = {"configurable": {"thread_id": "t-extra-dirs"}}
+    graph.invoke(state, thread)
+    graph.invoke(Command(resume=["Yes"]), thread)
+
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
+    finalise = [call for call in stub.calls if call["tag"] == "requirements-finalise"][0]
+    assert str(artifacts.shared_dir) in finalise["extra_dirs"]
 
 
 def test_a_survey_with_no_questions_never_pauses(state, stub, monkeypatch):
@@ -169,7 +197,7 @@ def test_user_choices_records_only_what_the_user_said(state, stub, monkeypatch):
 
     requirements_survey_node(state)
     choices = art.read_text(
-        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+        art.prepare(state["run_id"], state["target_repo"]).user_choices
     )
 
     assert state["goal"] in choices
@@ -192,12 +220,11 @@ def test_user_choices_accumulate_while_context_remains_the_current_snapshot(
         run_id="testrun-2",
         goal="Add a readiness endpoint without changing the health contract",
         target_repo=state["target_repo"],
-        run_dir=str(tmp_path / "run-2"),
     )
     stub.set_text("requirements", json.dumps(SURVEY))
     requirements_survey_node(second)
 
-    artifacts = art.prepare(second["run_dir"], second["target_repo"])
+    artifacts = art.prepare(second["run_id"], second["target_repo"])
     choices = art.read_text(artifacts.user_choices)
     context = art.read_text(artifacts.context)
     assert state["goal"] in choices
@@ -224,7 +251,7 @@ def test_answers_are_recorded_verbatim_not_paraphrased(state, stub, monkeypatch)
     graph.invoke(Command(resume=["Yes, but with a 200ms timeout"]), thread)
 
     choices = art.read_text(
-        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+        art.prepare(state["run_id"], state["target_repo"]).user_choices
     )
     assert "Yes, but with a 200ms timeout" in choices
     assert "Should /health check the database connection?" in choices
@@ -248,7 +275,7 @@ def test_material_questions_suspend_the_graph(state, stub, monkeypatch):
     # The first-run file is readable, but no synthesized context is published
     # until the user's answers are available.
     assert art.read_text(
-        art.prepare(state["run_dir"], state["target_repo"]).context
+        art.prepare(state["run_id"], state["target_repo"]).context
     ) == ""
 
 
@@ -325,7 +352,7 @@ def test_an_unanswered_question_is_not_recorded_as_answered(state, stub, monkeyp
     graph.invoke(Command(resume=["Yes", "   "]), thread)
 
     choices = art.read_text(
-        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+        art.prepare(state["run_id"], state["target_repo"]).user_choices
     )
     assert "Check the DB?" in choices
     assert "Require auth?" not in choices
@@ -377,7 +404,7 @@ def test_a_failed_finalise_keeps_the_survey_and_the_answers(state, stub, monkeyp
     assert done.get("status") != "failed"
     assert "Expose `GET /health`" in done["context"]  # the survey draft survived
     choices = art.read_text(
-        art.prepare(state["run_dir"], state["target_repo"]).user_choices
+        art.prepare(state["run_id"], state["target_repo"]).user_choices
     )
     assert "Yes, ping it" in choices
 

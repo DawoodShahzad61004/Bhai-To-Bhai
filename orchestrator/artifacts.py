@@ -11,10 +11,15 @@ Recorded permanently in docs/Architecture.md, the artifacts carried forward are:
 plus `learnings.md`, which four of the six agents append to and which is
 invisible in the drawing because it is a write-side channel touching most boxes.
 
-The context, user choices, and learnings are project-scoped under the target
-repository's `runs/` directory so a later run can reuse them. Run-specific
-artifacts live there too, grouped by kind and then run id: plans, tasks, events,
-and reviews remain auditable without turning `runs/<run-id>/` into the layout.
+The store lives outside the target repository's working tree, at
+`worktrees.artifact_root(target_repo)` — a sibling directory, same idiom as the
+task worktrees themselves (ADR-037; this superseded ADR-029's in-repo `runs/`
+location, which collided with a target project's own files of that name and
+did not survive an ordinary `git clean`). Inside that root, `shared/` holds
+`context.md`, `learnings.md`, and `user_choices.md` — the only directory ever
+granted to an agent via `extra_dirs` — and `records/` holds everything grouped
+by kind and then run id: plans, tasks, events, and reviews, auditable per run
+but never itself handed to an agent.
 
 Two properties are deliberate. Everything is written the moment it is produced,
 never buffered to the end of a run — a killed process still leaves a recoverable
@@ -30,8 +35,6 @@ import contextlib
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -39,29 +42,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import worktrees as wt
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
 CONTEXT_FILE = "context.md"
 USER_CHOICES_FILE = "user_choices.md"
-PLAN_FILE = "plan.json"
 LEARNINGS_FILE = "learnings.md"
-EVENTS_FILE = "events.jsonl"
 TASK_GLOB = "TASK-*.json"
-
-_LOCAL_EXCLUDE_BEGIN = "# >>> bhai-to-bhai artifacts >>>"
-_LOCAL_EXCLUDE_END = "# <<< bhai-to-bhai artifacts <<<"
-_LOCAL_EXCLUDE_PATTERNS = (
-    "/runs/context.md",
-    "/runs/learnings.md",
-    "/runs/learnings.md.lock",
-    "/runs/user_choices.md",
-    "/runs/plans/",
-    "/runs/tasks/",
-    "/runs/reviews/",
-    "/runs/events/",
-)
 
 # A task id has to survive being used as a filename, a git branch component and a
 # log tag, so it is constrained rather than trusted. The planner is a language
@@ -84,14 +73,23 @@ class RunArtifacts:
     supplies — Bugs.md #22 is a chart written into the harness's scratchpad
     because the brief said "the workspace directory" and the harness said
     C:\\Users\\...\\scratchpad.
+
+    `root` is one target's whole artifact store (`worktrees.artifact_root()`),
+    shared by every run against that target. `shared_dir` — the small,
+    frequently-granted files — and `records_dir` — the growing per-run audit
+    trail, never granted to an agent — are the two halves of it.
     """
 
-    run_dir: Path
-    shared_dir: Path
+    run_id: str
+    root: Path
 
     @property
-    def run_id(self) -> str:
-        return safe_id(self.run_dir.name, fallback="run")
+    def shared_dir(self) -> Path:
+        return self.root / "shared"
+
+    @property
+    def records_dir(self) -> Path:
+        return self.root / "records"
 
     @property
     def context(self) -> Path:
@@ -103,7 +101,7 @@ class RunArtifacts:
 
     @property
     def plan(self) -> Path:
-        return self.shared_dir / "plans" / f"{self.run_id}.json"
+        return self.records_dir / "plans" / f"{self.run_id}.json"
 
     @property
     def learnings(self) -> Path:
@@ -115,15 +113,15 @@ class RunArtifacts:
 
     @property
     def events(self) -> Path:
-        return self.shared_dir / "events" / f"{self.run_id}.jsonl"
+        return self.records_dir / "events" / f"{self.run_id}.jsonl"
 
     @property
     def tasks_dir(self) -> Path:
-        return self.shared_dir / "tasks" / self.run_id
+        return self.records_dir / "tasks" / self.run_id
 
     @property
     def reviews_dir(self) -> Path:
-        return self.shared_dir / "reviews" / self.run_id
+        return self.records_dir / "reviews" / self.run_id
 
     def task_file(self, task_id: str) -> Path:
         return self.tasks_dir / f"TASK-{safe_id(task_id)}.json"
@@ -138,78 +136,30 @@ class RunArtifacts:
         return self.reviews_dir / f"supervisor-{attempt:02d}.md"
 
 
-def _git_exclude_path(target_repo: Path) -> Path | None:
-    """Resolve this checkout's local exclude file without touching .gitignore."""
-    try:
-        completed = subprocess.run(
-            [shutil.which("git") or "git", "rev-parse", "--git-path", "info/exclude"],
-            cwd=str(target_repo),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    if completed.returncode != 0 or not completed.stdout.strip():
-        return None
-    path = Path(completed.stdout.strip())
-    return path.resolve() if path.is_absolute() else (target_repo / path).resolve()
-
-
-def _ensure_local_artifacts_excluded(target_repo: Path) -> None:
-    """Keep generated artifacts out of target commits using Git-local config.
-
-    Exact paths are excluded instead of the whole `runs/` directory, so a
-    target project that already owns unrelated files there is not hidden.
-    """
-    exclude_path = _git_exclude_path(target_repo)
-    if exclude_path is None:
-        return
-    exclude_path.parent.mkdir(parents=True, exist_ok=True)
-    current = (
-        exclude_path.read_text(encoding="utf-8", errors="replace")
-        if exclude_path.exists()
-        else ""
-    )
-    block = "\n".join(
-        (_LOCAL_EXCLUDE_BEGIN, *_LOCAL_EXCLUDE_PATTERNS, _LOCAL_EXCLUDE_END)
-    )
-    pattern = re.compile(
-        re.escape(_LOCAL_EXCLUDE_BEGIN) + r".*?" + re.escape(_LOCAL_EXCLUDE_END),
-        re.DOTALL,
-    )
-    if pattern.search(current):
-        updated = pattern.sub(block, current)
-    else:
-        prefix = current.rstrip("\r\n")
-        updated = f"{prefix}\n\n{block}\n" if prefix else f"{block}\n"
-    if updated != current:
-        exclude_path.write_text(updated, encoding="utf-8")
-
-
 def _copy_legacy_file(source: Path, destination: Path) -> None:
     if source.is_file() and not destination.exists():
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+        destination.write_bytes(source.read_bytes())
         logger.info("migrated legacy artifact %s -> %s", source, destination)
 
 
-def _migrate_legacy_layout(artifacts: RunArtifacts) -> None:
-    """Copy this run's old flat artifacts into the category-based layout."""
-    legacy = artifacts.run_dir
+def _migrate_legacy_layout(target_repo: Path, artifacts: RunArtifacts) -> None:
+    """Copy the shared project memory out of the pre-ADR-037 in-repo `runs/`.
+
+    Guarded on the shared files' own names existing there, not on `runs/`
+    merely existing — a target project can already own a `runs/` directory of
+    unrelated content (a real collision observed in practice: a sibling
+    project's own dry-run logs), and this must never touch it. Only the three
+    named shared files migrate; the source is never deleted, so a wrong guard
+    loses nothing, and old per-run plans/tasks/reviews/events are left where
+    they are rather than reshuffled into the new run's record tree.
+    """
+    legacy = target_repo / "runs"
+    if not ((legacy / LEARNINGS_FILE).is_file() or (legacy / USER_CHOICES_FILE).is_file()):
+        return
     _copy_legacy_file(legacy / CONTEXT_FILE, artifacts.context)
     _copy_legacy_file(legacy / USER_CHOICES_FILE, artifacts.user_choices)
     _copy_legacy_file(legacy / LEARNINGS_FILE, artifacts.learnings)
-    _copy_legacy_file(legacy / PLAN_FILE, artifacts.plan)
-    _copy_legacy_file(legacy / EVENTS_FILE, artifacts.events)
-    for source in legacy.glob(TASK_GLOB):
-        _copy_legacy_file(source, artifacts.tasks_dir / source.name)
-    legacy_reviews = legacy / "reviews"
-    if legacy_reviews.is_dir():
-        for source in legacy_reviews.glob("*.md"):
-            _copy_legacy_file(source, artifacts.reviews_dir / source.name)
 
 
 def _initialise_empty_artifacts(artifacts: RunArtifacts) -> None:
@@ -234,35 +184,27 @@ def _initialise_empty_artifacts(artifacts: RunArtifacts) -> None:
             pass
 
 
-def prepare(
-    run_dir: Path | str,
-    target_repo: Path | str | None = None,
-) -> RunArtifacts:
-    """Create the run-local and target-repository artifact directories.
+def prepare(run_id: str, target_repo: Path | str) -> RunArtifacts:
+    """Create this target's artifact store and one run's record directories.
 
-    `target_repo` is optional for callers that only need an isolated artifact
-    layout (notably tests and the append-learning CLI). Production pipeline
-    callers always provide it, making every artifact live under the target's
-    `runs/` directory while `run_dir` remains the controller's run identity and
-    legacy migration source.
+    The store lives at `worktrees.artifact_root(target_repo)` — outside the
+    target's working tree — so `shared/` (context, learnings, user choices) is
+    reused across every run against this target, while `records_dir`'s
+    plans/tasks/reviews/events are grouped by this specific `run_id`.
     """
-    resolved = Path(run_dir).resolve()
-    shared = (
-        (Path(target_repo).resolve() / "runs")
-        if target_repo is not None
-        else resolved
-    )
-    resolved.mkdir(parents=True, exist_ok=True)
-    shared.mkdir(parents=True, exist_ok=True)
-    artifacts = RunArtifacts(run_dir=resolved, shared_dir=shared)
+    run_id = safe_id(run_id, fallback="run")
+    target = Path(target_repo).resolve()
+    root = wt.artifact_root(target)
+    artifacts = RunArtifacts(run_id=run_id, root=root)
+
+    artifacts.shared_dir.mkdir(parents=True, exist_ok=True)
     artifacts.tasks_dir.mkdir(parents=True, exist_ok=True)
     artifacts.reviews_dir.mkdir(parents=True, exist_ok=True)
-    (shared / "plans").mkdir(exist_ok=True)
-    (shared / "events").mkdir(exist_ok=True)
-    if target_repo is not None:
-        _ensure_local_artifacts_excluded(Path(target_repo).resolve())
-        _migrate_legacy_layout(artifacts)
-        _initialise_empty_artifacts(artifacts)
+    (artifacts.records_dir / "plans").mkdir(parents=True, exist_ok=True)
+    (artifacts.records_dir / "events").mkdir(parents=True, exist_ok=True)
+
+    _migrate_legacy_layout(target, artifacts)
+    _initialise_empty_artifacts(artifacts)
     return artifacts
 
 
@@ -451,6 +393,11 @@ def _cli(argv: list[str] | None = None) -> int:
     since they run as a separate OS process from this one. Reuses
     append_learning rather than reimplementing it, so there is exactly one
     place that knows the file's format and its locking.
+
+    `artifacts_dir` is the `shared/` directory itself — the same path a coding
+    agent already received via `--add-dir` (`RunArtifacts.shared_dir`) — not a
+    directory this command prepares. Nothing under `records/` is reachable
+    from here, by construction: this command only ever needs `learnings.md`.
     """
     import argparse
 
@@ -463,7 +410,8 @@ def _cli(argv: list[str] | None = None) -> int:
         "append-learning", help="Append a finding, excluding other concurrent writers."
     )
     append.add_argument(
-        "artifacts_dir", help="Directory containing the shared learnings.md (absolute path)."
+        "artifacts_dir",
+        help="The shared artifact directory containing learnings.md (absolute path).",
     )
     append.add_argument("agent", help='Who is reporting this, e.g. "task-T-001".')
     append.add_argument(
@@ -476,7 +424,8 @@ def _cli(argv: list[str] | None = None) -> int:
         print("error: no message given (pass it as an argument or on stdin)", file=sys.stderr)
         return 1
 
-    run_artifacts = prepare(args.artifacts_dir)
+    shared_dir = Path(args.artifacts_dir).resolve()
+    run_artifacts = RunArtifacts(run_id="_cli", root=shared_dir.parent)
     append_learning(run_artifacts, args.agent, message)
     print(f"appended to {run_artifacts.learnings}")
     return 0

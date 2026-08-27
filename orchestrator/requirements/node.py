@@ -149,7 +149,7 @@ def _finish(
     cost: float,
 ) -> dict:
     """Write both artifacts and return the state update. Shared by both nodes."""
-    artifacts = art.prepare(state["run_dir"], state["target_repo"])
+    artifacts = art.prepare(state["run_id"], state["target_repo"])
     goal = state["goal"]
 
     context_md = _context_markdown(goal=goal, payload=payload, qa=qa)
@@ -213,7 +213,7 @@ def requirements_survey_node(state: PipelineState) -> dict:
     documents are written once, by whichever node reaches the end.
     """
     target = state["target_repo"]
-    artifacts = art.prepare(state["run_dir"], target)
+    artifacts = art.prepare(state["run_id"], target)
     logger.info("[%s] surveying %s", AGENT, target)
 
     survey = run_agent(
@@ -230,6 +230,10 @@ def requirements_survey_node(state: PipelineState) -> dict:
         cwd=target,
         tag=AGENT,
         tools=SURVEY_TOOLS,
+        # The shared artifact directory now lives outside the target checkout
+        # (ADR-037), so an agent sandboxed to `cwd` needs this grant to reach
+        # context.md / user_choices.md / learnings.md at all.
+        extra_dirs=(str(artifacts.shared_dir),),
     )
     if not survey.ok:
         return _failure(
@@ -311,6 +315,7 @@ def requirements_clarify_node(state: PipelineState) -> dict:
     logger.info("[%s] resumed with %d of %d answered", AGENT, len(qa), len(questions))
 
     target = state["target_repo"]
+    artifacts = art.prepare(state["run_id"], target)
     final = run_agent(
         finalise_prompt(
             goal=state["goal"],
@@ -326,6 +331,9 @@ def requirements_clarify_node(state: PipelineState) -> dict:
         # Same session: the agent already read the project once, and paying for
         # that twice is the switching cost this pipeline exists to price.
         resume_session=state.get("survey_session", ""),
+        # See the survey call above: the shared artifact directory is outside
+        # the target checkout (ADR-037) and needs an explicit grant.
+        extra_dirs=(str(artifacts.shared_dir),),
     )
 
     if final.ok:

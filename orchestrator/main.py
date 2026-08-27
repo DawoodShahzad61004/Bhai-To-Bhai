@@ -104,6 +104,11 @@ def describe_config() -> str:
         f"  supervisor        {'ON' if config.ENABLE_SUPERVISOR else 'OFF'}",
         f"  interactive Q&A   {'ON' if config.INTERACTIVE_REQUIREMENTS else 'OFF'}",
         f"  git worktrees     {'ON' if config.USE_GIT_WORKTREES else 'OFF'}",
+        "  artifact store    "
+        + (
+            config.ARTIFACT_ROOT
+            or f"<target-parent>/{config.ARTIFACT_DIR_NAME}/<target-name>-<hash>"
+        ),
         f"  parallel tasks    {config.MAX_PARALLEL_TASKS}",
         f"  rework rounds     {config.MAX_REWORK_ROUNDS} per wave",
         f"  replan rounds     {config.MAX_REPLAN_ROUNDS}",
@@ -264,8 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     run_id = args.resume or args.run_id or datetime.now().strftime("run-%Y%m%d-%H%M%S")
-    run_dir = config.RUNS_DIR / run_id
-    artifacts = art.prepare(run_dir, target)
+    artifacts = art.prepare(run_id, target)
 
     log_file = setup_logging(app_name=f"orchestrator_{run_id}")
     set_run_id(run_id)
@@ -296,7 +300,6 @@ def main(argv: list[str] | None = None) -> int:
                     run_id=run_id,
                     goal=args.goal,
                     target_repo=str(target),
-                    run_dir=str(artifacts.run_dir),
                 ),
                 thread,
                 graph,

@@ -142,7 +142,6 @@ class PipelineState(TypedDict):
     run_id: str
     goal: str
     target_repo: str  # absolute path to the repository being worked on
-    run_dir: str  # absolute path to this run's artifact directory
 
     # ── Agent 1: requirements gathering ──────────────────────────────────────
     # `context.md` is the requirements themselves. `user_choices.md` is the
@@ -228,7 +227,6 @@ def initial_state(
     run_id: str,
     goal: str,
     target_repo: str,
-    run_dir: str,
 ) -> PipelineState:
     """A fresh run's state, with every counter explicitly zeroed.
 
@@ -239,7 +237,6 @@ def initial_state(
         run_id=run_id,
         goal=goal,
         target_repo=target_repo,
-        run_dir=run_dir,
         current_wave=0,
         rework_count=0,
         replan_count=0,

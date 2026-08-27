@@ -15,12 +15,15 @@ in one cannot wander into another's.
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from config import (
+    ARTIFACT_DIR_NAME,
+    ARTIFACT_ROOT,
     GIT_TIMEOUT_SECONDS,
     INTEGRATION_BRANCH_TEMPLATE,
     TASK_BRANCH_TEMPLATE,
@@ -113,6 +116,25 @@ def worktree_root(target_repo: Path | str) -> Path:
     """Where this run's worktrees live: a sibling of the target repository."""
     target = Path(target_repo).resolve()
     return target.parent / WORKTREE_DIR_NAME
+
+
+def artifact_root(target_repo: Path | str) -> Path:
+    """Where this target's artifact store lives: a sibling of the target repository.
+
+    Same idiom as `worktree_root()` above, and for the same reason: state that
+    is not the target's own product code should not live inside its working
+    tree, where an ordinary `git clean` or a target that already owns a
+    `runs/` directory can destroy or collide with it (Decisions.md ADR-037).
+
+    Named `<target-name>-<hash8>` rather than the bare target name so two
+    different targets that happen to share a basename (two clones of the same
+    project under different parents, or two unrelated projects both called
+    "app") never resolve to the same store.
+    """
+    target = Path(target_repo).resolve()
+    base = Path(ARTIFACT_ROOT) if ARTIFACT_ROOT else target.parent / ARTIFACT_DIR_NAME
+    digest = hashlib.sha256(str(target).casefold().encode("utf-8")).hexdigest()[:8]
+    return base / f"{target.name}-{digest}"
 
 
 def branch_name(run_id: str, task_id: str) -> str:
@@ -220,10 +242,19 @@ def merge(
     Left in a conflicted state on failure, deliberately: that is the state the
     merger agent is dispatched to resolve. Aborting here would throw away the
     work it needs to see.
+
+    Cleaned of untracked/ignored files immediately before the merge, because
+    this checkout is long-lived across the whole run and anything left behind
+    by an earlier command — a stray `__pycache__/*.pyc`, say — can collide
+    with an incoming branch that adds a tracked file at the same path, which
+    git refuses to resolve on its own (docs/Bugs.md #51). Safe now that the
+    artifact store lives outside the target's working tree (ADR-037): this
+    checkout holds only the target's own product code.
     """
     checkout = git(target_repo, "checkout", into)
     if not checkout.ok:
         return checkout
+    git(target_repo, "clean", "-xdff")
     return git(target_repo, "merge", "--no-ff", "-m", message, branch)
 
 
