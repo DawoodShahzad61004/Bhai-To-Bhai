@@ -101,9 +101,9 @@ AGENTS = {
     "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
-    "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
-    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
-    "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "planner": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
+    "reviewer": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
+    "supervisor": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
 }
 
 CODING_AGENT_A = AgentSpec(
@@ -119,11 +119,20 @@ CODING_AGENT_B = AgentSpec(
 
 MAX_CODING_AGENT_COUNT = 3
 
-SMALL_MEDIUM_MODELS = [
+# Split by model scale, not by backend: within a tier, judgment about which
+# backend can actually finish a given task (Bugs.md's Ollama-bridge findings —
+# `apply_patch` unsupported and the shell fallback blocked by sandbox policy,
+# reproduced against both a 4B and a 20B model) lives in the planner prompt,
+# not in which list a model sits in.
+SMALL_MODELS = [
     # ("haiku", "claude"),
+    ("qwen3.5:4b", "ollama"),
+    # ("qwen3:8b", "ollama"),
+    # ("gemini-3.1-flash-lite", "gemini"),
+]
+MEDIUM_MODELS = [
     ("auto", "copilot"),
     ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
-    # ("gemini-3.1-flash-lite", "gemini"),
     # ("gpt-oss:120b-cloud", "ollama"),
     ("gpt-oss:20b-cloud", "ollama"),
     # ("gemma4:31b-cloud", "ollama"),
@@ -131,12 +140,10 @@ SMALL_MEDIUM_MODELS = [
     ("nemotron-3-nano:30b-cloud", "ollama"),
     # ("nemotron-3-super:cloud", "ollama"),
     # ("nemotron-3-ultra:cloud", "ollama"),
-    ("qwen3.5:4b", "ollama"),
-    # ("qwen3:8b", "ollama"),
 ]
 EXPERT_MODELS = [
-    # ("sonnet", "claude"), 
-    ("", "codex"),
+    ("sonnet", "claude"), 
+    # ("", "codex"),
     # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
 ]
 

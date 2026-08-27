@@ -140,6 +140,8 @@ def run_codex(
     custom_provider_env_key: str = "",
     backend_label: str = "Codex",
     disable_memories: bool = False,
+    isolate_from_user_config: bool = False,
+    disable_features: tuple[str, ...] = (),
 ) -> AgentResult:
     """One Codex-backed turn. Returns a result; never raises.
 
@@ -153,6 +155,14 @@ def run_codex(
     so an agent whose worktree is one directory and whose shared artifacts live
     in another cannot write to the second without `--add-dir` naming it
     explicitly.
+
+    `isolate_from_user_config` and `disable_features` exist because `codex exec`
+    otherwise loads the operator's interactive `~/.codex/config.toml` into every
+    headless dispatch — desktop-app plugins, MCP servers, and personality/skill
+    context that a pipeline stage never asked for and cannot use. Measured on
+    this project's Ollama bridge: that config alone added tens of thousands of
+    prompt tokens and surfaced an "under development" feature warning before the
+    turn even started, verified with `codex exec ... --ignore-user-config`.
     """
     if local_provider and custom_provider_id:
         return AgentResult(
@@ -187,6 +197,13 @@ def run_codex(
         # This does not disturb --output-last-message; both are populated.
         "--json",
     ]
+    if isolate_from_user_config:
+        # auth.json is unaffected (`--help`: "auth still uses CODEX_HOME"); only
+        # the interactive desktop profile — plugins, MCP servers, personality —
+        # is skipped.
+        argv.append("--ignore-user-config")
+    for feature in disable_features:
+        argv += ["--disable", feature]
     if local_provider:
         # Codex assumes reasoning for unknown local models; Ollama rejects that
         # request for non-thinking models such as Qwen 2.5 Coder.

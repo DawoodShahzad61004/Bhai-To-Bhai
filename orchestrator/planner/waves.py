@@ -100,11 +100,12 @@ def normalise_coding_agents(
     """Coerce the agent's requested coding-agent roster into `{backend, model}` dicts.
 
     Returns (agents, problems). Each requested slot must name a (model, backend)
-    pair from `allowed` — normally config.SMALL_MEDIUM_MODELS + EXPERT_MODELS —
-    the same menu the plan prompt offered. A slot naming anything else is
-    dropped and named, the discipline normalise_tasks applies to a task the
-    pipeline cannot dispatch. An empty or entirely-invalid result is reported as
-    a problem but is not itself a failure: the caller decides the fallback.
+    pair from `allowed` — normally config.SMALL_MODELS + MEDIUM_MODELS +
+    EXPERT_MODELS — the same menu the plan prompt offered. A slot naming
+    anything else is dropped and named, the discipline normalise_tasks applies
+    to a task the pipeline cannot dispatch. An empty or entirely-invalid result
+    is reported as a problem but is not itself a failure: the caller decides
+    the fallback.
     """
     allowed_pairs = {(backend, model) for model, backend in allowed}
     agents: list[dict[str, str]] = []

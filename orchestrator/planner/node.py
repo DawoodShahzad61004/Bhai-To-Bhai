@@ -66,7 +66,8 @@ def planner_node(state: PipelineState) -> dict:
             user_choices_path=str(artifacts.user_choices),
             target_repo=target,
             max_coding_agents=config.MAX_CODING_AGENT_COUNT,
-            small_medium_models=config.SMALL_MEDIUM_MODELS,
+            small_models=config.SMALL_MODELS,
+            medium_models=config.MEDIUM_MODELS,
             expert_models=config.EXPERT_MODELS,
             supervisor_comments=comments,
         ),
@@ -128,7 +129,7 @@ def planner_node(state: PipelineState) -> dict:
     coding_agents, agent_problems = normalise_coding_agents(
         payload.get("coding_agents"),
         max_count=config.MAX_CODING_AGENT_COUNT,
-        allowed=config.SMALL_MEDIUM_MODELS + config.EXPERT_MODELS,
+        allowed=config.SMALL_MODELS + config.MEDIUM_MODELS + config.EXPERT_MODELS,
     )
     if agent_problems:
         logger.warning("[%s] coding-agent roster adjusted: %s", AGENT, "; ".join(agent_problems))

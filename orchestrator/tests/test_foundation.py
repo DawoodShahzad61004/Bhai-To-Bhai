@@ -101,7 +101,14 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     assert argv[argv.index("--local-provider") + 1] == "ollama"
     assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
     assert "--oss" in argv
-    assert "--disable" not in argv
+    # Bugs.md #44/#39: the operator's interactive desktop profile (plugins, MCP
+    # servers, multi-agent tooling) must not bleed into a headless local-model
+    # dispatch — it drowned the actual task in tens of thousands of tokens.
+    assert "--ignore-user-config" in argv
+    from adapters.ollama import _IRRELEVANT_FEATURES
+
+    disabled = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--disable"]
+    assert disabled == list(_IRRELEVANT_FEATURES)
 
 
 def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):

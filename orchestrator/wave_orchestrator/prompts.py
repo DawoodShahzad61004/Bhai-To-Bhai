@@ -27,6 +27,16 @@ Windows shell safety rules for this pipeline:
 - For paths with spaces, use PowerShell `-LiteralPath` or quote the complete   path; do not pass a split path such as `Marker-PDF Report.md` as two arguments.
 - If a patch/write helper cannot create a file after two attempts, switch to a   native PowerShell write. In Windows PowerShell 5.1, use `-Encoding UTF8` or   `[System.IO.File]::WriteAllText(..., [System.Text.UTF8Encoding]::new($false))`;   do not use `utf8NoBOM`, which only exists in newer PowerShell.
 
+If your file-write tool is rejected as an unsupported or unavailable call, that \
+is a fixed fact about this session, not a naming mistake — do not retry it under \
+a guessed alternate name (`applypatch`, `patch`, and similar are not real \
+fallbacks). Try at most one different mechanism for the same edit; if that is \
+also rejected (for example "blocked by policy"), stop immediately and reply with \
+status="blocked" and blocked_reason naming exactly what was rejected. Spending \
+your whole turn retrying a call that has already been refused produces no work \
+and no usable diagnosis — an honest, fast "blocked" is strictly more useful than \
+that.
+
 Never send a message that contains only narration. Because your turn ends the \
 moment you reply, a message like "Now I need to update X" with no tool call \
 attached IS your reply — the turn ends there whether or not the work described \

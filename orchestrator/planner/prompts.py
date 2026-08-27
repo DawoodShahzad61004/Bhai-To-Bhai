@@ -45,19 +45,20 @@ are merged afterwards by a separate agent. So:
 ## Sizing the coding-agent roster
 
 You also decide how many coding agents this plan gets and which CLI and model \
-each one runs, within the two tiers below. This is a real capacity and cost \
+each one runs, within the three tiers below. This is a real capacity and cost \
 decision, not a formality.
 
 {model_menu}
 
 Pick between 1 and {max_coding_agents} agents. More agents only helps if the \
 plan actually has that much independent, parallel work in a single wave — sizing \
-the roster above your own wave widths just leaves agents idle. Use \
-small/medium-tier agents for tasks that are simple, mechanical, or long but \
-straightforward (boilerplate, repetitive edits, glue code); use expert-tier \
-agents for tasks that require real judgment (tricky logic, ambiguous \
-requirements, anything a mistake in would be expensive to unwind). A roster can, \
-and often should, mix tiers.
+the roster above your own wave widths just leaves agents idle. Use small-tier \
+agents only for trivial, low-stakes work where a wrong attempt costs little; use \
+medium-tier agents for real but bounded coding work (boilerplate, repetitive \
+edits, glue code) that still involves writing files, keeping the backend \
+restriction above in mind; use expert-tier agents for tasks that require real \
+judgment (tricky logic, ambiguous requirements, anything a mistake in would be \
+expensive to unwind). A roster can, and often should, mix tiers.
 
 **Order the list to match when each tier's work actually happens.** Tasks are \
 dispatched through this list in one continuous rotation across the whole run, in \
@@ -67,8 +68,8 @@ you know the shape you are creating: tasks with no unmet dependencies run first,
 and a task that depends on one of those cannot run until it is done. So if the \
 foundational, dependency-free work needs real judgment and what depends on it \
 afterward is comparatively mechanical, put the expert-tier entries first in the \
-list and the small/medium-tier entries after — the rotation will then reach the \
-right tier for the right stage of the work instead of cycling through all of \
+list and the small- and medium-tier entries after — the rotation will then reach \
+the right tier for the right stage of the work instead of cycling through all of \
 them evenly regardless of when each task actually runs.
 
 Return this JSON object:
@@ -95,11 +96,25 @@ dependencies and the pipeline derives the schedule.\
 """
 
 MODEL_MENU = """\
-Small/medium tier (simple and/or longer mechanical work):
-{small_medium}
+Small tier (trivial, mechanical work; a wrong attempt costs little):
+{small}
+
+Medium tier (real but bounded coding work — more capable than small, still not \
+expert judgment):
+{medium}
 
 Expert tier (complex, judgment-heavy work):
-{expert}\
+{expert}
+
+Do not assign a task that creates or edits a file to backend="ollama", at any \
+model size. Reproduced against both a 4B and a 20B model: Codex's file-edit \
+tool is unavailable through that bridge, its shell fallback is auto-rejected by \
+sandbox policy with no human to approve it, and the agent burns its whole turn \
+retrying before giving up — sometimes without even reporting failure. \
+backend="ollama" is only safe for read-only or advisory work. backend="local_llm" \
+reaches Codex through a different path and has not shown this specific failure, \
+but has not been proven reliable for file edits either — prefer it over \
+backend="ollama" for coding work, not as a confirmed substitute for it.\
 """
 
 REPLAN_NOTE = """\
@@ -132,13 +147,15 @@ def plan_prompt(
     user_choices_path: str,
     target_repo: str,
     max_coding_agents: int,
-    small_medium_models: list[tuple[str, str]],
+    small_models: list[tuple[str, str]],
+    medium_models: list[tuple[str, str]],
     expert_models: list[tuple[str, str]],
     supervisor_comments: str = "",
 ) -> str:
     replan = REPLAN_NOTE.format(comments=supervisor_comments) if supervisor_comments else ""
     model_menu = MODEL_MENU.format(
-        small_medium=_format_model_menu(small_medium_models),
+        small=_format_model_menu(small_models),
+        medium=_format_model_menu(medium_models),
         expert=_format_model_menu(expert_models),
     )
     brief = PLAN_BRIEF.format(model_menu=model_menu, max_coding_agents=max_coding_agents)

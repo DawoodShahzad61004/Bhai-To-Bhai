@@ -148,11 +148,11 @@ def test_an_id_field_is_accepted_in_place_of_task_id():
 
 # ── The coding-agent roster ──────────────────────────────────────────────────
 
-_MENU = config.SMALL_MEDIUM_MODELS + config.EXPERT_MODELS
+_MENU = config.SMALL_MODELS + config.MEDIUM_MODELS + config.EXPERT_MODELS
 
 
 def test_a_roster_naming_menu_pairs_is_accepted():
-    small_model, small_backend = config.SMALL_MEDIUM_MODELS[0]
+    small_model, small_backend = config.SMALL_MODELS[0]
     expert_model, expert_backend = config.EXPERT_MODELS[0]
     agents, problems = normalise_coding_agents(
         [
@@ -257,7 +257,7 @@ def test_the_prompt_offers_the_model_menu_and_the_agent_cap(state, stub):
     planner_node(state)
 
     prompt = stub.calls[0]["prompt"]
-    for model, backend in config.SMALL_MEDIUM_MODELS + config.EXPERT_MODELS:
+    for model, backend in config.SMALL_MODELS + config.MEDIUM_MODELS + config.EXPERT_MODELS:
         assert backend in prompt
     assert str(config.MAX_CODING_AGENT_COUNT) in prompt
 
