@@ -33,15 +33,25 @@ _DEBUG_BLOCK_LIMIT = 12000
 # Workflow nodes use Claude-style abstract tool names. Copilot CLI exposes a
 # different concrete tool inventory, so normalize the request at this adapter
 # boundary instead of granting every tool unconditionally.
+#
+# `powershell` is a session-based tool: a long-running command (e.g. a test
+# runner that drops into watch mode) does not return its output inline, and
+# the companion tools below are how the agent reads it back, feeds it input,
+# or ends it. Omitting them from `--available-tools` while still allowing
+# `powershell` itself lets an agent start a command it then has no way to
+# read the result of — `read_powershell is unavailable in this environment
+# (CommandNotFound)` is that failure surfacing mid-task.
+_POWERSHELL_TOOL_FAMILY = ("powershell", "read_powershell", "write_powershell", "kill_powershell")
+
 _TOOL_ALIASES: dict[str, tuple[str, ...]] = {
     "read": ("view",),
     "notebookread": ("view",),
     "glob": ("glob",),
     "grep": ("grep",),
     "rg": ("grep",),
-    "bash": ("powershell",) if os.name == "nt" else ("bash",),
-    "shell": ("powershell",) if os.name == "nt" else ("bash",),
-    "powershell": ("powershell",),
+    "bash": _POWERSHELL_TOOL_FAMILY if os.name == "nt" else ("bash",),
+    "shell": _POWERSHELL_TOOL_FAMILY if os.name == "nt" else ("bash",),
+    "powershell": _POWERSHELL_TOOL_FAMILY,
     "write": ("create", "edit", "apply_patch"),
     "edit": ("edit", "apply_patch"),
     "multiedit": ("edit", "apply_patch"),
@@ -249,6 +259,7 @@ def _prompt_contract_block(prompt: str) -> str:
     markers = (
         "return this json object:",
         "reply with a single json object matching this schema:",
+        "reply with a single json object and nothing else:",
     )
     for marker in markers:
         marker_index = lowered.find(marker)

@@ -98,7 +98,7 @@ class TaskOutcome:
         """
         if not self.ok:
             return f"{self.task_id}: FAILED ({self.error_kind}) — {self.error_message[:200]}"
-        changed = ", ".join(self.changed_files) or "NOTHING"
+        changed = parsing.joined_and_capped(self.changed_files, empty="NOTHING")
         return f"{self.task_id}: reported {self.status or 'nothing'}; git saw changes to {changed}"
 
 
@@ -145,9 +145,17 @@ def run_task(
     run_id: str,
     base: str,
     rework_comments: str,
-    resume_session: str,
+    previous_summary: str,
 ) -> TaskOutcome:
-    """One coding subagent, in its own worktree. Returns an outcome; never raises."""
+    """One coding subagent, in its own worktree. Returns an outcome; never raises.
+
+    Always a cold start. A rework's previous vendor session is never resumed —
+    its worktree has just been destroyed and rebuilt (see
+    wave_orchestrator/node.py's module docstring for why) — so a resumed
+    session would answer from a memory of files that no longer exist rather
+    than looking again. `previous_summary` and `rework_comments` carry the
+    previous attempt forward instead, written into the fresh prompt itself.
+    """
     task_id = task["task_id"]
     outcome = TaskOutcome(task_id=task_id, ok=False)
 
@@ -180,13 +188,13 @@ def run_task(
             python_exe=sys.executable,
             script_path=_ARTIFACTS_SCRIPT,
             rework_comments=rework_comments,
+            previous_summary=previous_summary,
         ),
         spec=agent,
         system_prompt=CODING_FRAME,
         cwd=str(workdir),
         tag=f"task-{task_id}",
         tools=CODING_TOOLS,
-        resume_session=resume_session,
         # The shared artifact directory is in the target checkout, not in this
         # task's isolated worktree, so the agent still needs explicit access.
         extra_dirs=(str(artifacts.shared_dir),),
@@ -224,6 +232,14 @@ def run_task(
     outcome.claimed_files = claimed
     outcome.ok = status != "blocked"
 
+    if not outcome.ok:
+        # A blocked agent is a reported failure, not a crashed one — result.ok
+        # is True here, so the `not result.ok` branch above never ran and never
+        # set these. Leaving them blank is what produced a bare "FAILED () — "
+        # log line with the actual reason nowhere in it.
+        outcome.error_kind = "blocked"
+        outcome.error_message = summary
+
     if outcome.ok and not outcome.changed_files:
         # The Bugs.md #21 signature: a fluent, specific, plausible report for work
         # that left no trace. Demoted to a failure here rather than passed on as a
@@ -249,7 +265,7 @@ def run_wave(
     agent_offset: int = 0,
     task_slots: dict[str, int] | None = None,
     rework_comments: dict[str, str] | None = None,
-    sessions: dict[str, str] | None = None,
+    previous_summaries: dict[str, str] | None = None,
 ) -> list[TaskOutcome]:
     """Dispatch every task in a wave, up to MAX_PARALLEL_TASKS at a time.
 
@@ -275,13 +291,16 @@ def run_wave(
     rework that only touches some of the wave's tasks briefs each one on its
     own problem rather than broadcasting one shared note to every task.
 
-    `sessions` maps task_id to the vendor session that attempted it last time, so
-    a rework reaches the same agent rather than briefing a fresh one — which is
-    what makes "here is what you got wrong" refer to anything.
+    `previous_summaries` maps task_id to what that task's own previous attempt
+    reported doing. A rework never resumes the vendor session that made that
+    attempt — its worktree is gone by the time this runs, so a resumed session
+    would be answering about files that no longer exist — this is what carries
+    "here is what you did, and here is what was wrong with it" to the fresh
+    session instead.
     """
-    sessions = sessions or {}
     slots = task_slots or {}
     comments = rework_comments or {}
+    summaries = previous_summaries or {}
     if not tasks:
         return []
     if not coding_agents:
@@ -307,7 +326,7 @@ def run_wave(
             run_id=run_id,
             base=base,
             rework_comments=comments.get(task_id, ""),
-            resume_session=sessions.get(task_id, ""),
+            previous_summary=summaries.get(task_id, ""),
         )
 
     outcomes: list[TaskOutcome] = []

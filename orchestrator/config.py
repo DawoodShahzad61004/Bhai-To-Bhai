@@ -158,14 +158,14 @@ MAX_PARALLEL_TASKS = 3
 # once held to it, how many times adapters.run_agent() may resume that same
 # session — on whichever backend is doing the coding — and nudge it to finish
 # before the narration is accepted as the turn's result.
-ENABLE_CODING_AGENT_FINISH_GUARD = False
+ENABLE_CODING_AGENT_FINISH_GUARD = True
 MAX_CODING_AGENT_CONTINUATION_ATTEMPTS = 5
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # REQUIREMENTS Q&A
 # ═══════════════════════════════════════════════════════════════════════════════
-INTERACTIVE_REQUIREMENTS = True
+INTERACTIVE_REQUIREMENTS = False
 MAX_CLARIFYING_QUESTIONS = 6
 
 

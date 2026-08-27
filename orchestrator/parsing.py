@@ -143,6 +143,25 @@ def string_list(payload: dict[str, Any], key: str) -> list[str]:
     return [item.strip() for item in raw if isinstance(item, str) and item.strip()]
 
 
+def joined_and_capped(items: list[str], *, limit: int = 20, empty: str = "") -> str:
+    """Comma-join `items`, capped at `limit` entries with a "+N more" suffix.
+
+    A task whose own commands left thousands of files behind — an installed
+    `node_modules`, say — must not turn a one-line evidence summary into a
+    log line or reviewer-prompt payload hundreds of thousands of characters
+    long (docs/Bugs.md #51). The count that overflows is itself the useful
+    signal, so it is kept rather than silently dropped.
+    """
+    if not items:
+        return empty
+    shown = items[:limit]
+    text = ", ".join(shown)
+    remaining = len(items) - len(shown)
+    if remaining > 0:
+        text += f", and {remaining} more file(s)"
+    return text
+
+
 def one_of(payload: dict[str, Any], key: str, allowed: tuple[str, ...]) -> str | None:
     """A field constrained to a closed set, matched case-insensitively.
 

@@ -24,13 +24,13 @@ Ignore the conventions of the repository you are standing in: do not read or \
 follow CLAUDE.md, AGENTS.md, project skills, or hooks.
 
 Reply with a single JSON object and nothing else:
-{{
+{
   "verdict": "accepted" | "replan",
   "assessment": "<requirement by requirement: is it satisfied, and how do you know>",
   "unmet": ["<a requirement from context.md that the finished code does not satisfy>"],
   "replan_guidance": "<only when the verdict is replan: what the plan missed or got wrong>",
   "learnings": "<a finding worth carrying to future runs, or an empty string>"
-}}\
+}\
 """
 
 SUPERVISOR_BRIEF = """\

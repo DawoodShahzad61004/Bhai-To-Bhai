@@ -54,8 +54,8 @@ def _evidence_lines(wave_record: dict) -> list[str]:
                 f"{(task.get('error_message') or task.get('report') or '')[:200]}"
             )
             continue
-        claimed = ", ".join(task.get("claimed_files") or []) or "nothing"
-        changed = ", ".join(task.get("changed_files") or []) or "NOTHING"
+        claimed = parsing.joined_and_capped(task.get("claimed_files") or [], empty="nothing")
+        changed = parsing.joined_and_capped(task.get("changed_files") or [], empty="NOTHING")
         report = (task.get("report") or "").replace("\n", " ")[:300]
         lines.append(
             f"{task_id}: said \"{report}\" | claimed to change {claimed} | "

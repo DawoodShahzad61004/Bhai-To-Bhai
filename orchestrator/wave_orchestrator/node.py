@@ -12,7 +12,15 @@ outside it (docs/Architecture.md, "High-Level Architecture").
 This is the other re-entry point. The reviewer sends a wave back here when the
 implementation is unacceptable — the plan was fine, the work was not — and the
 notes are specific about what that means: the subagent's worktree is reverted,
-and the same session is addressed again. Both happen here.
+and a fresh session starts in its place, briefed on what the previous attempt
+reported doing and on the reviewer's own words. Both happen here.
+
+Fresh, not resumed: the previous session's worktree no longer exists by the
+time a rework runs (`_rebuild_after_rework` below destroys it), and a vendor
+CLI resumed across that boundary answers from a memory of files that are gone
+rather than looking again — the same session id pointed at a rebuilt worktree
+is not the same task. The previous attempt's own report stands in for that
+memory instead, threaded into the new session's prompt.
 
 Smaller model, and it barely uses one: this box reads JSON and dispatches
 processes. The judgment lives in the coding subagents it starts and in the
@@ -34,20 +42,22 @@ logger = get_logger(__name__)
 AGENT = "wave_orchestrator"
 
 
-def _sessions_from(state: PipelineState, wave: int) -> dict[str, str]:
-    """Vendor sessions from this wave's previous attempt, by task.
+def _previous_reports_from(state: PipelineState, wave: int) -> dict[str, str]:
+    """Each task's own account of what it did last attempt, by task_id.
 
-    Read from the most recent attempt at this wave, so a rework addresses the
-    agent that did the work rather than a fresh one that has to be told what it
-    is looking at.
+    Read from the most recent attempt at this wave. The coding session itself
+    is never resumed across a rework — its worktree is destroyed before the
+    next attempt starts (see the module docstring) — so this is what stands in
+    for that memory: the previous attempt's own summary, threaded into the
+    fresh session's prompt alongside the reviewer's comments.
     """
     for record in reversed(state.get("wave_results") or []):
         if record.get("wave") != wave:
             continue
         return {
-            task["task_id"]: task.get("session_id", "")
+            task["task_id"]: task.get("report", "")
             for task in record.get("tasks", [])
-            if task.get("session_id")
+            if task.get("report")
         }
     return {}
 
@@ -207,6 +217,7 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
     # task's lookup simply misses "keep".
     task_ids = wave_task_ids
     rework_comments: dict[str, str] = {}
+    previous_reports: dict[str, str] = {}
     if state.get("review_verdict") == "rework":
         wave_level_fallback = state.get("review_comments", "")
         verdicts = latest_task_verdicts(state.get("wave_results") or [], wave_index)
@@ -215,6 +226,7 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         rework_comments = {
             tid: verdicts.get(tid, {}).get("reason") or wave_level_fallback for tid in task_ids
         }
+        previous_reports = _previous_reports_from(state, wave_index)
         rebuilt_ok, rebuild_error = _rebuild_after_rework(
             state, base, wave_index=wave_index, kept_ids=kept_ids, artifacts=artifacts
         )
@@ -279,7 +291,7 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         agent_offset=agent_offset,
         task_slots=task_slots,
         rework_comments=rework_comments,
-        sessions=_sessions_from(state, wave_index) if rework_comments else {},
+        previous_summaries=previous_reports,
     )
 
     succeeded = [outcome for outcome in outcomes if outcome.ok]

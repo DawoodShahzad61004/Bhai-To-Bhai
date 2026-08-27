@@ -952,6 +952,33 @@ def test_orchestrator_side_commit_captures_what_an_agent_left(git_repo):
     wt.cleanup(git_repo, [tree])
 
 
+def test_the_orchestrator_side_commit_excludes_build_artifacts(git_repo):
+    """docs/Bugs.md #51: a task's own commands (`npm install`, running a `.py`
+    file) leave build artifacts behind, and a blind `git add -A` turns them
+    into tracked, committed state — which then collides with an untracked
+    copy of the same path in the long-lived shared integration checkout."""
+    tree, _ = wt.create(git_repo, run_id="r2b", task_id="T-001", base="main")
+    (tree.path / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    (tree.path / "node_modules" / "pkg").mkdir(parents=True)
+    (tree.path / "node_modules" / "pkg" / "index.js").write_text("{}\n", encoding="utf-8")
+    (tree.path / "__pycache__").mkdir()
+    (tree.path / "__pycache__" / "app.cpython-313.pyc").write_bytes(b"\x00")
+
+    result = wt.commit_all(tree.path, "T-001: add app.py")
+    assert result.ok
+
+    committed = wt.git(tree.path, "ls-tree", "-r", "--name-only", "HEAD").stdout.splitlines()
+    assert "app.py" in committed
+    assert not any("node_modules" in path for path in committed)
+    assert not any("__pycache__" in path for path in committed)
+
+    # Left on disk, just not tracked — this keeps an artifact out of the
+    # commit, it does not delete anything from the agent's own working tree.
+    assert (tree.path / "node_modules" / "pkg" / "index.js").exists()
+    assert (tree.path / "__pycache__" / "app.cpython-313.pyc").exists()
+    wt.cleanup(git_repo, [tree])
+
+
 def test_clean_merges_land_on_the_integration_branch(git_repo):
     branch, created = wt.ensure_integration_branch(git_repo, "r3")
     assert created.ok
@@ -972,6 +999,29 @@ def test_clean_merges_land_on_the_integration_branch(git_repo):
     assert (git_repo / "file0.txt").exists()
     assert (git_repo / "file1.txt").exists()
     wt.cleanup(git_repo, trees)
+
+
+def test_merge_preserves_an_installed_dependency_tree(git_repo):
+    """Bugs.md #51 follow-on: once dependencies are installed in the
+    integration checkout, by whatever means, a later wave's merge must not
+    wipe them — reinstalling is not guaranteed to be possible again in the
+    same run (offline npm cache, a sandboxed coding agent, ...)."""
+    branch, _ = wt.ensure_integration_branch(git_repo, "r3b")
+    wt.git(git_repo, "checkout", branch)
+    (git_repo / "node_modules" / "pkg").mkdir(parents=True)
+    (git_repo / "node_modules" / "pkg" / "index.js").write_text("{}\n", encoding="utf-8")
+    (git_repo / "stray.tmp").write_text("leftover\n", encoding="utf-8")
+
+    tree, _ = wt.create(git_repo, run_id="r3b", task_id="T-001", base=branch)
+    (tree.path / "file.txt").write_text("T-001\n", encoding="utf-8")
+    wt.commit_all(tree.path, "T-001: add file")
+
+    result = wt.merge(git_repo, branch=tree.branch, into=branch, message="merge T-001")
+
+    assert result.ok, result.stderr
+    assert (git_repo / "node_modules" / "pkg" / "index.js").exists()
+    assert not (git_repo / "stray.tmp").exists()
+    wt.cleanup(git_repo, [tree])
 
 
 def test_a_conflict_is_left_in_place_for_the_merger_to_resolve(git_repo):

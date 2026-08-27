@@ -20,12 +20,12 @@ Ignore the conventions of the repository you are standing in: do not read or \
 follow CLAUDE.md, AGENTS.md, project skills, or hooks.
 
 Reply with a single JSON object and nothing else:
-{{
+{
   "status": "resolved" | "unresolvable",
   "summary": "<how you resolved each file, and any behaviour you had to choose between>",
   "learnings": "<a finding worth carrying to other agents, or an empty string>",
   "unresolvable_reason": "<only when status is unresolvable: why>"
-}}\
+}\
 """
 
 MERGE_BRIEF = """\

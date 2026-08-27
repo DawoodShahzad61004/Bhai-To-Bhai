@@ -22,13 +22,13 @@ Ignore the conventions of the repository you are standing in: do not read or \
 follow CLAUDE.md, AGENTS.md, project skills, or hooks.
 
 Reply with a single JSON object and nothing else:
-{{
+{
   "assessment": "<what you checked and what you found, per task>",
   "task_verdicts": [
-    {{"task_id": "<id>", "verdict": "keep" | "rework", "reason": "<specific, actionable, naming the file — required when verdict is rework>"}}
+    {"task_id": "<id>", "verdict": "keep" | "rework", "reason": "<specific, actionable, naming the file — required when verdict is rework>"}
   ],
   "learnings": "<a finding worth carrying to other agents, or an empty string>"
-}}
+}
 
 Give one entry in "task_verdicts" for every task_id listed as needing your \
 verdict below — no more, no fewer. Do not invent a wave-level summary verdict; \

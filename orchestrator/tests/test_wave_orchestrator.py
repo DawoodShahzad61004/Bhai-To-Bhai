@@ -17,6 +17,7 @@ import worktrees as wt
 from adapters.base import AgentResult
 from state import initial_state
 from wave_orchestrator import wave_orchestrator_node
+from wave_orchestrator.dispatch import TaskOutcome
 
 TASKS = [
     {
@@ -252,6 +253,23 @@ def test_a_report_of_work_that_left_no_trace_is_a_failure(wave_state, stub):
     assert tasks["T-002"]["ok"] is True
 
 
+def test_evidence_caps_a_runaway_file_list():
+    """Bugs.md #51: an installed node_modules must not turn a one-line
+    evidence summary into a hundreds-of-thousands-of-character log line, or
+    the reviewer prompt it also feeds."""
+    outcome = TaskOutcome(
+        task_id="T-001",
+        ok=True,
+        status="done",
+        changed_files=[f"frontend/node_modules/pkg{i}/index.js" for i in range(500)],
+    )
+
+    line = outcome.evidence()
+
+    assert len(line) < 3000
+    assert "and 480 more file(s)" in line
+
+
 def test_a_blocked_agent_is_not_counted_as_done(wave_state, stub):
     stub.set_reply(
         "task-T-001",
@@ -273,6 +291,12 @@ def test_a_blocked_agent_is_not_counted_as_done(wave_state, stub):
     tasks = {t["task_id"]: t for t in result["wave_results"][0]["tasks"]}
     assert tasks["T-001"]["ok"] is False
     assert "No database URL" in tasks["T-001"]["report"]
+    # error_kind/error_message must carry the reason too, not just report —
+    # evidence() reads only these two for a failed outcome, and a blank pair
+    # used to render as a bare "FAILED () — " with the actual reason nowhere
+    # in it.
+    assert tasks["T-001"]["error_kind"] == "blocked"
+    assert "No database URL" in tasks["T-001"]["error_message"]
 
 
 def test_a_failed_agents_partial_work_is_still_committed(wave_state, stub):
@@ -322,8 +346,11 @@ def test_one_failure_does_not_lose_the_rest_of_the_wave(wave_state, stub):
 # ── Rework ───────────────────────────────────────────────────────────────────
 
 
-def test_rework_reaches_the_same_agent_session(wave_state, stub):
-    """"Here is what you got wrong" has to refer to something it remembers."""
+def test_rework_cold_starts_with_the_previous_summary_in_the_prompt(wave_state, stub):
+    """The vendor session is never resumed across a rework — its worktree is
+    destroyed and rebuilt before the retry runs, so a resumed session would be
+    answering about files that no longer exist. What it did last time has to be
+    written into the fresh prompt instead of assumed as remembered context."""
     stub.set_reply("task-T-001", writing_agent("app/health.py"))
     stub.set_reply("task-T-002", writing_agent("NOTES.md"))
     first = wave_orchestrator_node(wave_state)
@@ -339,7 +366,8 @@ def test_rework_reaches_the_same_agent_session(wave_state, stub):
     wave_orchestrator_node(reworked)
 
     calls = {call["tag"]: call for call in stub.calls}
-    assert calls["task-T-001"]["resume_session"] == "sess-app/health.py"
+    assert calls["task-T-001"]["resume_session"] == ""
+    assert "Created app/health.py" in calls["task-T-001"]["prompt"]
     assert "The endpoint returns plain text, not JSON." in calls["task-T-001"]["prompt"]
     assert "This is a rework" in calls["task-T-001"]["prompt"]
 

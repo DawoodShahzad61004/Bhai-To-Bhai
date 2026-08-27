@@ -214,20 +214,55 @@ def create(
     return Worktree(task_id=task_id, path=path, branch=branch), result
 
 
+# Build-artifact directories that must never become part of a coding
+# subagent's commit, however deep in the tree they appear. Each is
+# regenerable by ordinary tooling (`npm install`, importing a `.py` file, a
+# build step), so committing one turns an ephemeral side effect into tracked
+# state — and once tracked, an untracked copy of the same path elsewhere in
+# the long-lived shared integration checkout collides with it on merge,
+# which git refuses to resolve on its own (docs/Bugs.md #51). The `glob`
+# magic is load-bearing: without it, a leading `**/` in a pathspec does not
+# match a directory that sits at the repository root, only a nested one.
+_COMMIT_EXCLUDE_PATTERNS = (
+    ":(exclude,glob)**/node_modules/**",
+    ":(exclude,glob)**/__pycache__/**",
+    ":(exclude,glob)**/dist/**",
+    ":(exclude,glob)**/.venv/**",
+    ":(exclude,glob)**/venv/**",
+)
+
+
 def commit_all(worktree: Path | str, message: str) -> GitResult:
-    """Commit everything in a worktree.
+    """Commit everything in a worktree, except known build-artifact noise.
 
     An orchestrator-side commit, on top of whatever the agent committed itself.
     ADR-005's premise is that a killed process must still leave a diff, and an
     agent that dies mid-turn has not committed anything.
+
+    _COMMIT_EXCLUDE_PATTERNS keeps that commit from also picking up whatever a
+    task's own commands happened to leave behind — `git add -A` with no
+    pathspec stages literally everything in the worktree, and a task that ran
+    `npm install` or executed a `.py` file has no reason to have its build
+    artifacts treated as "changes" it made.
     """
-    staged = git(worktree, "add", "-A")
+    staged = git(worktree, "add", "-A", "--", ".", *_COMMIT_EXCLUDE_PATTERNS)
     if not staged.ok:
         return staged
     status = git(worktree, "status", "--porcelain")
     if status.ok and not status.stdout:
         return GitResult(ok=True, stdout="nothing to commit")
     return git(worktree, "commit", "-m", message)
+
+
+# Directories expensive enough to install that a wave-to-wave `git clean`
+# must not treat them as disposable noise the way it treats `dist/` or
+# `__pycache__/`. Those regenerate in seconds; a dependency install can be
+# blocked for an entire run by network access or a coding agent's own
+# sandbox (docs/Bugs.md #34, #43, #51 — Codex's Windows sandbox refuses `npm
+# install` outright, and npm itself came back `ENOTCACHED` offline). `git
+# clean -e` uses gitignore-style matching, not pathspec magic, so a bare name
+# here already matches at any depth without further wildcarding.
+_CLEAN_PRESERVE_PATTERNS = ("node_modules", ".venv", "venv")
 
 
 def merge(
@@ -250,11 +285,21 @@ def merge(
     git refuses to resolve on its own (docs/Bugs.md #51). Safe now that the
     artifact store lives outside the target's working tree (ADR-037): this
     checkout holds only the target's own product code.
+
+    _CLEAN_PRESERVE_PATTERNS is exempted from that clean. An installed
+    dependency tree is an untracked directory too, and this clean would
+    otherwise remove it right along with genuine build noise — but
+    reinstalling it afterwards is not guaranteed to be possible again in the
+    same run. Once one is installed here, by whatever means, it now survives
+    every later wave's merge instead of being wiped and never coming back —
+    that repeated emptying is what left a reviewer unable to run
+    `vitest`/`vite` at all after the very wave that had just installed them.
     """
     checkout = git(target_repo, "checkout", into)
     if not checkout.ok:
         return checkout
-    git(target_repo, "clean", "-xdff")
+    preserve_flags = [flag for pattern in _CLEAN_PRESERVE_PATTERNS for flag in ("-e", pattern)]
+    git(target_repo, "clean", "-xdff", *preserve_flags)
     return git(target_repo, "merge", "--no-ff", "-m", message, branch)
 
 

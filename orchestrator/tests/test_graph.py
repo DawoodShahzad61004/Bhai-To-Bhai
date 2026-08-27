@@ -293,10 +293,13 @@ def test_the_review_rework_loop_re_runs_the_same_wave(pipeline, stub, git_repo):
     assert final["status"] == "completed"
     attempts = [(r["wave"], r["attempt"]) for r in final["wave_results"]]
     assert attempts == [(0, 0), (0, 1)]
-    # The rework instructions reached the coding agent.
+    # The rework instructions reached the coding agent, as a cold-started
+    # session briefed on the previous attempt rather than a resumed one — its
+    # worktree no longer exists by the time the retry runs.
     reworked = [c for c in stub.calls if c["tag"] == "task-T-001"][1]
     assert "Write actual content." in reworked["prompt"]
-    assert reworked["resume_session"] == "sess-NOTES.md"
+    assert "wrote NOTES.md" in reworked["prompt"]
+    assert reworked["resume_session"] == ""
 
 
 def test_the_supervisor_replan_loop_returns_to_the_planner(pipeline, stub):

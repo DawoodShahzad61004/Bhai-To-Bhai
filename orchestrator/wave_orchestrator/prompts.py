@@ -35,13 +35,13 @@ in the same message as the tool call that does it. The only text-only message \
 you ever send is the final JSON object below, once every change is already made.
 
 When you are done, reply with a single JSON object and nothing else:
-{{
+{
   "status": "done" | "blocked",
   "summary": "<what you actually changed, file by file>",
   "files_changed": ["<path>"],
   "blocked_reason": "<only when status is blocked: what stopped you>",
   "finish_reason": "stop" | "length"
-}}
+}
 
 "finish_reason" is "stop" if you reached this JSON naturally, having finished \
 everything you set out to do. It is "length" if you are being forced to wrap up \
@@ -107,11 +107,16 @@ REWORK_SECTION = """\
 
 ## This is a rework. Your previous attempt was rejected.
 
-You did this task before and a reviewer rejected the result. Your worktree has \
-been reset to a clean state, so the changes you made last time are gone and you \
-are starting again from the same base.
+You did this task before, in a session that no longer exists — your worktree \
+has been reset to a clean state, so the changes you made last time are gone and \
+you are starting fresh, from the same base, with no memory of that attempt \
+carried over automatically. The two sections below stand in for that memory.
 
-The reviewer said:
+### What you reported doing last time
+
+{previous_summary}
+
+### What the reviewer said was wrong
 
 {comments}
 
@@ -130,6 +135,7 @@ def coding_prompt(
     python_exe: str,
     script_path: str,
     rework_comments: str = "",
+    previous_summary: str = "",
 ) -> str:
     files = task.get("files") or []
     files_block = "\n".join(f"- {path}" for path in files) or "- (use your judgement)"
@@ -150,5 +156,8 @@ def coding_prompt(
         task_id=task["task_id"],
     )
     if rework_comments.strip():
-        prompt += REWORK_SECTION.format(comments=rework_comments.strip())
+        prompt += REWORK_SECTION.format(
+            comments=rework_comments.strip(),
+            previous_summary=previous_summary.strip() or "(no summary was recorded)",
+        )
     return prompt
