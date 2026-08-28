@@ -126,28 +126,26 @@ CODING_AGENT_B = AgentSpec(
 MAX_CODING_AGENT_COUNT = 3
 
 SMALL_MODELS = [
-    # ("haiku", "claude"),
     ("qwen3.5:4b", "ollama"),
     # ("qwen3:8b", "ollama"),
     # ("gemini-3.1-flash-lite", "gemini"),
-    # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
-    # ("gpt-oss:120b-cloud", "ollama"),
-    ("gpt-oss:20b-cloud", "ollama"),
-    # ("gemma4:31b-cloud", "ollama"),
-    ("gemma4:cloud", "ollama"),
-    # ("nemotron-3-super:cloud", "ollama"),
-    # ("nemotron-3-ultra:cloud", "ollama"),
 ]
 
 MEDIUM_MODELS = [
+    ("gpt-oss:20b-cloud", "ollama"),
     ("nemotron-3-nano:30b-cloud", "ollama"),
-    # ("auto", "copilot"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    ("gemma4:31b-cloud", "ollama"),
+    # ("haiku", "claude"),
+    ("auto", "copilot"),
 ]
 
 EXPERT_MODELS = [
-    # ("sonnet", "claude"), 
-    # ("", "codex"),
-    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    # ("gpt-oss:120b-cloud", "ollama"),
+    # ("nemotron-3-super:cloud", "ollama"),
+    # ("nemotron-3-ultra:cloud", "ollama"),
+    # ("sonnet", "claude"),
+    ("", "codex"),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
