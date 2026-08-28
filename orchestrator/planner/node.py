@@ -39,6 +39,25 @@ AGENT = "planner"
 PLANNER_TOOLS = ("Read", "Glob", "Grep", "Bash")
 
 
+def _ollama_file_write_warning_applies() -> bool:
+    """Bugs.md #53's finding is config-specific — reproduced only under
+    sandbox=workspace-write with approval_policy=never (headless exec has no
+    human to grant the shell fallback's escalation). If the roster has no
+    ollama entry, or either constant has moved off that exact combination, the
+    warning would be asserting something no longer established, so it is left
+    out of the prompt rather than stated as settled fact.
+    """
+    ollama_in_roster = any(
+        backend == "ollama"
+        for _, backend in config.SMALL_MODELS + config.MEDIUM_MODELS + config.EXPERT_MODELS
+    )
+    return (
+        ollama_in_roster
+        and config.CODEX_SANDBOX == "workspace-write"
+        and config.CODEX_APPROVAL_POLICY == "never"
+    )
+
+
 def _failure(message: str, *, kind: str) -> dict:
     logger.error("[%s] %s", AGENT, message)
     return {
@@ -69,6 +88,7 @@ def planner_node(state: PipelineState) -> dict:
             small_models=config.SMALL_MODELS,
             medium_models=config.MEDIUM_MODELS,
             expert_models=config.EXPERT_MODELS,
+            ollama_file_write_warning=_ollama_file_write_warning_applies(),
             supervisor_comments=comments,
         ),
         spec=config.AGENTS[AGENT],

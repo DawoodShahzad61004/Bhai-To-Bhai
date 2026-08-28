@@ -104,7 +104,10 @@ expert judgment):
 {medium}
 
 Expert tier (complex, judgment-heavy work):
-{expert}
+{expert}\
+"""
+
+_OLLAMA_FILE_WRITE_WARNING = """
 
 Do not assign a task that creates or edits a file to backend="ollama", at any \
 model size. Reproduced against both a 4B and a 20B model: Codex's file-edit \
@@ -150,6 +153,7 @@ def plan_prompt(
     small_models: list[tuple[str, str]],
     medium_models: list[tuple[str, str]],
     expert_models: list[tuple[str, str]],
+    ollama_file_write_warning: bool,
     supervisor_comments: str = "",
 ) -> str:
     replan = REPLAN_NOTE.format(comments=supervisor_comments) if supervisor_comments else ""
@@ -158,6 +162,8 @@ def plan_prompt(
         medium=_format_model_menu(medium_models),
         expert=_format_model_menu(expert_models),
     )
+    if ollama_file_write_warning:
+        model_menu += _OLLAMA_FILE_WRITE_WARNING
     brief = PLAN_BRIEF.format(model_menu=model_menu, max_coding_agents=max_coding_agents)
     return f"""{brief}
 

@@ -73,6 +73,46 @@ def test_missing_binary_is_a_result_not_an_exception(monkeypatch):
     assert result.error_kind == "not_installed"
 
 
+def test_codex_sandbox_and_approval_policy_are_valid_configured_options():
+    """Bugs.md #53's fix: both permission knobs are named, documented constants
+    in config.py, not literals scattered across call sites. Both are operator
+    tunable, so this checks the value is one of the documented options rather
+    than pinning a specific default."""
+    assert config.CODEX_SANDBOX in ("read-only", "workspace-write", "danger-full-access")
+    assert config.CODEX_APPROVAL_POLICY in ("untrusted", "on-request", "on-failure", "never")
+
+
+def test_codex_harness_reads_sandbox_and_approval_policy_from_config(monkeypatch, tmp_path):
+    """Every direct Codex turn takes its sandbox mode and approval policy from
+    config.py rather than a hardcoded literal, so operators have one place to
+    change the pipeline's permission surface (Bugs.md #53)."""
+    monkeypatch.setattr("config.CODEX_SANDBOX", "read-only")
+    monkeypatch.setattr("config.CODEX_APPROVAL_POLICY", "on-request")
+    captured: dict[str, object] = {}
+
+    def fake_run_with_deadline(argv, *, input, cwd, timeout):
+        captured.update(argv=argv, input=input, cwd=cwd, timeout=timeout)
+        output_path = Path(argv[argv.index("--output-last-message") + 1])
+        output_path.write_text("CODEX_ADAPTER_OK", encoding="utf-8")
+        stdout = '{"type":"thread.started","thread_id":"codex-session"}\n'
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr("adapters.codex.run_with_deadline", fake_run_with_deadline)
+    result = adapters.run_agent(
+        "Return the requested marker.",
+        spec=AgentSpec(backend="codex", model="", deadline_seconds=30),
+        cwd=str(tmp_path),
+        tag="codex-permission-probe",
+        invocation="direct",
+    )
+
+    argv = captured["argv"]
+    assert result.ok is True
+    assert argv[argv.index("--sandbox") + 1] == "read-only"
+    overrides = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-c"]
+    assert 'approval_policy="on-request"' in overrides
+
+
 def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     model = "qwen2.5-coder:14b-instruct-q4_K_M"
     captured: dict[str, object] = {}
@@ -99,8 +139,14 @@ def test_ollama_adapter_uses_codex_local_provider(monkeypatch, tmp_path):
     assert result.session_id == "ollama-session"
     assert argv[argv.index("--model") + 1] == model
     assert argv[argv.index("--local-provider") + 1] == "ollama"
-    assert argv[argv.index("-c") + 1] == "model_reasoning_effort=none"
+    overrides = [argv[i + 1] for i, arg in enumerate(argv) if arg == "-c"]
+    assert "model_reasoning_effort=none" in overrides
     assert "--oss" in argv
+    # Bugs.md #53: the Ollama route through Codex's harness must carry the same
+    # config-driven sandbox/approval surface as every other backend that shares
+    # run_codex() — nothing bypasses it just because the model is local.
+    assert argv[argv.index("--sandbox") + 1] == config.CODEX_SANDBOX
+    assert f'approval_policy="{config.CODEX_APPROVAL_POLICY}"' in overrides
     # Bugs.md #44/#39: the operator's interactive desktop profile (plugins, MCP
     # servers, multi-agent tooling) must not bleed into a headless local-model
     # dispatch — it drowned the actual task in tens of thousands of tokens.
@@ -152,6 +198,10 @@ def test_local_llm_adapter_uses_codex_custom_responses_provider(monkeypatch):
     assert 'model_providers.local_llm.base_url="http://local.test/v1"' in overrides
     assert 'model_providers.local_llm.env_key="CUSTOM_API_KEY"' in overrides
     assert 'model_providers.local_llm.wire_api="responses"' in overrides
+    # Bugs.md #53: same config-driven sandbox/approval surface as every other
+    # backend sharing run_codex() — the local-server bridge doesn't bypass it.
+    assert argv[argv.index("--sandbox") + 1] == config.CODEX_SANDBOX
+    assert f'approval_policy="{config.CODEX_APPROVAL_POLICY}"' in overrides
     assert argv[argv.index("--disable") + 1] == "memories"
     assert argv[argv.index("resume") + 1] == "previous-local-session"
     assert argv.index("--disable") < argv.index("resume")

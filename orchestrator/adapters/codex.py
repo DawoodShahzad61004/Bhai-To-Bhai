@@ -156,6 +156,13 @@ def run_codex(
     in another cannot write to the second without `--add-dir` naming it
     explicitly.
 
+    Sandbox mode and approval policy both come from `config.py`
+    (`CODEX_SANDBOX`, `CODEX_APPROVAL_POLICY`) rather than being hardcoded here,
+    so every caller of this function gets the same, centrally-configured
+    permission surface. `codex exec --help` (0.146.0) has no `--ask-for-approval`
+    flag of its own, so approval policy is set the same way as every other
+    TOML-only setting in this file: `-c approval_policy=<value>`.
+
     `isolate_from_user_config` and `disable_features` exist because `codex exec`
     otherwise loads the operator's interactive `~/.codex/config.toml` into every
     headless dispatch — desktop-app plugins, MCP servers, and personality/skill
@@ -192,6 +199,8 @@ def run_codex(
         cwd,
         "--sandbox",
         config.CODEX_SANDBOX,
+        "-c",
+        f"approval_policy={json.dumps(config.CODEX_APPROVAL_POLICY)}",
         "--skip-git-repo-check",
         # Events as JSONL on stdout, which is where the session id comes from.
         # This does not disturb --output-last-message; both are populated.

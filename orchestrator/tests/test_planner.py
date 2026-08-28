@@ -10,6 +10,7 @@ import artifacts as art
 import config
 from adapters.base import AgentResult
 from planner import assign_waves, normalise_coding_agents, normalise_tasks, planner_node
+from planner.node import _ollama_file_write_warning_applies
 
 PLAN = {
     "summary": "Add the endpoint, then its tests.",
@@ -260,6 +261,70 @@ def test_the_prompt_offers_the_model_menu_and_the_agent_cap(state, stub):
     for model, backend in config.SMALL_MODELS + config.MEDIUM_MODELS + config.EXPERT_MODELS:
         assert backend in prompt
     assert str(config.MAX_CODING_AGENT_COUNT) in prompt
+
+
+# ── The Ollama file-write warning (Bugs.md #53) ──────────────────────────────
+#
+# All four gating tests set every one of the three inputs explicitly rather
+# than relying on whatever config.py currently holds, since CODEX_SANDBOX and
+# CODEX_APPROVAL_POLICY are operator-tunable and the "applies" case must stay
+# true to Bugs.md #53's actual reproduction regardless of the live default.
+
+_WARNING_MARKER = "shell fallback is auto-rejected"
+
+
+def _set_bug_53_reproduction(monkeypatch, **overrides):
+    values = {
+        "config.SMALL_MODELS": [("qwen3.5:4b", "ollama")],
+        "config.MEDIUM_MODELS": [],
+        "config.EXPERT_MODELS": [],
+        "config.CODEX_SANDBOX": "workspace-write",
+        "config.CODEX_APPROVAL_POLICY": "never",
+        **overrides,
+    }
+    for target, value in values.items():
+        monkeypatch.setattr(target, value)
+
+
+def test_the_warning_applies_when_config_matches_the_bug_53_reproduction(monkeypatch):
+    _set_bug_53_reproduction(monkeypatch)
+    assert _ollama_file_write_warning_applies() is True
+
+
+def test_the_warning_does_not_apply_without_an_ollama_model_in_any_tier(monkeypatch):
+    _set_bug_53_reproduction(
+        monkeypatch,
+        **{
+            "config.SMALL_MODELS": [("haiku", "claude")],
+            "config.MEDIUM_MODELS": [("auto", "copilot")],
+            "config.EXPERT_MODELS": [("sonnet", "claude")],
+        },
+    )
+    assert _ollama_file_write_warning_applies() is False
+
+
+def test_the_warning_does_not_apply_off_workspace_write_sandbox(monkeypatch):
+    _set_bug_53_reproduction(monkeypatch, **{"config.CODEX_SANDBOX": "danger-full-access"})
+    assert _ollama_file_write_warning_applies() is False
+
+
+def test_the_warning_does_not_apply_off_never_approval_policy(monkeypatch):
+    _set_bug_53_reproduction(monkeypatch, **{"config.CODEX_APPROVAL_POLICY": "on-request"})
+    assert _ollama_file_write_warning_applies() is False
+
+
+def test_the_prompt_carries_the_warning_when_it_applies(state, stub, monkeypatch):
+    _set_bug_53_reproduction(monkeypatch)
+    stub.set_text("planner", json.dumps(PLAN))
+    planner_node(state)
+    assert _WARNING_MARKER in stub.calls[0]["prompt"]
+
+
+def test_the_prompt_omits_the_warning_when_it_does_not_apply(state, stub, monkeypatch):
+    _set_bug_53_reproduction(monkeypatch, **{"config.CODEX_APPROVAL_POLICY": "on-request"})
+    stub.set_text("planner", json.dumps(PLAN))
+    planner_node(state)
+    assert _WARNING_MARKER not in stub.calls[0]["prompt"]
 
 
 def test_the_planner_is_given_read_only_tools(state, stub):
