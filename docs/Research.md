@@ -539,6 +539,50 @@
 
 ---
 
+## 49. Small vs. medium coding-agent model capability boundary: file I/O is where 4B-class models fail, not in reasoning depth
+
+| Field | Detail |
+|---|---|
+| **Topic** | Distinction between model *scale* (parameter count, training compute) and task *scope* (multi-turn file edits vs. single-shot analysis). Both affect task success, but they are not the same thing. |
+| **Date** | 2026-08-27 |
+| **Findings** | When 4B-class models (qwen3.5:4b) and 20B-class models (gpt-oss:20b-cloud) fail to write files in the Codex harness, the failure is not because the model cannot *reason* about how to write a file — both models generate reasonable code and correct shell commands — but because the transport layer (Codex's Ollama bridge) does not expose the structured file-edit tool and auto-rejects shell as unsafe. Switching to `direct:local_llm` with the same models would likely surface different constraints: they might succeed if the harness permits shell execution, or they might run out of context mid-task, or they might get stuck in reasoning loops. The key is that the bottleneck is not reasoning depth, it is infrastructure. **Why this matters for tier definitions**: a "small" model is not small because it fails to understand code; it is small because its context window and instruction-following are limited and because the available compute per inference is constrained. In a different harness (e.g., one with full shell access and no sandbox restrictions), a 20B model might handle real coding, or it might still fail (needing 70B+). The Ollama-via-Codex setup proved unsafe not because of model size but because of transport constraints. |
+| **Implication for Practice** | Document the scope of each model tier by the infrastructure it has, not just by parameter count. "Small tier" = read-only/advisory work, where failures are low-cost. "Medium tier" = real but bounded coding, provisioned with file-edit tools and shell execution. "Expert tier" = complex judgment, provisioned with all tools plus higher reasoning capacity. The tier system is about matching task scope to provisioned infrastructure + model capacity, not just model size. |
+
+---
+
+## 50. Artifact storage relocation outside target repository eliminates a three-way collision between target-repo bloat, build-artifact commits, and parallel worktree isolation
+
+| Field | Detail |
+|---|---|
+| **Topic** | Why a sibling artifact store (ADR-038) solved three independent problems that appeared unrelated until implementation. |
+| **Date** | 2026-08-27 |
+| **Findings** | After 100+ runs, a target repository's `runs/` folder becomes bloated (100+ subdirectories, each with metadata). In parallel, worktrees cannot directly access `runs/` files when isolated on different branches, forcing artifact contents into prompts. And build artifacts (`.pyc`, node_modules) get accidentally committed via `git add -A` because there is no `.gitignore` in the target repo, and the orchestrator's own `git clean -xdff` before merge would delete legitimate shared memory if it lived inside the target repo. Three independent "fix one, break another" problems. **The sibling directory solution addresses all three**: (1) bloat is outside the target repo; (2) worktrees can read shared memory by absolute path without isolation issues; (3) `git clean` can safely run before merge because shared memory is in `.bhai-artifacts/`, not in the target repo — and build artifacts never become tracked files because `commit_all()` uses pathspec exclusions. The elegance is that no single part of this solution is novel; the value is that one simple topology change (move to sibling) unlocks three concurrent fixes. |
+| **Implication for Practice** | When facing multiple constraints that seem to require conflicting solutions, first ask whether the problem statement itself contains an unjustified assumption. Here: "artifacts must live in the target repo" was the unnecessary assumption. Move that constraint, and the other problems simplify. |
+
+---
+
+## 51. Codex CLI's Ollama bridge is proven safe for single-shot structured output (JSON generation), proven unsafe for multi-turn coding (file edits fail at transport layer)
+
+| Field | Detail |
+|---|---|
+| **Topic** | Evidence boundaries for the Ollama-via-Codex backend. |
+| **Date** | 2026-08-27 |
+| **Findings** | Codex routing to `ollama run` works for: requirements JSON survey (single-shot), plan JSON generation (single-shot), merge conflict resolution briefing (single-shot, no file writes). It fails for: coding-agent tasks that require writing files (apply_patch unavailable, shell auto-rejected). The distinction is not model size or reasoning power — it is whether the task requires the file-edit tool (unavailable in the bridge) or makes shell calls (auto-rejected by non-interactive sandbox policy). A 20B Ollama model can generate correct Python code and shell commands; the model does not fail. The transport fails. **Why this clarification matters**: future evaluators might ask "why not use a bigger Ollama model?" The answer is not "model size," it is "Codex's Ollama bridge is missing apply_patch and sandboxes all shell execution." No parameter count will fix that. The separate `direct:local_llm` backend uses Codex with a different inference route, so it may expose different tradeoffs (local model still limited, but no Ollama bridge gaps). |
+| **Implication for Practice** | When a backend fails a task, separate the model from the transport layer. Proving that small models fail does not prove that the problem is model size. Proving that a 20B model fails at file I/O through a specific harness proves that the harness has gaps, not that 20B is too small. |
+
+---
+
+## 52. Parallel context isolation of coding agents: running tasks in separate worktrees blocks artifact access unless artifacts have absolute paths
+
+| Field | Detail |
+|---|---|
+| **Topic** | Why artifact reference (absolute path) is better than artifact injection (copy into prompt) when agents cannot share the target repository. |
+| **Date** | 2026-08-27 |
+| **Findings** | Parallel coding agents run in isolated worktrees (different branches of the same repository, checked out to different physical directories). If shared artifacts (`context.md`, `learnings.md`) live inside the target repository, worktrees must copy them into prompts (bloats prompts, loses live-update semantics). If artifacts have absolute paths (e.g., `/path/to/.bhai-artifacts/shared/learnings.md`), agents can read them directly with tools like Read, and concurrent appends serialize correctly with OS-level locks. The empirical test (Aug 10): three parallel Haiku agents all read from shared artifact paths and appended to learnings.md using the CLI lock; concurrency serialized correctly, no interleaving. This proved that the reference-not-injection model works at the transport boundary (agents with tool access to absolute paths). |
+| **Implication for Practice** | Grant agents file-system-level access to shared memory, not prompt-level copies. This keeps artifacts current across concurrent agents and reduces prompt bloat. The cost is that agents must have tools (Read, Write, Bash) available, which all direct CLI adapters support. |
+
+---
+
 ## 46. Small/local models emit prose narration instead of required JSON, causing false-done reporting when the reply ends the turn before the structured object arrives
 
 | Field | Detail |

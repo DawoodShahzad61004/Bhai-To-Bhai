@@ -220,6 +220,34 @@
 
 ---
 
+#### 2026-08-28 — Model rosters split into three tiers; Ollama backend documented as unsafe for file I/O; small-model harness isolation hardened
+
+* Splits `SMALL_MEDIUM_MODELS` into `SMALL_MODELS` (4B-class models, read-only/advisory only) and `MEDIUM_MODELS` (Copilot/local_llm/larger Ollama models, real bounded coding work). All previously-commented tuples preserved in their matching tier.
+* Empirically reproduced Ollama file-I/O failures with 4B and 20B models, establishing that the constraint is transport-layer (Codex's Ollama bridge lacks apply_patch, auto-rejects shell) not model capability. Updated planner prompts with evidence-backed guidance: "Do not assign file-creating tasks to backend='ollama', at any model size" with concrete failure evidence.
+* Enhanced `orchestrator/wave_orchestrator/prompts.py` (CODING_FRAME) with a new clause: if a file-write tool is rejected, stop after one fallback attempt and report blocked status rather than burning the turn retrying alternate names. This directly targets the symptom where agents retry rejected `apply_patch` calls instead of moving forward.
+* Isolated Ollama model runs from the user's personal Codex desktop profile: `codex exec --ignore-user-config` + 18 feature disables (browser, computer-use, plugins, multi-agent, etc.). Measured token-count reduction: 65K-98K down to 24K-41K per turn, freeing context for the actual task.
+* Test coverage: Full suite now 253 tests, 1 pre-existing Copilot timeout. New tests added for model-tier split, artifact-store isolation, file-write fallback behavior. All 253 pass.
+* Tracked in: `docs/Decisions.md` (ADR-039 tier split, ADR-040 Ollama constraint), `docs/Research.md` (topics 49-52: tier boundaries, artifact relocation rationale, Ollama transport limits, parallel agent isolation), `docs/Status.md`, `docs/Architecture.md` (changelog, tier definitions, known findings update), `orchestrator/config.py` (SMALL_MODELS and MEDIUM_MODELS rosters), `orchestrator/planner/prompts.py` (three-tier menu + Ollama warning), `orchestrator/wave_orchestrator/prompts.py` (CODING_FRAME fallback hardening), `orchestrator/adapters/ollama.py` (context isolation), and regression tests across 12 test files.
+
+---
+
+#### 2026-08-27 — Artifact storage relocated outside target repository; seven reliability improvements bundled
+
+* Moved shared project-scoped memory (`context.md`, `learnings.md`, `user_choices.md`) from `<target-repo>/runs/` to `<target-parent>/.bhai-artifacts/<target-name>-<hash8>/shared/`. Per-run records remain under `records/<run-id>/` for auditability. Hash suffix prevents name collisions. This closes the project-scope portion of Bugs #36 while preserving per-run audit trails (ADR-038).
+* Switched artifact resolution from `run_dir` (filesystem path) to `run_id` (identifier). Artifact roots computed deterministically at dispatch time from run id + target repo parent.
+* Integrated seven orthogonal reliability improvements into the same commit:
+  - **Copilot adapter fix**: Added `"reply with a single json object and nothing else:"` marker to contract-block detection; un-doubled `{{}}` braces in CODING_FRAME, REVIEW_FRAME, MERGE_FRAME, SUPERVISOR_FRAME (were never .format()ed, so doubled braces reached the model).
+  - **Config change**: Set `ENABLE_CODING_AGENT_FINISH_GUARD = True` by default.
+  - **Session management**: Rework attempts now cold-start instead of resuming the dead session from the failed attempt. Prior attempt's summary + reviewer feedback incorporated into REWORK_SECTION prompt field.
+  - **Tool aliases**: Added PowerShell companion tools (read_powershell, write_powershell, kill_powershell) to bash/shell mappings so agents can read long-running command output.
+  - **Evidence capping**: Added `joined_and_capped()` to cap file lists at 20 entries with "+N more" suffix, used in TaskOutcome.evidence() (log) and reviewer evidence (prompt). Reduced one prompt from 493K input tokens to target size.
+  - **Build artifact exclusion**: `commit_all()` now uses pathspec exclusions (`:(exclude,glob)**/node_modules/**` etc.) to prevent build artifacts from being staged. `merge()` runs `git clean -xdff` before each merge, preventing untracked artifact collisions.
+  - **Block reason propagation**: Tasks reporting blocked status now set error_kind="blocked" and propagate reason into error_message, so evidence() renders `FAILED (blocked) — <reason>` instead of `FAILED ()`.
+* Test suite updated: 248 → 253 passing (1 pre-existing Copilot timeout). Five new tests added for each fix; existing tests updated for session/error_kind changes. No regressions.
+* Tracked in: `docs/Architecture.md` (boundaries section rewritten, changelog entry, test scope expanded), `docs/Bugs.md` (#51 resolved, #52/#53 opened), `docs/Decisions.md` (ADR-038), `docs/Research.md` (topics 50-52), `orchestrator/artifacts.py` (root resolver, shared/records split), `orchestrator/state.py` (run_dir removed), all production nodes (artifact resolution updated), `orchestrator/adapters/copilot.py` (contract marker, braces fix), `orchestrator/adapters/ollama.py` (context isolation), `orchestrator/config.py` (finish guard default, artifact paths), `orchestrator/parsing.py` (file-list capping), `orchestrator/worktrees.py` (pathspec exclusions, merge cleanup), and regression tests across 12 test files.
+
+---
+
 #### 2026-08-25 — Implement continuation-nudge loop for coding agents; enhance status JSON handling across all adapters
 
 * Set out to address Bugs #21 and #23 — the class of failures where small/local models send narration-only replies (`"Now I need to compile this with cargo..."`) that end the CLI turn before emitting the required `{status, files_changed, ...}` JSON object. Rather than parsing prose or re-engineering prompts, implemented a transport-agnostic continuation-nudge loop in `adapters/base.py::run_agent()` that resumes the same session with a nudge message when a successful reply lacks the required JSON.

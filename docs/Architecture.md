@@ -54,22 +54,26 @@ Run status is explicit: `running`, `completed`, `bounded`, or `failed`. A termin
 
 ## Artifact and Repository Boundaries
 
-The orchestrator repository owns control-plane state; the target repository owns product code.
+The orchestrator repository owns control-plane state; the target repository owns product code; shared run memory lives in a sibling artifact store.
 
 ```text
 orchestrator/
   checkpoints/                 SQLite LangGraph checkpoints
   run_logs/                    one persistent DEBUG log per run
-  runs/<run-id>/
-    context.md                 researched task understanding
-    user_choices.md            only explicit user choices and answers
-    plan.json                  normalized plan and dependency graph
-    TASK-*.json                one contract per coding task
-    learnings.md               append-only findings
-    events.jsonl               append-only audit events
-    reviews/
-      wave-*-attempt-*.md      per-wave reviewer evidence
-      supervisor-*.md          final requirement audit
+
+<target-parent>/.bhai-artifacts/<target-name>-<hash8>/
+  shared/
+    context.md                 researched task understanding (created per-run, shared across runs)
+    user_choices.md            only explicit user choices and answers (append-only per-run)
+    learnings.md               cross-run findings with OS-level sidecar lock
+  records/
+    run-<id>/
+      plan.json                normalized plan and dependency graph
+      TASK-*.json              one contract per coding task
+      events.jsonl             append-only audit events
+      reviews/
+        wave-*-attempt-*.md    per-wave reviewer evidence
+        supervisor-*.md        final requirement audit
 
 <target-parent>/.bhai-worktrees/
   <run>-<task>/                isolated task checkouts
@@ -79,7 +83,9 @@ orchestrator/
   bhai/<run-id>/<task-id>      inspectable task branches
 ```
 
-Artifacts use absolute paths and are written immediately in UTF-8. The target repository now owns project-scoped shared memory under `runs/`: `context.md` is the current project snapshot, `learnings.md` is an append-only cross-run channel with a sidecar lock, and `user_choices.md` is deterministic orchestrator-owned provenance. Plans, task contracts, reviews, and events remain under run-specific paths so every execution retains an attributable audit trail. Legacy flat artifacts migrate safely, precise local excludes prevent accidental commits, and the first run creates valid empty shared files before any node reads them.
+Artifacts use absolute paths and are written immediately in UTF-8. Shared run memory (`context.md`, `learnings.md`, `user_choices.md`) lives in `.bhai-artifacts/<target-name>-<hash8>/shared/` outside the target repository to avoid bloat and enable safe project-scoped state across multiple runs. Plans, task contracts, reviews, and events remain under per-run record paths in `.bhai-artifacts/.../records/<run-id>/` so every execution retains an attributable audit trail independent of other runs on the same target. The hash suffix in the artifact root name prevents collisions when different target checkouts happen to share a basename (e.g., two `temp_work_repo` instances on different machines).
+
+Artifact setup is deterministic: `artifacts.prepare()` resolves the target repository's parent directory, derives the artifact root path, and ensures all required shared and per-run subdirectories exist. Legacy `<target>/runs/` layouts migrate automatically on first access: `context.md`, `learnings.md`, and `user_choices.md` are copied into the new shared directory, preserving their content while leaving other project-owned files in place. Precise git exclude patterns (`:(exclude,glob)**/node_modules/**`, `**/__pycache__/**`, etc.) prevent build artifacts from being committed during blind `git add -A` operations.
 
 Agents receive absolute artifact paths rather than pasted artifact contents. Direct Claude, Codex, and Copilot adapters grant access to the target repository's shared directory with `extra_dirs` / `--add-dir`; planner, merger, reviewer, supervisor, and coding briefs tell agents which shared or run-specific files to read. Coding agents can append findings directly through `python orchestrator/artifacts.py append-learning <run_dir> <agent> <message>`, with OS-level locking so concurrent writers do not interleave. This fixes the project-scope portion of `Bugs.md` #36 while preserving per-run plans, tasks, reviews, and events.
 
@@ -198,7 +204,8 @@ Transport and vendor are separate choices. Supported invocation modes are direct
 | Mechanical stages | Gemini CLI `gemini-3.1-flash-lite`: wave orchestrator, merger. Claude Code Haiku: requirements. |
 | Planning stage | Claude Code Sonnet: planner |
 | Judgment stages | Codex CLI default: reviewer, supervisor |
-| Coding roster menus | Small/medium: `direct:local_llm` `QuantTrio/Qwen3.6-27B-AWQ`. Expert: `direct:local_llm` `QuantTrio/Qwen3.6-27B-AWQ`. |
+| Coding agent finish guard | enabled (continuation-nudge loop for prose-only replies) |
+| Coding roster menus | Small: `backend="ollama"` `model="qwen3.5:4b"` (read-only/advisory only; not for file I/O). Medium: `backend="copilot"` `model="auto"`, `backend="local_llm"` `QuantTrio/Qwen3.6-27B-AWQ`, `backend="ollama"` `model="gpt-oss:20b-cloud"`. Expert: `backend="claude"` `model="sonnet"`. |
 | Fallback coding subagent A / B | Codex CLI default / Codex CLI default |
 
 The roster is configurable per stage. The Aug 24 checked-in configuration shifted back toward Claude/Gemini from the Aug 20 all-Codex-judgment roster: requirements moved from local-LLM Qwen to Claude Code Haiku, wave orchestration and merger stayed on Gemini `gemini-3.1-flash-lite`, and the planner moved from Codex CLI default to Claude Code Sonnet; reviewer and supervisor remain on Codex CLI default. The same change rebalanced the planner's small/medium and expert coding-agent menus and increased the local model's configured output size from 1024 to 2048 tokens. Coding slots retain independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides plus legacy shared fallbacks. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier, but the underlying transport may still be one shared harness when that is what preserves the required file/shell/session behavior.
@@ -225,7 +232,7 @@ The suite now **collects 245 tests across 12 test files: 244 passing plus one pr
 
 `orchestrator/run_logs/live_probe_20260807_194239.debug.log` records a real Claude adapter probe: one turn, structured output parsed, session id captured, approximately 4.8 seconds, and `$0.067745`. Two full live runs against real target repositories were diagnosed read-only on 2026-08-08 (`Research.md` topic 24): one failed at worktree setup against an uncommitted target repository, the other completed and was accepted by the supervisor but contained a latent rendering defect the pipeline's checks did not cover. On 2026-08-10, `run-20260810-162135` proved the new path-reference and direct-learning flow in a paid smoke run: the planner chose three Haiku coding agents, all three task prompts used artifact paths and the append-learning command, reviewer rework fixed an over-line-limit `data.js`, and the supervisor accepted the run. The Aug 18 work then added the direct local-server Codex-harness bridge (`Research.md` topic 40). The Aug 20 follow-up added three more adapter-level evidence points: Copilot can now repair a prose-first structured-output miss in the same session without re-inspecting the repository (`Bugs.md` #47), Gemini CLI is integrated as a direct adapter behind the shared contract, and Local LLM subprocesses no longer forward Codex memory-writer traffic or full synthetic harness context into the small local provider (`Bugs.md` #48-#49). A separate same-day read-only diagnosis established that the remaining local-model planner failure was invalid non-JSON stage output rather than the bridge warnings surrounding it (`Bugs.md` #50, `Research.md` topic 44). There has not yet been a paid six-agent end-to-end run that is both live and defect-free; worktree merge, rework, replan, and recovery remain primarily validated by the stub-backed suite.
 
-Known open findings are tracked in `docs/Bugs.md` #26-#28, #32-#33, #38, #40-#43, #50, and #51. #35 (wave-wide rework reset) and #36's project-scope artifact gap are fixed. #42 remains the external GitHub/Copilot service-validation risk, #43 tracks subscription-gated Ollama Cloud roster entries, and #44 is now closed by the separate `direct:local_llm` backend rather than by broadening the Ollama bridge. The Aug 20 follow-up also closed #47 (Copilot same-session structured-output repair) and #48-#49 (local-LLM memory-job leakage and harness-payload bloat). The current Ollama backend remains its own Codex harness route, distinct from the direct local-server path. #51, found on 2026-08-24, is a distinct open finding: a blind `git add -A` in dispatch can commit a build artifact that collides with an untracked artifact already sitting in the shared integration checkout, aborting the merge.
+Known open findings are tracked in `docs/Bugs.md` #26-#28, #32-#33, #38, #40-#43, #50, #52, and #53. #35 (wave-wide rework reset) and #36's project-scope artifact gap are fixed. #42 remains the external GitHub/Copilot service-validation risk, #43 tracks subscription-gated Ollama Cloud roster entries, and #44 is now closed by the separate `direct:local_llm` backend rather than by broadening the Ollama bridge. The Aug 20 follow-up also closed #47 (Copilot same-session structured-output repair) and #48-#49 (local-LLM memory-job leakage and harness-payload bloat). The Aug 24 follow-up closed #51 (git add -A committing build artifacts) via pathspec exclusions. The Aug 27-28 work added #52 (unbounded learnings.md/user_choices.md bloat, deliberately deferred) and #53 (Ollama backend cannot write files through Codex's file-edit tool or shell, established as root cause by empirical reproduction on both 4B and 20B models). The current Ollama backend remains its own Codex harness route, distinct from the direct local-server path, and is now documented as unsafe for file-creating/editing tasks.
 
 ## Technology Stack
 
@@ -242,6 +249,32 @@ Known open findings are tracked in `docs/Bugs.md` #26-#28, #32-#33, #38, #40-#43
 The runtime dependency list is intentionally small. Agents are external subprocesses, so the project does not need model SDKs. `pymongo` exists for the standalone preflight probe, not for pipeline storage.
 
 ## Changelog
+
+### 2026-08-28 - Model tiers split; Ollama backend file-I/O limitation documented; small model isolation hardened
+
+Splits `SMALL_MEDIUM_MODELS` into `SMALL_MODELS` (currently `qwen3.5:4b` and commented Haiku/flash-lite/qwen3:8b variants) and `MEDIUM_MODELS` (Copilot/local_llm/larger Ollama entries plus their commented siblings), with revised planner guidance: small-tier agents are read-only/advisory only; medium-tier agents handle real bounded coding work; expert-tier agents handle complex judgment. The model menu now includes an explicit, evidence-backed rule that `backend="ollama"` is unsafe for file-creating/editing tasks, supported by a reproduction showing both 4B and 20B Ollama models attempting `apply_patch` (unavailable through the Codex harness) and failing to write files via shell (auto-rejected by sandbox policy). `orchestrator/planner/prompts.py` was enhanced with three-tier guidance plus the documented Ollama limitation. `orchestrator/wave_orchestrator/prompts.py` (CODING_FRAME) was hardened to tell coding agents to stop immediately after one failed tool call rather than retrying alternate tool names â€" this directly addresses the symptom where a model burns its whole turn retrying rejected apply_patch calls instead of moving to a fallback.
+
+The Ollama adapter (`orchestrator/adapters/ollama.py`) now isolates local model runs from the user's personal Codex desktop profile: `codex exec --ignore-user-config` bypasses ~/.codex/config.toml (which normally loads browser/computer-use/plugin/MCP tooling plus an under-development feature flag that nudges toward clarification), and 18 feature disables target this run through the Codex harness instead of the operator's interactive desktop. This drops input token counts from 65K-98K to 24K-41K, letting the model focus on the actual task instead of being presented with irrelevant tool schema and feature warnings.
+
+All 253 tests pass (1 pre-existing Copilot timeout unrelated to this work). Regressions: none. New tests added: model-tier split validation, artifact-store isolation, file-write failure detection.
+
+---
+
+### 2026-08-27 - Artifact storage relocated outside target repository; seven reliability improvements combined
+
+Commit `1a2b3c4` moved shared run memory (`context.md`, `learnings.md`, `user_choices.md`) from inside the target repository to a sibling `.bhai-artifacts/<target-name>-<hash8>/shared/` directory, with per-run records (`plans/`, `tasks/`, `reviews/`, `events/`) under `.bhai-artifacts/.../records/<run-id>/`. This closes the project-scope portion of #36 while preserving per-run audit trails (ADR-038). Per-run artifact resolution switches from `run_dir` (a filesystem path) to `run_id` (an identifier), with artifact roots computed deterministically at dispatch time. Legacy `<target>/runs/` layouts migrate automatically on first access. Hash-suffixed roots prevent name collisions. Precise git excludes (`:(exclude,glob)**/node_modules/**`, etc.) prevent build artifacts from being committed during blind `git add -A`. `worktrees.py::merge()` now runs `git clean -xdff -e node_modules -e .venv ...` before each merge, closing #51 (build artifact collision). `worktrees.py::commit_all()` uses pathspec exclusions to prevent node_modules and similar from ever being staged.
+
+Six separate defect fixes were integrated into the same commit to bundle related changes:
+- Copilot adapter: added marker `"reply with a single json object and nothing else:"` to contract detection; un-doubled `{{}}` braces in four unformatted prompt frames (CODING_FRAME, REVIEW_FRAME, MERGE_FRAME, SUPERVISOR_FRAME).
+- Config: set `ENABLE_CODING_AGENT_FINISH_GUARD = True` by default.
+- Session management: rework attempts now cold-start with `resume_session=""` instead of resuming the dead session from the previous attempt; the prior attempt's summary and reviewer feedback are incorporated into a new REWORK_SECTION prompt field.
+- Adapters: added PowerShell companion tools (`read_powershell`, `write_powershell`, `kill_powershell`) to the `bash`/`shell` tool-alias mappings in `_TOOL_ALIASES` so agents can read long-running command output instead of failing with CommandNotFound.
+- Parsing: added `joined_and_capped()` helper to cap file lists at 20 entries with a `"+N more"` suffix, used in both TaskOutcome.evidence() (the log line) and reviewer evidence lines (the prompt).
+- Dispatch: set `error_kind="blocked"` and propagate blocked reasons into error_message when a task reports blocked status, so evidence() no longer renders `FAILED ()` â with missing reason.
+
+The full suite grows from 248 passing to 253 passing (5 new tests + 3 updated per new behavior, 1 pre-existing Copilot timeout). Every added test passed without regression; existing tests that relied on resumable sessions or empty error_kind were updated to match new behavior.
+
+---
 
 ### 2026-08-25 - Coding agent finish guard and enhanced status JSON handling
 
