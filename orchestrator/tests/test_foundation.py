@@ -953,6 +953,69 @@ def test_run_shared_does_not_record_anything_on_success(run_dir):
     assert art.read_learnings_stamp(run_dir) == 0
 
 
+def test_run_shared_does_not_duplicate_the_same_symptom_on_retry(run_dir):
+    """Observed in production (run-20260829-162143): a task rerunning its own
+    failing test five times auto-appended five near-identical entries. Retrying
+    the identical command with the identical symptom should collapse to one
+    entry — the second and third attempts tell a peer nothing new."""
+    failing_command = (
+        sys.executable,
+        "-c",
+        "import sys; print('assertion X failed', file=sys.stderr); sys.exit(1)",
+    )
+    for _ in range(3):
+        result = _run_shared(run_dir, "T-001", *failing_command)
+        assert result.returncode == 1
+
+    body = art.read_text(run_dir.learnings)
+    # Count entries by their `[auto] `` marker, not the symptom phrase — the
+    # phrase also appears inside the quoted command text of each entry.
+    assert body.count("[auto] `") == 1
+    assert "assertion X failed" in body
+
+
+def test_run_shared_records_a_genuinely_new_symptom_for_the_same_command(run_dir):
+    """The same command can fail for a *different* reason on a later attempt
+    (an environment issue first, then a real test assertion once that's
+    fixed) — that second failure is new information and must still land,
+    even though the command string is identical to the suppressed retry
+    above."""
+    def run(script: str) -> subprocess.CompletedProcess:
+        return _run_shared(
+            run_dir, "T-001", sys.executable, "-c",
+            f"import sys; print('{script}', file=sys.stderr); sys.exit(1)",
+        )
+
+    run("environment not configured")
+    run("environment not configured")  # duplicate, suppressed
+    run("assertion Z failed")  # genuinely new, must be recorded
+
+    body = art.read_text(run_dir.learnings)
+    assert body.count("[auto] `") == 2
+    assert "environment not configured" in body
+    assert "assertion Z failed" in body
+
+
+def test_run_shared_dedup_is_scoped_per_task(run_dir):
+    """A peer recording the identical symptom is a different, useful signal —
+    not a duplicate to suppress. Only a task's repeat of its OWN prior finding
+    is redundant."""
+    failing_command = (
+        sys.executable,
+        "-c",
+        "import sys; print('shared install failure', file=sys.stderr); sys.exit(1)",
+    )
+    art.write_learnings_cursor(run_dir, "T-001", art.read_learnings_stamp(run_dir))
+    art.write_learnings_cursor(run_dir, "T-002", art.read_learnings_stamp(run_dir))
+
+    _run_shared(run_dir, "T-001", *failing_command)
+    _run_shared(run_dir, "T-002", *failing_command)
+
+    body = art.read_text(run_dir.learnings)
+    assert body.count("[auto] `") == 2
+    assert "T-001" in body and "T-002" in body
+
+
 def test_run_shared_surfaces_a_peer_finding_hit_within_the_same_window(run_dir):
     """The docs/Bugs.md #54 regression: T-001 and T-002 dispatch at roughly the
     same moment (dispatch.py seeds both cursors to "nothing yet" before either

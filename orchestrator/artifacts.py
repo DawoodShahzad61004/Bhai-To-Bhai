@@ -498,6 +498,34 @@ def _first_nonblank_line(text: str, limit: int = 300) -> str:
     return ""
 
 
+def _already_auto_recorded(
+    artifacts: RunArtifacts, task_id: str, command_str: str, symptom: str
+) -> bool:
+    """True if `task_id` already auto-recorded this exact command/symptom pair.
+
+    Keyed on the symptom too, not just the command: a repeated command can
+    fail for a *different* reason on a later attempt (an environment issue,
+    then later a real test assertion once the environment is fixed), and that
+    second failure is new information no one has seen yet — only a byte-for-
+    byte repeat of the same symptom is the noise this exists to cut (observed
+    in production: the same task rerunning the same failing test five times
+    in a row, each auto-appending a near-identical entry).
+
+    Scoped to this task's own entries — a peer recording the identical
+    finding is a different, useful signal (already surfaced via
+    `peer_entries_since`), not a duplicate to suppress here. Reads directly,
+    no lock: only this task's own single, sequential process ever writes
+    entries under its own task_id, so nothing else can race this read.
+    """
+    prefix = f"[auto] `{command_str}` failed"
+    suffix = f": {symptom}"
+    text = read_text(artifacts.learnings)
+    return any(
+        agent == task_id and prefix in entry and entry.rstrip().endswith(suffix)
+        for agent, entry in _split_learning_entries(text)
+    )
+
+
 def run_shared_command(shared_dir: str, task_id: str, command: list[str]) -> int:
     """Run `command`, then surface any peer `learnings.md` entries recorded meanwhile.
 
@@ -507,10 +535,12 @@ def run_shared_command(shared_dir: str, task_id: str, command: list[str]) -> int
     no reason to expect an answer is already there. This wraps the failing
     command itself instead of relying on that judgment call: on a non-zero
     exit it (1) records this task's own symptom immediately, before anyone
-    diagnoses anything, and (2) prints whatever peers have recorded since this
-    task last checked, right below the command's real output — the same tool
-    result the agent is already about to read, not a second lookup it has to
-    remember to make.
+    diagnoses anything — skipped if this exact command already produced this
+    exact symptom for this task, so retrying the same failing command does
+    not spam learnings.md with repeats of a finding already there — and (2)
+    prints whatever peers have recorded since this task last checked, right
+    below the command's real output — the same tool result the agent is
+    already about to read, not a second lookup it has to remember to make.
 
     The command's stdout/stderr and exit code are preserved exactly, so a
     caller's own success/failure handling behaves identically to running the
@@ -549,9 +579,11 @@ def run_shared_command(shared_dir: str, task_id: str, command: list[str]) -> int
         sys.stderr.write(result.stderr)
 
     if result.returncode != 0:
+        command_str = " ".join(command)
         symptom = _first_nonblank_line(result.stderr) or _first_nonblank_line(result.stdout)
-        finding = f"[auto] `{' '.join(command)}` failed (exit {result.returncode}): {symptom}"
-        append_learning(artifacts, task_id, finding)
+        if not _already_auto_recorded(artifacts, task_id, command_str, symptom):
+            finding = f"[auto] `{command_str}` failed (exit {result.returncode}): {symptom}"
+            append_learning(artifacts, task_id, finding)
 
     stamp = read_learnings_stamp(artifacts)
     if stamp != cursor:
