@@ -178,6 +178,15 @@ def run_task(
         outcome.branch = base
 
     artifacts = art.prepare(run_id, target_repo)
+    # Seed this task's learnings.md cursor to right now, before the agent's own
+    # turn (and its first `Read` of learnings.md) starts. Without this, the
+    # first `run-shared` call this task ever makes would default its cursor to
+    # *its own* current stamp reading — silently treating anything a peer
+    # already wrote moments earlier as "already known" and never surfacing it,
+    # which is exactly the failure docs/Bugs.md #54 describes. Seeding here
+    # instead makes the cursor mean what it should: "what this task could
+    # already see when it started," matching its actual start-of-turn read.
+    art.write_learnings_cursor(artifacts, task_id, art.read_learnings_stamp(artifacts))
     result = run_agent(
         coding_prompt(
             task=task,

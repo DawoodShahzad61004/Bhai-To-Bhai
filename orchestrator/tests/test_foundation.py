@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -908,6 +909,88 @@ def test_the_append_learning_cli_reuses_the_same_writer(run_dir):
     body = art.read_text(run_dir.learnings)
     assert "found a thing" in body
     assert "task-T-001" in body
+
+
+def test_append_learning_bumps_the_stamp(run_dir):
+    """The stamp is what lets `run-shared` skip a full read when nothing
+    changed (docs/Bugs.md #54) — it has to track the file's real size or that
+    fast path silently goes stale."""
+    assert art.read_learnings_stamp(run_dir) == 0
+    art.append_learning(run_dir, "planner", "waves must respect depends_on")
+    assert art.read_learnings_stamp(run_dir) == run_dir.learnings.stat().st_size
+
+
+def _run_shared(run_dir, task_id: str, *command: str) -> subprocess.CompletedProcess:
+    script = str(Path(art.__file__).resolve())
+    return subprocess.run(
+        [sys.executable, script, "run-shared", str(run_dir.shared_dir), task_id, "--", *command],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+
+def test_run_shared_preserves_exit_code_and_records_a_symptom_on_failure(run_dir):
+    result = _run_shared(
+        run_dir,
+        "T-001",
+        sys.executable,
+        "-c",
+        "import sys; print('normal output'); print('npm ERESOLVE conflict', file=sys.stderr); sys.exit(7)",
+    )
+    assert result.returncode == 7
+    assert "normal output" in result.stdout
+    assert "npm ERESOLVE conflict" in result.stderr
+
+    body = art.read_text(run_dir.learnings)
+    assert "T-001" in body
+    assert "npm ERESOLVE conflict" in body
+
+
+def test_run_shared_does_not_record_anything_on_success(run_dir):
+    result = _run_shared(run_dir, "T-001", sys.executable, "-c", "print('fine')")
+    assert result.returncode == 0
+    assert art.read_learnings_stamp(run_dir) == 0
+
+
+def test_run_shared_surfaces_a_peer_finding_hit_within_the_same_window(run_dir):
+    """The docs/Bugs.md #54 regression: T-001 and T-002 dispatch at roughly the
+    same moment (dispatch.py seeds both cursors to "nothing yet" before either
+    agent starts), then T-001 fails first. T-002's own first `run-shared` call
+    — for the *same* underlying failure — must see T-001's entry, even though
+    T-002 never went looking for it."""
+    # What wave_orchestrator/dispatch.py does for every task right before it
+    # starts that task's agent turn.
+    art.write_learnings_cursor(run_dir, "T-001", art.read_learnings_stamp(run_dir))
+    art.write_learnings_cursor(run_dir, "T-002", art.read_learnings_stamp(run_dir))
+
+    failing_command = (
+        sys.executable,
+        "-c",
+        "import sys; print('npm ERESOLVE conflict', file=sys.stderr); sys.exit(1)",
+    )
+    t001 = _run_shared(run_dir, "T-001", *failing_command)
+    assert t001.returncode == 1
+    assert "PEER FINDINGS" not in t001.stderr  # nothing recorded yet when T-001 ran
+
+    t002 = _run_shared(run_dir, "T-002", *failing_command)
+    assert t002.returncode == 1
+    assert "PEER FINDINGS RECORDED WHILE THIS RAN" in t002.stderr
+    assert "T-001" in t002.stderr
+    assert "npm ERESOLVE conflict" in t002.stderr
+
+
+def test_run_shared_skips_the_banner_once_a_task_has_already_seen_a_finding(run_dir):
+    """A second, later `run-shared` call from the same task should not
+    re-announce a peer finding it already surfaced once."""
+    art.write_learnings_cursor(run_dir, "T-002", art.read_learnings_stamp(run_dir))
+    art.append_learning(run_dir, "T-001", "npm ci needs --legacy-peer-deps")
+
+    first = _run_shared(run_dir, "T-002", sys.executable, "-c", "print('ok')")
+    assert "PEER FINDINGS" in first.stderr
+
+    second = _run_shared(run_dir, "T-002", sys.executable, "-c", "print('ok again')")
+    assert "PEER FINDINGS" not in second.stderr
 
 
 def test_events_are_written_on_arrival(run_dir):

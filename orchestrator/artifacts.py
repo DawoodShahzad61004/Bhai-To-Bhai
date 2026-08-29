@@ -50,6 +50,14 @@ logger = get_logger(__name__)
 CONTEXT_FILE = "context.md"
 USER_CHOICES_FILE = "user_choices.md"
 LEARNINGS_FILE = "learnings.md"
+# Bumped alongside every learnings.md write (its value is the file's new byte
+# size) so a reader can ask "has anything been added since I last looked?"
+# without opening and diffing the file itself — see run-shared below and
+# docs/Bugs.md #54.
+LEARNINGS_STAMP_FILE = "learnings.stamp"
+# Per-task "where did I last leave off in learnings.md" bookmarks, one file
+# each, kept out of the three agent-facing shared files rather than mixed in.
+LEARNINGS_CURSORS_DIRNAME = ".learnings_cursors"
 TASK_GLOB = "TASK-*.json"
 
 # A task id has to survive being used as a filename, a git branch component and a
@@ -110,6 +118,17 @@ class RunArtifacts:
     @property
     def learnings_lock(self) -> Path:
         return self.learnings.with_name(self.learnings.name + ".lock")
+
+    @property
+    def learnings_stamp(self) -> Path:
+        return self.shared_dir / LEARNINGS_STAMP_FILE
+
+    @property
+    def learnings_cursors_dir(self) -> Path:
+        return self.shared_dir / LEARNINGS_CURSORS_DIRNAME
+
+    def learnings_cursor_file(self, task_id: str) -> Path:
+        return self.learnings_cursors_dir / f"{safe_id(task_id)}.offset"
 
     @property
     def events(self) -> Path:
@@ -174,6 +193,7 @@ def _initialise_empty_artifacts(artifacts: RunArtifacts) -> None:
         artifacts.context,
         artifacts.learnings,
         artifacts.learnings_lock,
+        artifacts.learnings_stamp,
         artifacts.user_choices,
         artifacts.events,
     ):
@@ -302,6 +322,11 @@ def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
     interleaved write would lose whichever writer lost the race. `_exclusive_lock`
     is what prevents that; the write itself is one `write()` call so a
     concurrent reader never observes a header with no entry after it.
+
+    Also rewrites `learnings_stamp` to the file's new byte size, inside the
+    same lock — so the stamp and the content it describes never disagree, and
+    `peer_entries_since()` below can tell "nothing changed" from a stamp
+    comparison alone, without opening `learnings.md` at all.
     """
     finding = finding.strip()
     if not finding:
@@ -318,7 +343,87 @@ def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
         )
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(header + entry)
+        artifacts.learnings_stamp.parent.mkdir(parents=True, exist_ok=True)
+        artifacts.learnings_stamp.write_text(str(path.stat().st_size), encoding="utf-8")
     logger.debug("learnings += %s (%d chars)", agent, len(finding))
+
+
+def read_learnings_stamp(artifacts: RunArtifacts) -> int:
+    """`learnings.md`'s byte size as of the most recent `append_learning()` call.
+
+    0 for a run that has never had a finding appended — the same state an
+    empty, freshly-`touch()`-ed learnings.md is in.
+    """
+    text = read_text(artifacts.learnings_stamp, "0").strip()
+    try:
+        return int(text)
+    except ValueError:
+        return 0
+
+
+def read_learnings_cursor(artifacts: RunArtifacts, task_id: str) -> int | None:
+    """Where `task_id` last left off reading `learnings.md`, or None if never recorded.
+
+    `None`, not 0, marks "never recorded" — dispatch seeds a task's cursor to 0
+    whenever a run's `learnings.md` genuinely starts empty (see
+    `wave_orchestrator/dispatch.py`), and 0 is that case's correct, meaningful
+    value. Collapsing "unset" into 0 would make a caller's `cursor or
+    read_learnings_stamp(...)` fallback override a real, freshly-seeded 0 with
+    "start from wherever the file is right now" — silently hiding exactly the
+    peer finding docs/Bugs.md #54 needs surfaced.
+    """
+    text = read_text(artifacts.learnings_cursor_file(task_id), "").strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def write_learnings_cursor(artifacts: RunArtifacts, task_id: str, offset: int) -> None:
+    path = artifacts.learnings_cursor_file(task_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(offset), encoding="utf-8")
+
+
+_ENTRY_HEADER = re.compile(r"^## \S+ \S+ — (.+)$", re.MULTILINE)
+
+
+def _split_learning_entries(text: str) -> list[tuple[str, str]]:
+    """(agent, entry text) for every `## <stamp> — <agent>` block in `text`."""
+    headers = list(_ENTRY_HEADER.finditer(text))
+    entries = []
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+        entries.append((header.group(1).strip(), text[header.start():end].rstrip("\n")))
+    return entries
+
+
+def peer_entries_since(artifacts: RunArtifacts, task_id: str, cursor: int) -> tuple[str, int]:
+    """Findings appended by agents other than `task_id` after byte offset `cursor`.
+
+    Returns `(formatted text or "", learnings.md's current byte size)` — the
+    second value is always returned, even when the first is empty, so a caller
+    can advance its cursor unconditionally rather than only on a hit.
+
+    Reads bytes rather than `read_text()` so the offset lines up with
+    `learnings_stamp` (a byte size). A cursor that lands mid-character in a
+    multibyte UTF-8 sequence — real here, since these entries carry the same
+    em dash `append_learning` writes into every header — decodes to a
+    replacement character at worst; this channel is a best-effort nudge, not
+    the record of truth, which is `learnings.md` itself, always fully
+    readable by any agent regardless of what this returns.
+    """
+    try:
+        data = artifacts.learnings.read_bytes()
+    except FileNotFoundError:
+        return "", 0
+    end = len(data)
+    cursor = min(max(cursor, 0), end)
+    tail = data[cursor:].decode("utf-8", errors="replace")
+    peers = [text for agent, text in _split_learning_entries(tail) if agent != task_id]
+    return "\n\n".join(peers), end
 
 
 def append_user_choices(artifacts: RunArtifacts, run_id: str, content: str) -> None:
@@ -385,8 +490,98 @@ def load_tasks(artifacts: RunArtifacts) -> list[dict[str, Any]]:
     return tasks
 
 
+def _first_nonblank_line(text: str, limit: int = 300) -> str:
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return line[:limit]
+    return ""
+
+
+def run_shared_command(shared_dir: str, task_id: str, command: list[str]) -> int:
+    """Run `command`, then surface any peer `learnings.md` entries recorded meanwhile.
+
+    docs/Bugs.md #54: a coding agent is told it can re-read `learnings.md` "at
+    any time," but that only fires if the agent thinks to look — an agent
+    hitting the exact failure a same-wave peer is *also* hitting right now has
+    no reason to expect an answer is already there. This wraps the failing
+    command itself instead of relying on that judgment call: on a non-zero
+    exit it (1) records this task's own symptom immediately, before anyone
+    diagnoses anything, and (2) prints whatever peers have recorded since this
+    task last checked, right below the command's real output — the same tool
+    result the agent is already about to read, not a second lookup it has to
+    remember to make.
+
+    The command's stdout/stderr and exit code are preserved exactly, so a
+    caller's own success/failure handling behaves identically to running the
+    bare command — the only difference on a failure is extra text after it,
+    and on Windows the command is fed through `cmd.exe` (`shell=True` with a
+    correctly quoted single string) so a `.cmd`-shimmed tool like `npm` still
+    resolves via PATH the way it would when this same command is typed
+    directly into PowerShell.
+    """
+    shared_path = Path(shared_dir).resolve()
+    artifacts = RunArtifacts(run_id="_cli", root=shared_path.parent)
+
+    cursor = read_learnings_cursor(artifacts, task_id)
+    if cursor is None:
+        cursor = read_learnings_stamp(artifacts)
+
+    import subprocess
+
+    if os.name == "nt":
+        result = subprocess.run(
+            subprocess.list2cmdline(command),
+            shell=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    else:
+        result = subprocess.run(
+            command, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+
+    if result.returncode != 0:
+        symptom = _first_nonblank_line(result.stderr) or _first_nonblank_line(result.stdout)
+        finding = f"[auto] `{' '.join(command)}` failed (exit {result.returncode}): {symptom}"
+        append_learning(artifacts, task_id, finding)
+
+    stamp = read_learnings_stamp(artifacts)
+    if stamp != cursor:
+        peers, new_cursor = peer_entries_since(artifacts, task_id, cursor)
+        if peers:
+            print("\n--- PEER FINDINGS RECORDED WHILE THIS RAN ---", file=sys.stderr)
+            print(peers, file=sys.stderr)
+        write_learnings_cursor(artifacts, task_id, new_cursor)
+    else:
+        write_learnings_cursor(artifacts, task_id, stamp)
+
+    return result.returncode
+
+
+def _cli_run_shared(argv: list[str]) -> int:
+    usage = "usage: artifacts.py run-shared <artifacts_dir> <task_id> -- <command> [args...]"
+    if "--" not in argv:
+        print(usage, file=sys.stderr)
+        return 1
+    split = argv.index("--")
+    head, command = argv[:split], argv[split + 1 :]
+    if len(head) != 2 or not command:
+        print(usage, file=sys.stderr)
+        return 1
+    shared_dir, task_id = head
+    return run_shared_command(shared_dir, task_id, command)
+
+
 def _cli(argv: list[str] | None = None) -> int:
-    """`python artifacts.py append-learning <artifacts_dir> <agent> [message]`.
+    """`append-learning <artifacts_dir> <agent> [message]` or `run-shared <artifacts_dir> <task_id> -- <command...>`.
 
     The coding subagents' own entry point for writing directly to the shared
     learnings.md from inside their worktree — invoked over Bash, not imported,
@@ -397,8 +592,34 @@ def _cli(argv: list[str] | None = None) -> int:
     `artifacts_dir` is the `shared/` directory itself — the same path a coding
     agent already received via `--add-dir` (`RunArtifacts.shared_dir`) — not a
     directory this command prepares. Nothing under `records/` is reachable
-    from here, by construction: this command only ever needs `learnings.md`.
+    from here, by construction: these commands only ever touch `learnings.md`
+    and its stamp/cursor sidecars.
+
+    `run-shared` is dispatched before argparse ever sees the arguments: its
+    trailing `<command...>` is a free-form argv tail (someone else's flags,
+    not this program's), and argparse's subparser handling has no clean way
+    to say "stop parsing after `--` and hand me everything raw."
+    `append-learning` has no such tail, so it keeps its original argparse path
+    unchanged below.
+
+    Reconfigures stdout/stderr to UTF-8 first. This CLI is invoked as its own
+    fresh OS process (over Bash, not imported), so it starts with whatever
+    console codepage Windows handed it — cp1252, typically — rather than the
+    UTF-8 every file in this module already insists on. `run-shared`'s peer
+    findings are `learnings.md` entries verbatim, headers and all, and every
+    header carries the same em dash Bugs.md #11 already names as the thing
+    bare cp1252 output dies on.
     """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+    argv = list(argv if argv is not None else sys.argv[1:])
+    if argv and argv[0] == "run-shared":
+        return _cli_run_shared(argv[1:])
+
     import argparse
 
     parser = argparse.ArgumentParser(

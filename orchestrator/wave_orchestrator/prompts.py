@@ -96,21 +96,26 @@ LEARNINGS_SECTION = """\
 ## Shared findings from this run
 
 Other coding agents are working on other tasks in parallel, in their own \
-worktrees, right now — this is the one file all of you share. Read \
-`{learnings_path}` at any time to see what they have found; reading is always \
-safe and never waits on anything.
+worktrees right now — this is the one file all of you share. Read \
+`{learnings_path}` at any time; reading never waits on anything.
 
-If you learn something the others should know — a gotcha, a convention this \
-codebase actually follows, a dead end — record it the moment you find it, do \
-not wait until you finish, by running this from a shell (adjust the finding, \
-keep the rest exactly as shown):
+Record a finding the moment you find it, not at the end, from a shell:
 
     "{python_exe}" "{script_path}" append-learning "{artifacts_dir}" "{task_id}" "<your finding, one paragraph>"
 
-This is safe to run at any time, including at the same moment another agent \
-runs it too — writes are queued automatically, so nothing is lost. Only call it \
-for something genuinely worth another agent's attention; do not narrate routine \
-progress.
+For install/build/test commands, use this instead of calling them directly \
+— same args, `run-shared` for `append-learning`, then `--` and the command. \
+On failure it auto-records your symptom and prints any peer finding for the \
+same failure below the command's output:
+
+    "{python_exe}" "{script_path}" run-shared "{artifacts_dir}" "{task_id}" -- <command and args>
+
+For any other failure, re-read the file first — a peer may already have the \
+answer — and if it's one others could hit too (not a bug in your own code), \
+record the raw symptom before you diagnose it.
+
+Safe to run any time, even simultaneously — writes are queued. Only record \
+what's genuinely worth a peer's attention; do not narrate routine progress.
 """
 
 REWORK_SECTION = """\

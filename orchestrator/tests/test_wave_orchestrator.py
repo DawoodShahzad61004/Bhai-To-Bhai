@@ -174,6 +174,63 @@ def test_the_brief_tells_agents_how_to_record_a_finding_directly(wave_state, stu
     assert str(artifacts.shared_dir) in call["extra_dirs"]
 
 
+def test_the_coding_prompt_stays_within_copilots_argv_budget():
+    """A production run (run-20260829-160013) hit this for real: a
+    `LEARNINGS_SECTION` edit made the prompt long enough that every
+    copilot-backed task failed both its initial dispatch and its rework with
+    "The command line is too long," while the same-length codex-backed task in
+    the same wave succeeded. copilot passes the whole prompt as one `-p`
+    argument through `copilot.BAT`, which Windows routes through cmd.exe — a
+    ~8191-character total command-line ceiling that has nothing to do with the
+    prompt's own content, only its length. cmd.exe's own flags (tool list,
+    add-dir, worktree path) already cost several hundred characters before the
+    prompt starts, so this budgets the prompt itself with real margin, not just
+    enough for one task's exact length."""
+    from wave_orchestrator.prompts import CODING_FRAME, coding_prompt
+
+    task = {
+        "task_id": "T-003",
+        "title": "Animate App filter panel changes",
+        "description": (
+            "Add a component-scoped CSSTransitionGroup in App that animates the "
+            "filtered task panel when the selected filter changes, using a key "
+            "derived from the filter and react-transition-group 1.2.1 only for "
+            "this new animation. Preserve TaskList callbacks, task summary "
+            "aria-live behavior, and nested row transitions; create a dedicated "
+            "App filter-transition stylesheet with enter/enter-active/leave/"
+            "leave-active classes, explicit 220ms-compatible timeouts, and "
+            "prefers-reduced-motion handling. Extend App tests for filter "
+            "changes and transition wiring."
+        ),
+        "files": [
+            "frontend/src/App.jsx",
+            "frontend/src/features/tasks/AppFilterTransition.css",
+            "frontend/src/App.test.jsx",
+        ],
+        "acceptance": (
+            "App tests pass; changing all/active/completed remounts the keyed "
+            "panel with the declared transition classes and matching timeout "
+            "values, task actions still work, reduced-motion disables or "
+            "shortens the panel transition, and npm run build succeeds."
+        ),
+    }
+    prompt = coding_prompt(
+        task=task,
+        worktree=r"C:\Users\LOQ\Desktop\Projects\.bhai-worktrees\run-20260829-160013-T-003",
+        context_path=r"C:\Users\LOQ\Desktop\Projects\.bhai-artifacts\target-55fce4bb\shared\context.md",
+        learnings_path=r"C:\Users\LOQ\Desktop\Projects\.bhai-artifacts\target-55fce4bb\shared\learnings.md",
+        artifacts_dir=r"C:\Users\LOQ\Desktop\Projects\.bhai-artifacts\target-55fce4bb\shared",
+        python_exe=r"C:\Users\LOQ\Desktop\Projects\Bhai-To-Bhai\.venv\Scripts\python.exe",
+        script_path=r"C:\Users\LOQ\Desktop\Projects\Bhai-To-Bhai\orchestrator\artifacts.py",
+    )
+    full_prompt = CODING_FRAME + "\n\n" + prompt
+    assert len(full_prompt) < 7000, (
+        f"coding prompt is {len(full_prompt)} chars for a realistically verbose "
+        "task — copilot's own argv flags cost several hundred more before the "
+        "8191-char cmd.exe ceiling; trim the brief rather than let this regress"
+    )
+
+
 def test_a_coding_agent_can_record_a_finding_the_way_the_brief_instructs(wave_state, stub):
     """End to end: actually run the command the brief tells agents to run, and
     confirm it lands in the run's shared learnings.md."""
