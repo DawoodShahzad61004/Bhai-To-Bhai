@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import artifacts as art  # noqa: E402
 import config  # noqa: E402
+import diagnostics  # noqa: E402
 import worktrees as wt  # noqa: E402
 from graph import compile_graph  # noqa: E402
 from logging_config import get_logger, set_run_id, setup_logging  # noqa: E402
@@ -102,6 +103,8 @@ def describe_config() -> str:
         f"  transport         {config.INVOCATION}",
         f"  reviewer          {'ON' if config.ENABLE_REVIEWER else 'OFF'}",
         f"  supervisor        {'ON' if config.ENABLE_SUPERVISOR else 'OFF'}",
+        f"  agent diagnostics {'ON' if config.ENABLE_AGENT_DIAGNOSTICS else 'OFF'}",
+        f"  diagnostic workers {config.AGENT_DIAGNOSTIC_MAX_PARALLEL}",
         f"  interactive Q&A   {'ON' if config.INTERACTIVE_REQUIREMENTS else 'OFF'}",
         f"  git worktrees     {'ON' if config.USE_GIT_WORKTREES else 'OFF'}",
         "  artifact store    "
@@ -132,6 +135,26 @@ def describe_config() -> str:
         f"deadline {config.CODING_AGENT_B.deadline_seconds}s"
     )
     return "\n".join(lines)
+
+
+def diagnostics_gate_passed() -> bool:
+    """Run the optional strict live-backend gate before any run state exists."""
+    if not config.ENABLE_AGENT_DIAGNOSTICS:
+        return True
+
+    try:
+        report = diagnostics.run_configured_diagnostics()
+    except ValueError as exc:
+        print("Bhai-To-Bhai agent diagnostics")
+        print("=" * 31)
+        print(f"[FAIL] configuration: {exc}")
+        print("Run aborted before pipeline startup.")
+        return False
+
+    print(diagnostics.render_human(report))
+    if not report.passed:
+        print("Run aborted before pipeline startup.")
+    return report.passed
 
 
 def render_graph() -> str:
@@ -267,6 +290,9 @@ def main(argv: list[str] | None = None) -> int:
     if error:
         print(f"error: {error}")
         return 2
+
+    if not diagnostics_gate_passed():
+        return 1
 
     run_id = args.resume or args.run_id or datetime.now().strftime("run-%Y%m%d-%H%M%S")
     artifacts = art.prepare(run_id, target)

@@ -325,7 +325,16 @@ def _is_context_overflow(error: UpstreamError) -> bool:
     """
     raw_body = error.body.decode("utf-8", errors="replace")
     body = raw_body.lower()
-    return "maximum context length" in body or "context_length" in body
+    token_budget_exceeded = (
+        "inputs" in body
+        and "max_new_tokens" in body
+        and "must be <=" in body
+    )
+    return (
+        "maximum context length" in body
+        or "context_length" in body
+        or token_budget_exceeded
+    )
 
 
 def chat_to_response_events(
@@ -616,9 +625,7 @@ class _BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-def _allowed_codex_tools(tools: tuple[str, ...]) -> set[str] | None:
-    if not tools:
-        return None
+def _allowed_codex_tools(tools: tuple[str, ...]) -> set[str]:
     allowed: set[str] = set()
     if {"Read", "Write", "Edit", "Glob", "Grep", "Bash"}.intersection(tools):
         allowed.add("shell_command")

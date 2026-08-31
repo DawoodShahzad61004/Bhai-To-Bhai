@@ -34,6 +34,12 @@ load_dotenv()
 ENABLE_REVIEWER = True
 ENABLE_SUPERVISOR = True
 
+# Live backend/model diagnostics are opt-in because each unique configured pair
+# makes a real provider call.  The standalone diagnostics CLI ignores this gate;
+# this flag controls only automatic checks before a pipeline starts or resumes.
+ENABLE_AGENT_DIAGNOSTICS = False
+AGENT_DIAGNOSTIC_MAX_PARALLEL = 3
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PATHS

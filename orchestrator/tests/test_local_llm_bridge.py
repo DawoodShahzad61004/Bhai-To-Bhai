@@ -6,6 +6,8 @@ import json
 from urllib.request import Request, urlopen
 
 from adapters.local_llm_bridge import (
+    UpstreamError,
+    _is_context_overflow,
     chat_to_response_events,
     compact_chat_request,
     responses_bridge,
@@ -232,6 +234,24 @@ def test_compact_request_preserves_latest_task_and_tool_schema():
     assert compact["max_tokens"] == MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL
 
 
+def test_server_token_budget_error_triggers_context_compaction():
+    error = UpstreamError(
+        422,
+        json.dumps(
+            {
+                "error": (
+                    "Input validation error: `inputs` tokens + `max_new_tokens` "
+                    "must be <= 66222. Given: 97379 `inputs` tokens and 0 "
+                    "`max_new_tokens`"
+                ),
+                "error_type": "validation",
+            }
+        ).encode("utf-8"),
+    )
+
+    assert _is_context_overflow(error) is True
+
+
 def test_loopback_bridge_serves_responses_sse(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -251,6 +271,14 @@ def test_loopback_bridge_serves_responses_sse(monkeypatch):
                 {
                     "model": "local/model",
                     "input": "Return the marker.",
+                    "tools": [
+                        {
+                            "type": "function",
+                            "name": "shell_command",
+                            "description": "Run a command.",
+                            "parameters": {"type": "object", "properties": {}},
+                        }
+                    ],
                     "stream": True,
                 }
             ).encode("utf-8"),
@@ -265,6 +293,7 @@ def test_loopback_bridge_serves_responses_sse(monkeypatch):
     assert captured["payload"]["messages"] == [
         {"role": "user", "content": "Return the marker."}
     ]
+    assert "tools" not in captured["payload"]
     assert "event: response.output_item.done" in body
     assert '"text":"BRIDGE_OK"' in body
     assert "event: response.completed" in body

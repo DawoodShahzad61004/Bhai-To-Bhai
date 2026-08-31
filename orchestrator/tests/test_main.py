@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -80,6 +81,7 @@ def test_dry_run_prints_the_configuration_and_the_graph(capsys):
     assert "transport" in out
     assert "reviewer" in out
     assert "supervisor" in out
+    assert "agent diagnostics" in out
     # Every agent's backend and model is stated, so a run is never a surprise.
     assert "requirements" in out
     assert "coding subagent" in out
@@ -97,6 +99,78 @@ def test_describe_config_reflects_the_toggles(monkeypatch):
     text = main.describe_config()
     assert "reviewer          OFF" in text
     assert "supervisor        ON" in text
+
+
+def test_disabled_diagnostics_gate_makes_no_live_call(monkeypatch):
+    monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", False)
+    monkeypatch.setattr(
+        main.diagnostics,
+        "run_configured_diagnostics",
+        lambda: pytest.fail("disabled diagnostics made a live call"),
+    )
+
+    assert main.diagnostics_gate_passed() is True
+
+
+@pytest.mark.parametrize("passed", [True, False])
+def test_enabled_diagnostics_gate_uses_the_live_report(monkeypatch, capsys, passed):
+    monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", True)
+    monkeypatch.setattr(
+        main.diagnostics,
+        "run_configured_diagnostics",
+        lambda: SimpleNamespace(passed=passed),
+    )
+    monkeypatch.setattr(main.diagnostics, "render_human", lambda report: "diagnostic summary")
+
+    assert main.diagnostics_gate_passed() is passed
+    out = capsys.readouterr().out
+    assert "diagnostic summary" in out
+    assert ("Run aborted" in out) is (not passed)
+
+
+def test_diagnostics_configuration_error_fails_the_gate(monkeypatch, capsys):
+    monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", True)
+    monkeypatch.setattr(
+        main.diagnostics,
+        "run_configured_diagnostics",
+        lambda: (_ for _ in ()).throw(ValueError("invalid menu")),
+    )
+
+    assert main.diagnostics_gate_passed() is False
+    assert "invalid menu" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("resume_args", [[], ["--resume", "existing-run"]])
+def test_failed_diagnostics_abort_new_and_resumed_runs_before_artifacts(
+    monkeypatch, git_repo, resume_args
+):
+    monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", True)
+    monkeypatch.setattr(
+        main.diagnostics,
+        "run_configured_diagnostics",
+        lambda: SimpleNamespace(passed=False),
+    )
+    monkeypatch.setattr(main.diagnostics, "render_human", lambda report: "failed diagnostics")
+    monkeypatch.setattr(
+        main.art,
+        "prepare",
+        lambda *args, **kwargs: pytest.fail("artifacts prepared before diagnostics passed"),
+    )
+
+    code = main.main(["--goal", "g", "--target", str(git_repo), *resume_args])
+
+    assert code == 1
+
+
+def test_dry_run_never_makes_live_diagnostic_calls(monkeypatch):
+    monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", True)
+    monkeypatch.setattr(
+        main.diagnostics,
+        "run_configured_diagnostics",
+        lambda: pytest.fail("dry-run made a live diagnostic call"),
+    )
+
+    assert main.main(["--dry-run"]) == 0
 
 
 # ── Reporting ────────────────────────────────────────────────────────────────
