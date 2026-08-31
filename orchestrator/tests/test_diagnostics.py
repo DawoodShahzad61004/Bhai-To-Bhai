@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 import threading
 import time
@@ -221,6 +222,56 @@ def test_structured_adapter_payload_is_accepted(monkeypatch, tmp_path):
     )
 
     assert report.passed is True
+
+
+def test_both_sides_of_every_probe_reach_the_debug_log(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(
+        diagnostics.adapters,
+        "run_agent",
+        lambda *args, **kwargs: AgentResult(
+            ok=True, text="here you go", structured={"diagnostic": "nope"}
+        ),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="diagnostics"):
+        diagnostics.run_diagnostics(
+            (_target("ollama", "qwen3.5:4b"),),
+            max_parallel=1,
+            workspace_root=tmp_path,
+        )
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+
+    # One tag ties the whole exchange together in a file holding every other probe.
+    assert "[diagnostic-ollama-qwen3.5-4b] input |" in logged
+    assert "[diagnostic-ollama-qwen3.5-4b] output |" in logged
+    assert "[diagnostic-ollama-qwen3.5-4b] verdict |" in logged
+    assert diagnostics.DIAGNOSTIC_PROMPT in logged
+    assert "model=qwen3.5:4b" in logged
+    # The reply is kept verbatim on both channels: the contract failure below is
+    # only diagnosable from what the model actually sent.
+    assert "here you go" in logged
+    assert '{"diagnostic": "nope"}' in logged
+    assert "FAIL agent_error" in logged
+
+
+def test_a_raising_adapter_still_logs_the_failed_turn(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(
+        diagnostics.adapters,
+        "run_agent",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("transport exploded")),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="diagnostics"):
+        report = diagnostics.run_diagnostics(
+            (_target(),), max_parallel=1, workspace_root=tmp_path
+        )
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+
+    assert report.passed is False
+    assert "transport exploded" in logged
+    assert "FAIL agent_error" in logged
 
 
 def test_human_and_json_rendering_include_actionable_target_data():

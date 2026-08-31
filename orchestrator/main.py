@@ -291,14 +291,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {error}")
         return 2
 
+    # Logging is configured before the gate rather than after it. The gate makes
+    # one real provider call per configured pair, and a failed one is diagnosed
+    # from the prompt and reply diagnostics.py writes to this file — which needs
+    # a handler to exist by then, or the whole exchange is dropped. A run the
+    # gate aborts still leaves its evidence on disk, which is the property
+    # logging_config.py exists for.
+    run_id = args.resume or args.run_id or datetime.now().strftime("run-%Y%m%d-%H%M%S")
+    log_file = setup_logging(app_name=f"orchestrator_{run_id}")
+    set_run_id(run_id)
+
     if not diagnostics_gate_passed():
         return 1
 
-    run_id = args.resume or args.run_id or datetime.now().strftime("run-%Y%m%d-%H%M%S")
+    # Only past the gate does a run acquire state on disk.
     artifacts = art.prepare(run_id, target)
-
-    log_file = setup_logging(app_name=f"orchestrator_{run_id}")
-    set_run_id(run_id)
 
     logger.info("goal: %s", args.goal)
     logger.info("target: %s", target)

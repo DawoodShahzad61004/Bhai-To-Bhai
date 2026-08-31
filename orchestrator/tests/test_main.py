@@ -162,6 +162,32 @@ def test_failed_diagnostics_abort_new_and_resumed_runs_before_artifacts(
     assert code == 1
 
 
+def test_logging_is_configured_before_the_diagnostics_gate_runs(
+    monkeypatch, git_repo, tmp_path
+):
+    """The gate's own failures are diagnosed from the prompt and reply that
+    diagnostics.py writes to the run log, so a handler has to exist by the time
+    it makes its calls. Configured after the gate, the whole exchange is dropped
+    exactly when it is the only evidence there is."""
+    order: list[str] = []
+
+    def fake_setup_logging(**kwargs):
+        order.append("logging")
+        return tmp_path / "run.log"
+
+    def fake_gate():
+        order.append("gate")
+        return SimpleNamespace(passed=False)
+
+    monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", True)
+    monkeypatch.setattr(main, "setup_logging", fake_setup_logging)
+    monkeypatch.setattr(main.diagnostics, "run_configured_diagnostics", fake_gate)
+    monkeypatch.setattr(main.diagnostics, "render_human", lambda report: "failed diagnostics")
+
+    assert main.main(["--goal", "g", "--target", str(git_repo)]) == 1
+    assert order == ["logging", "gate"]
+
+
 def test_dry_run_never_makes_live_diagnostic_calls(monkeypatch):
     monkeypatch.setattr("config.ENABLE_AGENT_DIAGNOSTICS", True)
     monkeypatch.setattr(

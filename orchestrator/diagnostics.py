@@ -5,6 +5,12 @@ A version probe can prove that a CLI exists; it cannot prove that credentials,
 the selected model, the harness/provider route, and structured replies work
 together.  Each unique configured pair therefore receives one minimal real
 turn, with no file or shell tools requested.
+
+Every probe writes both sides of its exchange — what was sent, and what came
+back verbatim — to the run's debug log.  A one-line verdict is enough to know
+*that* a pair is broken; it is never enough to know why.  "Successful turn
+violated the diagnostic JSON contract" describes a dozen different faults, and
+which one it was is only ever visible in the reply the model actually sent.
 """
 
 from __future__ import annotations
@@ -12,8 +18,10 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
+import contextvars
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 import re
 import sys
@@ -23,7 +31,26 @@ from typing import Any, Sequence
 
 import adapters
 import config
+from logging_config import get_logger, setup_logging
 import parsing
+
+
+logger = get_logger(__name__)
+
+# A diagnostic reply is one small JSON object, but a *failing* one can be a
+# whole vendor stack trace or a verbose model monologue.  Same head/tail budget
+# the adapters use, for the same reason: the log stays readable and still shows
+# both ends of anything oversized.
+_DEBUG_BLOCK_LIMIT = 12000
+
+
+def _debug_block(text: str) -> str:
+    if len(text) <= _DEBUG_BLOCK_LIMIT:
+        return text
+    head = text[:4000]
+    tail = text[-4000:]
+    omitted = len(text) - len(head) - len(tail)
+    return f"{head}\n... [{omitted} chars omitted] ...\n{tail}"
 
 
 DIAGNOSTIC_PAYLOAD = {"diagnostic": "ok"}
@@ -61,6 +88,16 @@ class DiagnosticTarget:
         if self.backend in ("ollama", "local_llm"):
             return "codex"
         return self.backend
+
+    @property
+    def tag(self) -> str:
+        """How this probe names itself to the adapter and in the log.
+
+        The same string on both sides is what lets one pair's dispatch, prompt,
+        reply and verdict be read together in a file where every probe is
+        interleaved with every other.
+        """
+        return f"diagnostic-{_safe_fragment(self.backend)}-{_safe_fragment(self.model)}"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -212,7 +249,68 @@ def _safe_fragment(value: str) -> str:
     return (cleaned or "default")[:48]
 
 
+def _log_input(target: DiagnosticTarget, cwd: Path) -> None:
+    """Record everything the probe is about to send, before it sends it.
+
+    Written first rather than alongside the reply, so a pair that hangs until
+    its deadline still leaves behind what it was asked.
+    """
+    logger.debug(
+        "[%s] input | adapter=%s | harness=%s | model=%s | deadline=%ds | cwd=%s | sources=%s",
+        target.tag,
+        target.adapter_key,
+        target.harness,
+        target.model or "(cli default)",
+        target.deadline_seconds,
+        cwd,
+        ", ".join(target.sources),
+    )
+    logger.debug("[%s] input prompt:\n%s", target.tag, _debug_block(DIAGNOSTIC_PROMPT))
+    logger.debug(
+        "[%s] input schema: %s",
+        target.tag,
+        json.dumps(DIAGNOSTIC_SCHEMA, ensure_ascii=False, sort_keys=True),
+    )
+
+
+def _log_output(target: DiagnosticTarget, result: adapters.AgentResult) -> None:
+    """Record the turn exactly as the adapter handed it back.
+
+    Both channels, because either one alone can be the whole story: a backend
+    that honours structured output leaves `text` empty, and a backend that
+    ignores the schema puts its answer — or its refusal — only in `text`.
+    """
+    logger.debug("[%s] output | %s", target.tag, result.summary())
+    logger.debug("[%s] output text:\n%s", target.tag, _debug_block(result.text))
+    if result.structured is not None:
+        logger.debug(
+            "[%s] output structured:\n%s",
+            target.tag,
+            _debug_block(json.dumps(result.structured, ensure_ascii=False, sort_keys=True)),
+        )
+
+
+def _log_verdict(result: DiagnosticResult) -> None:
+    """Close the probe's block with the line the report will show."""
+    logger.debug(
+        "[%s] verdict | %s | %.1fs/%ds | %s",
+        result.target.tag,
+        "PASS" if result.passed else f"FAIL {result.error_kind}",
+        result.duration_seconds,
+        result.target.deadline_seconds,
+        result.detail,
+    )
+
+
 def _probe(target: DiagnosticTarget, cwd: Path) -> DiagnosticResult:
+    """Exercise one target, with both sides of the exchange in the debug log."""
+    _log_input(target, cwd)
+    result = _attempt(target, cwd)
+    _log_verdict(result)
+    return result
+
+
+def _attempt(target: DiagnosticTarget, cwd: Path) -> DiagnosticResult:
     spec = config.AgentSpec(
         backend=target.backend,
         model=target.model,
@@ -224,12 +322,15 @@ def _probe(target: DiagnosticTarget, cwd: Path) -> DiagnosticResult:
             DIAGNOSTIC_PROMPT,
             spec=spec,
             cwd=str(cwd),
-            tag=f"diagnostic-{_safe_fragment(target.backend)}-{_safe_fragment(target.model)}",
+            tag=target.tag,
             tools=(),
             json_schema=DIAGNOSTIC_SCHEMA,
             invocation=target.invocation,
         )
     except Exception as exc:  # the adapter boundary promises not to raise; keep auditing if it does
+        logger.debug(
+            "[%s] output raised %s: %s", target.tag, type(exc).__name__, exc, exc_info=True
+        )
         return DiagnosticResult(
             target=target,
             passed=False,
@@ -239,6 +340,7 @@ def _probe(target: DiagnosticTarget, cwd: Path) -> DiagnosticResult:
         )
 
     duration = time.perf_counter() - started
+    _log_output(target, result)
     if not result.ok:
         return DiagnosticResult(
             target=target,
@@ -308,8 +410,12 @@ def run_diagnostics(
 
         ordered: list[DiagnosticResult | None] = [None] * len(targets)
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="agent-diagnostic") as pool:
+            # copy_context() carries the run's correlation id into each thread,
+            # the same way dispatch.py does for concurrent coding subagents. A
+            # ContextVar does not cross a thread boundary on its own, and every
+            # probe here logs from a worker (ADR-013).
             futures = {
-                pool.submit(_probe, target, workspaces[index]): index
+                pool.submit(contextvars.copy_context().run, _probe, target, workspaces[index]): index
                 for index, target in enumerate(targets)
             }
             for future in as_completed(futures):
@@ -369,6 +475,13 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv if argv is not None else sys.argv[1:])
+    # Standalone, nothing else has configured logging, so the exchange would go
+    # nowhere. `--json` is a machine channel and the console handler shares its
+    # stdout, so that mode keeps the console silent and the file complete.
+    log_file = setup_logging(
+        app_name="diagnostics",
+        console_level=logging.CRITICAL if args.json else config.CONSOLE_LOG_LEVEL,
+    )
     try:
         report = run_configured_diagnostics()
     except ValueError as exc:
@@ -380,7 +493,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[FAIL] configuration: {exc}")
         return 1
 
-    print(render_json(report) if args.json else render_human(report))
+    if args.json:
+        print(render_json(report))
+    else:
+        print(render_human(report))
+        print(f"Prompt and reply for every target: {log_file}")
     return 0 if report.passed else 1
 
 
