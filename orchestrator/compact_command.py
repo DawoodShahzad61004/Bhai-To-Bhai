@@ -127,7 +127,7 @@ async def compact_file_async(
 
 async def compact_files_parallel(file_paths: list[str | Path], use_llm: bool = True) -> dict[str, Any]:
     """Compact multiple files in parallel."""
-    setup_logging()
+    setup_logging(app_name="compact")
     logger.info(f"[COMPACT] starting parallel compaction of {len(file_paths)} file(s)")
 
     tasks = [compact_file_async(path, use_llm=use_llm) for path in file_paths]
@@ -154,7 +154,7 @@ def compact_command(use_llm: bool = True) -> int:
     Compacts the episodic memory artifacts (from config.COMPACT_ARTIFACT_FILES)
     in parallel and reports results.
     """
-    setup_logging()
+    setup_logging(app_name="compact")
 
     # Get artifact files from config
     file_paths = config.COMPACT_ARTIFACT_FILES

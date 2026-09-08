@@ -35,9 +35,6 @@ load_dotenv()
 ENABLE_REVIEWER = True
 ENABLE_SUPERVISOR = True
 
-# Live backend/model diagnostics are opt-in because each unique configured pair
-# makes a real provider call.  The standalone diagnostics CLI ignores this gate;
-# this flag controls only automatic checks before a pipeline starts or resumes.
 ENABLE_AGENT_DIAGNOSTICS = False
 AGENT_DIAGNOSTIC_MAX_PARALLEL = 3
 
@@ -115,7 +112,7 @@ AGENTS = {
     "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
-    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "reviewer": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
     "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
 
@@ -139,12 +136,12 @@ SMALL_MODELS = [
 ]
 
 MEDIUM_MODELS = [
-    ("gpt-oss:20b-cloud", "ollama"),
-    ("nemotron-3-nano:30b-cloud", "ollama"),
-    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
-    ("gemma4:31b-cloud", "ollama"),
-    # ("haiku", "claude"),
-    ("auto", "copilot"),
+    # ("gpt-oss:20b-cloud", "ollama"),
+    # ("nemotron-3-nano:30b-cloud", "ollama"),
+    # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    # ("gemma4:31b-cloud", "ollama"),
+    ("haiku", "claude"),
+    # ("auto", "copilot"),
 ]
 
 EXPERT_MODELS = [
@@ -170,7 +167,7 @@ MAX_CODING_AGENT_CONTINUATION_ATTEMPTS = 5
 # ═══════════════════════════════════════════════════════════════════════════════
 # REQUIREMENTS Q&A
 # ═══════════════════════════════════════════════════════════════════════════════
-INTERACTIVE_REQUIREMENTS = False
+INTERACTIVE_REQUIREMENTS = True
 MAX_CLARIFYING_QUESTIONS = 6
 
 
@@ -219,11 +216,8 @@ EPISODIC_BLOCK_SPLIT_PATTERN = re.compile(r"\n(?=## )")
 # Header shape: 'DATE TIME SEP TAG...', e.g. '2026-08-29 12:48:55Z - requirements'.
 EPISODIC_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%SZ"
 
-# user_choices.md (one of COMPACT_ARTIFACT_FILES) headers put the run id
-# before the timestamp instead of after it, e.g.
-# '## Run `run-20260829-174814` — 2026-08-29 12:48:55Z'. Captures (run_id,
-# date, time); the separator between them is skipped positionally, same as
-# EPISODIC_TIMESTAMP_FORMAT's SEP - its value doesn't matter.
+# user_choices.md: '## Run `run-20260829-174814` — 2026-08-29 12:48:55Z'. 
+# Captures (run_id, date, time);
 USER_CHOICES_HEADER_PATTERN = re.compile(
     r"^## Run `([^`]+)`.*?(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}Z)"
 )
@@ -284,7 +278,7 @@ MERGE_VALIDATION_ENABLED = True
 # --- Consolidation / pruning ---------------------------------------------------
 PRUNE_BOTTOM_PERCENT = 0.20
 ENABLE_PRUNING = True
-MIN_PRUNE_BUDGET = 2_000
+MIN_PRUNE_BUDGET = 1_000
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # COMPACT COMMAND CONFIGURATION  —  Episodic memory artifacts to consolidate
