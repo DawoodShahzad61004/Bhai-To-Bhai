@@ -7,6 +7,11 @@ memory logs shaped like:
     ## 2026-08-29 12:51:46Z - T-001
     <free-text content>
 
+or user_choices.md's run-id-first shape:
+
+    ## Run `run-20260829-174814` — 2026-08-29 12:48:55Z
+    <free-text content>
+
 One `parse_episodic_md()` + five scoring functions, stdlib only, so the same
 module drops into any project whose episodic log follows this header shape.
 Each factor takes the record plus whatever cross-record context it needs
@@ -39,7 +44,9 @@ class EpisodicRecord:
 def parse_episodic_md(text: str) -> list[EpisodicRecord]:
     """Split a log on '## ' headers. Header shape is 'DATE TIME SEP TAG' -
     SEP is whatever separator character the log uses (an em dash, a mojibake
-    artifact, anything); only its position, not its value, matters."""
+    artifact, anything); only its position, not its value, matters. Falls
+    back to user_choices.md's 'Run RUN-ID SEP DATE TIME' shape, using the
+    run id as the record's tag."""
     records: list[EpisodicRecord] = []
     # Split right before each '## ' so every chunk keeps its own header +
     # body together; a lookahead split (vs. a plain split) doesn't eat the delimiter.
@@ -49,6 +56,22 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
         if not block.startswith("## "):
             continue  # stray text before the first header (e.g. a title line) - not a record
         header, _, body = block.partition("\n")
+
+        # user_choices.md shape: '## Run `RUN-ID` SEP DATE TIME' - run id
+        # leads instead of trailing, so it needs its own match before falling
+        # back to the standard 'DATE TIME SEP TAG' header.
+        choices_match = config.USER_CHOICES_HEADER_PATTERN.match(header)
+        if choices_match:
+            run_id, date_str, time_str = choices_match.groups()
+            try:
+                timestamp = datetime.strptime(
+                    f"{date_str} {time_str}", config.EPISODIC_TIMESTAMP_FORMAT
+                ).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue  # header shape matched but the timestamp didn't parse - skip, don't crash the batch
+            records.append(EpisodicRecord(timestamp, run_id, body.strip(), block))
+            continue
+
         # 'DATE TIME SEP TAG...' -> split into at most 4 pieces so a
         # multi-word tag doesn't get chopped up.
         parts = header[3:].strip().split(None, 3)

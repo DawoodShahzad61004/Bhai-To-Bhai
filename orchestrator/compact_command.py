@@ -28,6 +28,26 @@ class NoOpEmbedder:
         return 0.0
 
 
+def _memories_to_markdown(memories: list) -> str:
+    """Reconstruct episodic markdown from consolidated memories."""
+    if not memories:
+        return ""
+
+    # Sort by created_at (oldest first)
+    sorted_memories = sorted(memories, key=lambda m: m.created_at)
+
+    lines = []
+    for m in sorted_memories:
+        # Format: ## YYYY-MM-DD HH:MM:SSZ - TAG
+        timestamp = m.created_at.strftime("%Y-%m-%d %H:%M:%SZ")
+        lines.append(f"## {timestamp} - {m.tag}")
+        lines.append("")
+        lines.append(m.content)
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 async def compact_file_async(
     file_path: str | Path,
     use_llm: bool = True,
@@ -55,6 +75,11 @@ async def compact_file_async(
 
         memories = compact_markdown_file(file_path, **kwargs)
         logger.info(f"[COMPACT] {file_path.name}: {len(memories)} durable memories")
+
+        # Reconstruct episodic markdown and write back to file
+        markdown_content = _memories_to_markdown(memories)
+        file_path.write_text(markdown_content, encoding="utf-8")
+        logger.info(f"[COMPACT] {file_path.name}: wrote {len(memories)} memories back to file")
 
         return {
             "file": str(file_path),

@@ -100,6 +100,7 @@ Each consolidated memory includes:
 The compaction pipeline uses these settings from `orchestrator/config.py`:
 
 - `EPISODIC_BLOCK_SPLIT_PATTERN` - Regex for splitting markdown blocks
+- `USER_CHOICES_HEADER_PATTERN` - Regex for user_choices.md's run-id-first header shape
 - `ENTITY_PATTERN` - Pattern for extracting entities (codes, PascalCase names, filenames)
 - `IMPORTANCE_WEIGHTS` - Weights for the five scoring factors
 - `DECAY_LAMBDA_PER_HOUR` - Passive decay rate
@@ -126,6 +127,5 @@ Logs are written to `orchestrator/run_logs/<run-id>.debug.log` with detailed inf
 
 ## Notes
 
-- **user_choices.md format**: If a file uses a different header format (e.g., `## Run 'run-id' — DATE TIME`), it won't parse. Adjust `EPISODIC_BLOCK_SPLIT_PATTERN` and parsing logic in `mem_manager/importance.py` if needed.
 - **Empty files**: Files with no matching episodic records will show 0 memories (not an error).
 - **Large corpora**: Pruning is skipped for corpora under `MIN_PRUNE_BUDGET` (default 2000 characters).

@@ -86,7 +86,7 @@ GEMINI_APPROVAL_MODE = "yolo"
 
 CUSTOM_API_BASE = os.getenv("CUSTOM_API_BASE", "")
 CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "")
-CUSTOM_API_MODEL_NAME = os.getenv("CUSTOM_API_MODEL_NAME", "")
+CUSTOM_API_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 MAX_OUTPUT_SIZE_FOR_LOCAL_MODEL = 2048
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -214,12 +214,21 @@ RATE_LIMIT_MARKERS = (
 # MEM_MANAGER CONFIGURATION  —  Memory consolidation and deduplication
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# --- Episodic markdown parsing (importance.parse_episodic_md) ---------------
+# --- Episodic markdown parsing -----------------------------------------------
 EPISODIC_BLOCK_SPLIT_PATTERN = re.compile(r"\n(?=## )")
 # Header shape: 'DATE TIME SEP TAG...', e.g. '2026-08-29 12:48:55Z - requirements'.
 EPISODIC_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%SZ"
 
-# --- Entity extraction (importance.extract_entities) -------------------------
+# user_choices.md (one of COMPACT_ARTIFACT_FILES) headers put the run id
+# before the timestamp instead of after it, e.g.
+# '## Run `run-20260829-174814` — 2026-08-29 12:48:55Z'. Captures (run_id,
+# date, time); the separator between them is skipped positionally, same as
+# EPISODIC_TIMESTAMP_FORMAT's SEP - its value doesn't matter.
+USER_CHOICES_HEADER_PATTERN = re.compile(
+    r"^## Run `([^`]+)`.*?(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}Z)"
+)
+
+# --- Entity extraction -------------------------------------------------------
 ENTITY_PATTERN = re.compile(
     r"`([^`]+)`"                                       # backtick code spans
     r"|\b([A-Z][a-zA-Z0-9]*(?:[A-Z][a-zA-Z0-9]*)+)\b"   # CamelCase / PascalCase
@@ -227,7 +236,7 @@ ENTITY_PATTERN = re.compile(
     r"|\b(\w+\.\w+(?:\.\w+)*)\b"                        # dotted filenames/paths
 )
 
-# --- Composite importance (Architecture.md Formulae row 1) -------------------
+# --- Composite importance ----------------------------------------------------
 IMPORTANCE_WEIGHTS = {
     "recency": 0.25,
     "frequency": 0.25,
@@ -243,7 +252,7 @@ FREQUENCY_SIMILARITY_THRESHOLD = 0.6
 DEFAULT_SUCCESS_MARKERS = ("passed", "success", "resolved", "fixed", "works")
 DEFAULT_FAILURE_MARKERS = ("failed", "error", "not recognized", "exit 1", "traceback")
 
-# --- Passive decay (Architecture.md Formulae row 2) ---------------------------
+# --- Passive decay  ------------------------------------------------------------
 DECAY_LAMBDA_PER_HOUR = 0.001
 
 # --- Embeddings / dedup-merge --------------------------------------------------
@@ -251,10 +260,7 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 EMBEDDING_ENCODING_TIMEOUT_SECONDS = 30.0
 MERGE_SIMILARITY_THRESHOLD = 0.60
 
-# --- LLM: one local OpenAI-compatible endpoint, two roles ---------------------
-# Note: CUSTOM_API_BASE, CUSTOM_API_KEY, CUSTOM_API_MODEL_NAME already defined above
-# for orchestrator general use; mem_manager reuses them
-JUDGE_MODEL_NAME = os.getenv("JUDGE_MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
+JUDGE_MODEL_NAME = CUSTOM_API_MODEL_NAME
 
 MERGE_LLM_TEMPERATURE = 0.1
 MERGE_LLM_MAX_TOKENS = 2048
