@@ -1,0 +1,29 @@
+# mem_manage — pinned to what a fresh `uv venv --python 3.13` actually resolved
+# (same convention memora_mini/requirements.txt follows). All 107 tests pass
+# and the real sentence-transformers/EmbeddingManager integration test runs
+# clean against this set; only the live-LLM integration test needs
+# CUSTOM_API_BASE configured and reachable, and skips cleanly otherwise.
+#
+# torch: plain `torch==2.14.0` resolves to the CPU-only wheel from PyPI.
+# For CUDA (e.g. Blackwell/RTX 50-series laptops, sm_120, needs CUDA 12.8+),
+# install from the PyTorch CUDA index instead of PyPI, e.g.:
+#   uv pip install --index-url https://download.pytorch.org/whl/cu130 torch==2.14.0+cu130
+
+numpy==2.5.2
+torch==2.14.0
+sentence-transformers==6.0.1
+
+# LLM clients (services/llm_setup.py, services/llm_caller.py). llm_setup.py
+# currently constructs ChatGroq clients; llm_caller.py's exception-handling
+# imports the raw `groq` SDK directly. langchain-groq==1.1.3 (latest) pins
+# groq<1.0.0, so groq is capped at 0.37.1 here rather than the 1.x line.
+langchain-openai==1.6.0
+openai==3.7.0
+groq==0.37.1
+httpx==0.28.1
+requests==2.34.2
+python-dotenv==1.2.3
+langchain_groq==1.1.3
+
+# tests
+pytest==9.1.1

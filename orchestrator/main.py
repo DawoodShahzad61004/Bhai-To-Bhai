@@ -60,6 +60,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Print the graph and the effective configuration, then exit.",
     )
     parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Compact shared episodic memory artifacts (user_choices.md and learnings.md) in parallel using the mem_manager module.",
+    )
+    parser.add_argument(
         "--yes",
         action="store_true",
         help="Do not pause for clarifying questions (same as INTERACTIVE_REQUIREMENTS=0).",
@@ -275,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.yes:
         config.INTERACTIVE_REQUIREMENTS = False
+
+    if args.compact:
+        from compact_command import compact_command
+        return compact_command()
 
     if args.dry_run:
         print(describe_config())
