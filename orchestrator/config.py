@@ -295,6 +295,13 @@ PRUNE_BOTTOM_PERCENT = 0.20
 ENABLE_PRUNING = True
 MIN_PRUNE_BUDGET = 1_000
 
+# Final durable-memory tags, numbered chronologically within each file.
+# Files not listed here retain their source entry tags.
+DURABLE_MEMORY_TAG_PREFIXES = {
+    "learnings.md": "Learning",
+    "user_choices.md": "User Choice",
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # COMPACT COMMAND CONFIGURATION  —  Episodic memory artifacts to consolidate
 # ═══════════════════════════════════════════════════════════════════════════════

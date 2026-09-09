@@ -104,7 +104,7 @@ def test_choice_run_markers_are_not_attached_to_the_previous_memory(store, block
     art.append_user_choices(store, "run-one", block("first decision", tag="run-one", choices=True))
     art.append_user_choices(store, "run-two", block("second decision", tag="run-two", choices=True))
     result = compact_markdown_file(store.user_choices, use_llm=False)
-    first = next(m for m in result if m.tag == "run-one")
+    first = next(m for m in result if m.tag == "User Choice 1")
     assert "run-two" not in first.content, "Next run's control marker leaked into the previous decision"
 
 

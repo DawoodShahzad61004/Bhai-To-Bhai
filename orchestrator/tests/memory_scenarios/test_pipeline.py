@@ -53,8 +53,45 @@ def test_file_command_commits_readable_results(tmp_path, block, embedder, filena
     path.write_text(block("same") + "\n" + block("same"), encoding="utf-8")
     result = asyncio.run(command.compact_file_async(path, use_llm=False, embedder=embedder))
     assert result["status"] == "success" and result["memory_count"] == 1
-    assert [r.content for r in parse_episodic_md(path.read_text(encoding="utf-8"))] == ["same"]
+    records = parse_episodic_md(path.read_text(encoding="utf-8"))
+    assert [record.content for record in records] == ["same"]
+    prefix = config.DURABLE_MEMORY_TAG_PREFIXES.get(filename.lower())
+    expected_tag = f"{prefix} 1" if prefix else "T-001"
+    assert records[0].tag == expected_tag
+    assert result["memories"][0]["tag"] == expected_tag
     assert json.loads(json.dumps(result))["memories"][0]["content"] == "same"
+
+
+@pytest.mark.parametrize(
+    ("filename", "prefix"),
+    [("learnings.md", "Learning"), ("user_choices.md", "User Choice")],
+)
+def test_durable_memories_use_file_specific_chronological_names(
+    tmp_path, block, now, embedder, filename, prefix
+):
+    path = tmp_path / filename
+    path.write_text(
+        block("newer", tag="source-new", timestamp=now)
+        + "\n"
+        + block("older", tag="source-old", timestamp=now - timedelta(days=1)),
+        encoding="utf-8",
+    )
+
+    result = compact_markdown_file(path, now=now, embedder=embedder, use_llm=False)
+
+    assert {memory.content: memory.tag for memory in result} == {
+        "older": f"{prefix} 1",
+        "newer": f"{prefix} 2",
+    }
+
+
+def test_unconfigured_memory_file_retains_source_tags(tmp_path, block, embedder):
+    path = tmp_path / "other.md"
+    path.write_text(block("keep", tag="source-tag"), encoding="utf-8")
+
+    result = compact_markdown_file(path, embedder=embedder, use_llm=False)
+
+    assert result[0].tag == "source-tag"
 
 
 def test_repeated_singleton_compaction_keeps_content_and_id(tmp_path, block, embedder):
@@ -166,7 +203,7 @@ def test_main_routes_compact_before_normal_run_validation(monkeypatch):
 def test_actual_agent_append_format_is_ingested(store, agent, session, now, embedder):
     art.append_learning(store, agent, "A durable engineering lesson.", session=session)
     result = compact_markdown_file(store.learnings, now=now, embedder=embedder, use_llm=False)
-    assert len(result) == 1 and result[0].tag == agent
+    assert len(result) == 1 and result[0].tag == "Learning 1"
     assert result[0].content == "A durable engineering lesson."
     # The marker is metadata, not content: it identifies the record without
     # becoming part of the text that gets embedded, merged, or shown back.
@@ -179,7 +216,7 @@ def test_requirements_choices_writer_to_memory_pipeline(store, embedder):
                                  qa=[("Test framework?", "pytest")], session="codex:xyz")
     art.append_user_choices(store, store.run_id, text)
     result = compact_markdown_file(store.user_choices, embedder=embedder, use_llm=False)
-    assert len(result) == 1 and result[0].tag == store.run_id
+    assert len(result) == 1 and result[0].tag == "User Choice 1"
     assert all(value in result[0].content for value in ("PostgreSQL", "Keep Python", "pytest"))
     assert result[0].session == "codex:xyz"
     assert "<!-- session:" not in result[0].content

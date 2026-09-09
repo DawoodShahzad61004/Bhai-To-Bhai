@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+
+import config
 
 from .consolidate import refresh_decay, rerank_and_prune
 from .importance import parse_episodic_md
@@ -69,8 +72,21 @@ def compact_markdown(
 
 
 def compact_markdown_file(path: str | Path, **kwargs) -> list[DurableMemory]:
-    text = Path(path).read_text(encoding="utf-8")
-    return compact_markdown(text, **kwargs)
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    memories = compact_markdown(text, **kwargs)
+    prefix = config.DURABLE_MEMORY_TAG_PREFIXES.get(path.name.lower())
+    if not prefix:
+        return memories
+
+    chronological = sorted(
+        enumerate(memories), key=lambda item: (item[1].created_at, item[0])
+    )
+    tags = {
+        original_index: f"{prefix} {number}"
+        for number, (original_index, _) in enumerate(chronological, start=1)
+    }
+    return [replace(memory, tag=tags[index]) for index, memory in enumerate(memories)]
 
 
 def _main(argv: list[str]) -> int:
