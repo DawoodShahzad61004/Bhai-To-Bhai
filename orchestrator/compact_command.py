@@ -41,6 +41,11 @@ def _memories_to_markdown(memories: list) -> str:
         # Format: ## YYYY-MM-DD HH:MM:SSZ - TAG
         timestamp = m.created_at.strftime("%Y-%m-%d %H:%M:%SZ")
         lines.append(f"## {timestamp} - {m.tag}")
+        # Directly under the header, because this function's output OVERWRITES
+        # the real artifact file: a session dropped here is destroyed on the
+        # first /compact, not merely missing from this rendering.
+        if m.session:
+            lines.append(config.SESSION_MARKER_TEMPLATE.format(session=m.session))
         lines.append("")
         lines.append(m.content)
         lines.append("")
@@ -93,6 +98,7 @@ async def compact_file_async(
                     "content": m.content,
                     "created_at": m.created_at.isoformat(),
                     "provenance": m.provenance,
+                    "session": m.session,
                     "merged_from_count": len(m.merged_from),
                 }
                 for m in memories

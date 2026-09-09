@@ -107,12 +107,12 @@ class AgentSpec:
 
 AGENTS = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="claude", model="haiku", deadline_seconds=900,),
+    "requirements": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
-    "reviewer": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
+    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
     "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
 
@@ -138,10 +138,10 @@ SMALL_MODELS = [
 MEDIUM_MODELS = [
     # ("gpt-oss:20b-cloud", "ollama"),
     # ("nemotron-3-nano:30b-cloud", "ollama"),
-    # ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
+    ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
     # ("gemma4:31b-cloud", "ollama"),
-    ("haiku", "claude"),
-    # ("auto", "copilot"),
+    # ("haiku", "claude"),
+    ("auto", "copilot"),
 ]
 
 EXPERT_MODELS = [
@@ -222,20 +222,35 @@ USER_CHOICES_HEADER_PATTERN = re.compile(
     r"^## Run `([^`]+)`.*?(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}Z)"
 )
 
-# --- Entity extraction -------------------------------------------------------
-ENTITY_PATTERN = re.compile(
-    r"`([^`]+)`"                                       # backtick code spans
-    r"|\b([A-Z][a-zA-Z0-9]*(?:[A-Z][a-zA-Z0-9]*)+)\b"   # CamelCase / PascalCase
-    r"|\b([A-Z]{1,6}-\d+)\b"                            # ticket-style tags, e.g. T-001
-    r"|\b(\w+\.\w+(?:\.\w+)*)\b"                        # dotted filenames/paths
+# --- Session identity --------------------------------------------------------
+# The identity a memory record is scored under is the agent-backend session that
+# wrote it, not a noun scraped out of its prose. A regex over the text made
+# importance a function of writing style - an entry mentioning `npm ci` and
+# package.json outscored one saying the same thing in plain words.
+#
+# The writer stamps the marker on the line directly AFTER the '## ' header,
+# never before it: EPISODIC_BLOCK_SPLIT_PATTERN splits on a lookahead, so a line
+# above a header belongs to the PREVIOUS block (which is exactly what already
+# happens to append_user_choices' '<!-- run:ID -->' marker).
+SESSION_MARKER_TEMPLATE = "<!-- session:{session} -->"
+# One pattern, two uses: .match() against a block body (anchored at position 0
+# regardless of MULTILINE, so a marker quoted mid-finding stays content) and
+# .sub() to strip markers out of text shown to a peer agent.
+SESSION_MARKER_PATTERN = re.compile(
+    r"^[ \t]*<!--[ \t]*session:(\S+)[ \t]*-->[ \t]*\n?", re.MULTILINE
 )
+# The backend prefix is what stops two vendors' id spaces colliding in one
+# shared log; a session id is only unique within its own vendor. `\S+` above
+# assumes the id carries no whitespace - true of every adapter's ids, which are
+# UUID- or hex-shaped.
+SESSION_KEY_TEMPLATE = "{backend}:{session_id}"
 
 # --- Composite importance ----------------------------------------------------
 IMPORTANCE_WEIGHTS = {
     "recency": 0.25,
     "frequency": 0.25,
     "surprise": 0.20,
-    "entity": 0.15,
+    "session": 0.15,
     "outcome": 0.15,
 }
 # Principle 6 (explicit choices outrank inferred preferences)

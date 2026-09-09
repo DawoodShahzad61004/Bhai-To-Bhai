@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import config
 import worktrees as wt
 from logging_config import get_logger
 
@@ -313,7 +314,24 @@ def _exclusive_lock(path: Path):
         handle.close()
 
 
-def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
+def session_key(backend: str, session_id: str) -> str:
+    """`"<backend>:<session_id>"` — the identity a memory record is scored under.
+
+    Empty when the vendor reported no session id: a bare `"claude:"` would be
+    one fake identity shared by every sessionless claude turn, which is the
+    opposite of an identity. mem_manager scores a sessionless record at 0 on
+    that factor rather than lifting it on a fabricated one.
+    """
+    if not session_id:
+        return ""
+    return config.SESSION_KEY_TEMPLATE.format(
+        backend=backend or "unknown", session_id=session_id
+    )
+
+
+def append_learning(
+    artifacts: RunArtifacts, agent: str, finding: str, *, session: str = ""
+) -> None:
     """Add one finding to the shared learnings file.
 
     Append-only and timestamped. Every agent writes here, some from this
@@ -327,12 +345,21 @@ def append_learning(artifacts: RunArtifacts, agent: str, finding: str) -> None:
     same lock — so the stamp and the content it describes never disagree, and
     `peer_entries_since()` below can tell "nothing changed" from a stamp
     comparison alone, without opening `learnings.md` at all.
+
+    `session` is the writing agent's backend session (see `session_key`), and
+    is what mem_manager scores this entry's salience by. It goes on the line
+    directly *below* the header — mem_manager splits blocks on a lookahead, so
+    a line above a header belongs to the previous entry. With no session the
+    entry is byte-identical to what this has always written: the coding
+    subagents' CLI writes and the auto-recorded command failures below run in
+    their own OS process with no AgentResult to read one from.
     """
     finding = finding.strip()
     if not finding:
         return
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-    entry = f"\n## {stamp} — {agent}\n\n{finding}\n"
+    marker = f"{config.SESSION_MARKER_TEMPLATE.format(session=session)}\n" if session else ""
+    entry = f"\n## {stamp} — {agent}\n{marker}\n{finding}\n"
     path = artifacts.learnings
     path.parent.mkdir(parents=True, exist_ok=True)
     with _exclusive_lock(path):
@@ -423,7 +450,12 @@ def peer_entries_since(artifacts: RunArtifacts, task_id: str, cursor: int) -> tu
     cursor = min(max(cursor, 0), end)
     tail = data[cursor:].decode("utf-8", errors="replace")
     peers = [text for agent, text in _split_learning_entries(tail) if agent != task_id]
-    return "\n\n".join(peers), end
+    # The session marker is a scoring key for the memory pipeline, not
+    # information for a peer agent: shown verbatim it invites a subagent to copy
+    # the format into its own findings, or to try to resume a session that is
+    # not its own. Stripped after the join, so the agent-name matching above and
+    # the byte offset returned below are both untouched.
+    return config.SESSION_MARKER_PATTERN.sub("", "\n\n".join(peers)), end
 
 
 def append_user_choices(artifacts: RunArtifacts, run_id: str, content: str) -> None:

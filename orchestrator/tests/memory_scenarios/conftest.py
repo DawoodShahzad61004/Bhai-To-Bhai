@@ -36,10 +36,13 @@ def now():
 
 @pytest.fixture
 def block(now):
-    def make(content="Use pytest fixtures.", tag="T-001", timestamp=None, choices=False):
+    def make(content="Use pytest fixtures.", tag="T-001", timestamp=None, choices=False,
+             session=""):
         stamp = (timestamp or now).strftime("%Y-%m-%d %H:%M:%SZ")
         header = f"## Run `{tag}` — {stamp}" if choices else f"## {stamp} — {tag}"
-        return f"{header}\n\n{content}\n"
+        # Below the header, matching both real writers - see config.SESSION_MARKER_TEMPLATE.
+        marker = f"{config.SESSION_MARKER_TEMPLATE.format(session=session)}\n" if session else ""
+        return f"{header}\n{marker}\n{content}\n"
 
     return make
 
@@ -50,7 +53,7 @@ def memory(now):
         identifier = content_id(content)
         fields = dict(id=identifier, content=content, tag="T-001", created_at=now,
                       last_accessed_at=now, importance=0.5, provenance="inferred",
-                      merged_from=[identifier])
+                      session="", merged_from=[identifier])
         fields.update(kwargs)
         return DurableMemory(**fields)
 

@@ -97,6 +97,7 @@ def _user_choices_markdown(
     goal: str,
     stated: list[str],
     qa: list[tuple[str, str]],
+    session: str = "",
 ) -> str:
     """Assemble one append-only user-choice ledger entry.
 
@@ -105,8 +106,12 @@ def _user_choices_markdown(
     readable by a person deciding whether to trust it.
     """
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-    lines = [
-        f"## Run `{run_id}` — {stamp}",
+    lines = [f"## Run `{run_id}` — {stamp}"]
+    if session:
+        # Directly below the header, never above it: mem_manager splits blocks
+        # on a lookahead, so a line above a header belongs to the previous one.
+        lines.append(config.SESSION_MARKER_TEMPLATE.format(session=session))
+    lines += [
         "",
         "### Stated in the original request",
         "",
@@ -147,14 +152,19 @@ def _finish(
     stated: list[str],
     unasked: list[str],
     cost: float,
+    session: str = "",
 ) -> dict:
-    """Write both artifacts and return the state update. Shared by both nodes."""
+    """Write both artifacts and return the state update. Shared by both nodes.
+
+    `session` is the backend session that produced `payload`; it is stamped on
+    both artifacts so mem_manager can score them by who wrote them.
+    """
     artifacts = art.prepare(state["run_id"], state["target_repo"])
     goal = state["goal"]
 
     context_md = _context_markdown(goal=goal, payload=payload, qa=qa)
     choices_md = _user_choices_markdown(
-        run_id=state["run_id"], goal=goal, stated=stated, qa=qa
+        run_id=state["run_id"], goal=goal, stated=stated, qa=qa, session=session
     )
     art.write_text(artifacts.context, context_md)
     art.append_user_choices(artifacts, state["run_id"], choices_md)
@@ -166,6 +176,7 @@ def _finish(
             "Ran non-interactively with open questions; the planner is working from "
             "assumptions on these points:\n"
             + "\n".join(f"- {question}" for question in unasked),
+            session=session,
         )
 
     entry = event(
@@ -286,6 +297,7 @@ def requirements_survey_node(state: PipelineState) -> dict:
         stated=stated,
         unasked=questions,
         cost=survey.cost_usd,
+        session=art.session_key(config.AGENTS[AGENT].backend, survey.session_id),
     )
 
 
@@ -362,6 +374,14 @@ def requirements_clarify_node(state: PipelineState) -> dict:
         stated=stated,
         unasked=[],
         cost=final.cost_usd,
+        # The finalise call *resumes* the survey session, and on failure the
+        # branches above keep the survey draft - so when finalise reports no id
+        # of its own, the survey's is still the truthful identity of what is
+        # being written here.
+        session=art.session_key(
+            config.AGENTS[AGENT].backend,
+            final.session_id or state.get("survey_session", ""),
+        ),
     )
 
 

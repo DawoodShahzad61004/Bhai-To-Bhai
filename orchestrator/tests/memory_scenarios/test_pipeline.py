@@ -162,21 +162,39 @@ def test_main_routes_compact_before_normal_run_validation(monkeypatch):
 
 
 @pytest.mark.parametrize("agent", ["requirements", "planner", "T-001", "merger", "reviewer", "supervisor"])
-def test_actual_agent_append_format_is_ingested(store, agent, now, embedder):
-    art.append_learning(store, agent, "A durable engineering lesson.")
+@pytest.mark.parametrize("session", ["", "claude:abc"], ids=["no-session", "sessioned"])
+def test_actual_agent_append_format_is_ingested(store, agent, session, now, embedder):
+    art.append_learning(store, agent, "A durable engineering lesson.", session=session)
     result = compact_markdown_file(store.learnings, now=now, embedder=embedder, use_llm=False)
     assert len(result) == 1 and result[0].tag == agent
     assert result[0].content == "A durable engineering lesson."
+    # The marker is metadata, not content: it identifies the record without
+    # becoming part of the text that gets embedded, merged, or shown back.
+    assert result[0].session == session
     assert art.read_learnings_stamp(store) == store.learnings.stat().st_size
 
 
 def test_requirements_choices_writer_to_memory_pipeline(store, embedder):
     text = _user_choices_markdown(run_id=store.run_id, goal="Use PostgreSQL", stated=["Keep Python"],
-                                 qa=[("Test framework?", "pytest")])
+                                 qa=[("Test framework?", "pytest")], session="codex:xyz")
     art.append_user_choices(store, store.run_id, text)
     result = compact_markdown_file(store.user_choices, embedder=embedder, use_llm=False)
     assert len(result) == 1 and result[0].tag == store.run_id
     assert all(value in result[0].content for value in ("PostgreSQL", "Keep Python", "pytest"))
+    assert result[0].session == "codex:xyz"
+    assert "<!-- session:" not in result[0].content
+
+
+def test_session_identity_survives_repeated_file_compaction(store, embedder):
+    art.append_learning(store, "reviewer", "Serialise the shared writes.", session="claude:s1")
+    art.append_learning(store, "planner", "Split the wave.", session="codex:s2")
+    first = asyncio.run(command.compact_file_async(store.learnings, embedder=embedder, use_llm=False))
+    second = asyncio.run(command.compact_file_async(store.learnings, embedder=embedder, use_llm=False))
+    assert {m["session"] for m in first["memories"]} == {"claude:s1", "codex:s2"}
+    assert {m["session"] for m in second["memories"]} == {"claude:s1", "codex:s2"}
+    # Re-emitting the marker has to be a fixed point, or every /compact would
+    # rewrite the block and hand the same content a new id each time.
+    assert [m["id"] for m in first["memories"]] == [m["id"] for m in second["memories"]]
 
 
 def test_two_projects_compact_independently(tmp_path, block, embedder):

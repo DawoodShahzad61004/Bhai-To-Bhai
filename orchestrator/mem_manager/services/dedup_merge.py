@@ -103,6 +103,11 @@ def _deterministic_union(group: Sequence[DurableMemory]) -> DurableMemory:
         last_accessed_at=max(memory.last_accessed_at for memory in ordered),
         importance=max(memory.importance for memory in ordered),
         provenance="explicit" if any(memory.provenance == "explicit" for memory in ordered) else "inferred",
+        # Same tie-break as `tag` above: the highest-importance member wins. A
+        # merge spanning two sessions has no single truthful session, and
+        # blanking it would throw away the identity of the common case, where
+        # every member came from the same agent turn.
+        session=keeper.session,
         merged_from=[source_id for memory in ordered for source_id in memory.merged_from],
     )
 

@@ -103,6 +103,10 @@ def planner_node(state: PipelineState) -> dict:
             f"The planning agent failed. {result.error_message}", kind=result.error_kind
         )
 
+    # The identity every learning below is written under - mem_manager scores a
+    # record's salience by the backend session that produced it.
+    session = art.session_key(config.AGENTS[AGENT].backend, result.session_id)
+
     parsed = parsing.extract_json(result.text, result.structured)
     if not parsed.ok:
         return _failure(
@@ -128,6 +132,7 @@ def planner_node(state: PipelineState) -> dict:
             AGENT,
             "Tasks discarded from the plan as unusable:\n"
             + "\n".join(f"- {problem}" for problem in problems),
+            session=session,
         )
 
     schedule = assign_waves(tasks)
@@ -158,6 +163,7 @@ def planner_node(state: PipelineState) -> dict:
             AGENT,
             "Coding-agent roster adjusted from what the plan requested:\n"
             + "\n".join(f"- {problem}" for problem in agent_problems),
+            session=session,
         )
     if not coding_agents:
         # No usable roster from the plan — the two-slot default this pipeline

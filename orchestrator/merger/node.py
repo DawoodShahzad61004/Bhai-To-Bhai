@@ -59,8 +59,8 @@ def merger_node(state: PipelineState) -> dict:
         artifacts_dir=str(artifacts.shared_dir),
     )
 
-    for learning in report.learnings:
-        art.append_learning(artifacts, AGENT, learning)
+    for learning, session in report.learnings:
+        art.append_learning(artifacts, AGENT, learning, session=session)
 
     entry = event(
         "wave_merged" if report.ok else "merge_failed",

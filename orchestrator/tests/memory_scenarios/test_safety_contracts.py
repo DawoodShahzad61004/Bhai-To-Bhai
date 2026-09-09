@@ -46,10 +46,11 @@ def test_singleton_dedup_preserves_the_source_id(block, now, embedder):
     assert result[0].id == source[0].id, "An unmerged source record changed identity"
 
 
-@pytest.mark.parametrize("field", ["last_accessed_at", "provenance", "merged_from"])
+@pytest.mark.parametrize("field", ["last_accessed_at", "provenance", "session", "merged_from"])
 def test_markdown_roundtrip_retains_durable_metadata(memory, now, field):
     original = memory("a durable lesson", created_at=now - timedelta(days=30),
-                      last_accessed_at=now, provenance="explicit", merged_from=["source-a", "source-b"])
+                      last_accessed_at=now, provenance="explicit", session="claude:abc",
+                      merged_from=["source-a", "source-b"])
     text = command._memories_to_markdown([original])
     reread = build_durable_memories(parse_episodic_md(text), now=now)[0]
     assert getattr(reread, field) == getattr(original, field), f"Markdown persistence discarded {field}"

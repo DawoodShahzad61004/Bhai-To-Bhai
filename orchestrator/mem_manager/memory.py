@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Sequence
 
-from .importance import EpisodicRecord, build_entity_index, composite_importance
+from .importance import EpisodicRecord, build_session_index, composite_importance
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,13 @@ class DurableMemory:
     last_accessed_at: datetime
     importance: float
     provenance: str
+    # The session that wrote the source record, carried through so a /compact
+    # rewrite can re-emit it. Without this field the round trip through
+    # compact_command._memories_to_markdown destroys every session identity in
+    # the file - that function rebuilds the markdown from these fields alone.
+    # After a merge this names the keeper's session only, so it and
+    # `merged_from` legitimately disagree for LLM-merged content.
+    session: str = ""
     # ids of every source EpisodicRecord folded into this memory. A single,
     # never-merged record still carries its own id here - this is what lets
     # a conflicting-but-distinct memory be told apart from a genuine merge.
@@ -49,12 +56,12 @@ def build_durable_memories(
     records: Sequence[EpisodicRecord], *, now: datetime | None = None
 ) -> list[DurableMemory]:
     """One DurableMemory per EpisodicRecord, each scored by composite_importance
-    over the *whole* input corpus (so frequency/surprise/entity-salience see
+    over the *whole* input corpus (so frequency/surprise/session-salience see
     every record, not just the ones processed so far)."""
-    entity_index = build_entity_index(records)
+    session_index = build_session_index(records)
     memories: list[DurableMemory] = []
     for record in records:
-        importance = composite_importance(record, records, entity_index, now=now)
+        importance = composite_importance(record, records, session_index, now=now)
         record_id = _record_id(record)
         memories.append(
             DurableMemory(
@@ -65,6 +72,7 @@ def build_durable_memories(
                 last_accessed_at=record.timestamp,
                 importance=importance,
                 provenance=record.provenance,
+                session=record.session,
                 merged_from=[record_id],
             )
         )

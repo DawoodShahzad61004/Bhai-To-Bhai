@@ -184,6 +184,10 @@ def reviewer_node(state: PipelineState) -> dict:
             "events": [event("review_failed", agent=AGENT, error_kind=result.error_kind, detail=message)],
         }
 
+    # The identity every learning below is written under - mem_manager scores a
+    # record's salience by the backend session that produced it.
+    session = art.session_key(config.AGENTS[AGENT].backend, result.session_id)
+
     parsed = parsing.extract_json(result.text, result.structured)
     if not parsed.ok:
         # An unreadable reviewer has not approved anything. Coercing this to
@@ -231,7 +235,7 @@ def reviewer_node(state: PipelineState) -> dict:
 
     learning = parsing.require_str(payload, "learnings", allow_empty=True)
     if learning:
-        art.append_learning(artifacts, AGENT, learning)
+        art.append_learning(artifacts, AGENT, learning, session=session)
 
     rework_count = state.get("rework_count", 0)
     kept = sum(1 for info in task_verdicts.values() if info["verdict"] == "keep")
@@ -294,6 +298,7 @@ def reviewer_node(state: PipelineState) -> dict:
             AGENT,
             f"Wave {wave_index} could not be brought to an acceptable state in "
             f"{config.MAX_REWORK_ROUNDS} rework round(s). Outstanding problems:\n{comments}",
+            session=session,
         )
         update["status"] = "bounded"
         update["stop_reason"] = reason

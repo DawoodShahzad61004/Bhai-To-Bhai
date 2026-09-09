@@ -920,6 +920,38 @@ def test_append_learning_bumps_the_stamp(run_dir):
     assert art.read_learnings_stamp(run_dir) == run_dir.learnings.stat().st_size
 
 
+def test_append_learning_stamps_the_session_below_the_header(run_dir):
+    """mem_manager splits blocks on a lookahead before '## ', so a marker
+    written above a header would be scored as the PREVIOUS entry's identity."""
+    art.append_learning(run_dir, "planner", "split the wave", session="claude:s1")
+    lines = art.read_text(run_dir.learnings).splitlines()
+    header = next(i for i, line in enumerate(lines) if line.startswith("## "))
+    assert lines[header + 1] == "<!-- session:claude:s1 -->"
+
+
+def test_append_learning_without_a_session_writes_no_marker(run_dir):
+    """A coding subagent's CLI write has no AgentResult to read a session from.
+    Those entries have to keep producing exactly the bytes they always did."""
+    art.append_learning(run_dir, "T-001", "npm ci needs --legacy-peer-deps")
+    assert "<!-- session:" not in art.read_text(run_dir.learnings)
+
+
+def test_session_key_refuses_to_invent_an_identity():
+    """A bare 'claude:' would be one fake identity shared by every sessionless
+    claude turn — the opposite of an identity."""
+    assert art.session_key("claude", "abc") == "claude:abc"
+    assert art.session_key("claude", "") == ""
+
+
+def test_peer_findings_do_not_carry_the_session_marker(run_dir):
+    """The marker is a scoring key for the memory pipeline, not information for
+    a peer agent — and not a session id to hand it an invitation to resume."""
+    art.append_learning(run_dir, "T-001", "npm ci needs --legacy-peer-deps", session="claude:s1")
+    peers, _ = art.peer_entries_since(run_dir, "T-002", 0)
+    assert "npm ci needs --legacy-peer-deps" in peers
+    assert "<!-- session:" not in peers
+
+
 def _run_shared(run_dir, task_id: str, *command: str) -> subprocess.CompletedProcess:
     script = str(Path(art.__file__).resolve())
     return subprocess.run(

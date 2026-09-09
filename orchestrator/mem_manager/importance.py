@@ -2,6 +2,7 @@
 memory logs shaped like:
 
     ## 2026-08-29 12:48:55Z - requirements
+    <!-- session:claude:9f3ab2c1 -->
     <free-text content>
 
     ## 2026-08-29 12:51:46Z - T-001
@@ -10,12 +11,17 @@ memory logs shaped like:
 or user_choices.md's run-id-first shape:
 
     ## Run `run-20260829-174814` — 2026-08-29 12:48:55Z
+    <!-- session:codex:0198ab -->
     <free-text content>
+
+The optional session marker names the agent-backend session that wrote the
+entry; it is absent on legacy entries and on the coding subagents' writes,
+which come from their own OS process with no AgentResult in hand.
 
 One `parse_episodic_md()` + five scoring functions, stdlib only, so the same
 module drops into any project whose episodic log follows this header shape.
 Each factor takes the record plus whatever cross-record context it needs
-(the corpus, an entity index) rather than reaching for global state.
+(the corpus, a session index) rather than reaching for global state.
 """
 from __future__ import annotations
 
@@ -35,10 +41,29 @@ class EpisodicRecord:
     tag: str
     content: str
     raw: str = ""
+    # "<backend>:<session_id>" of the agent turn that wrote this entry, when the
+    # writer stamped one. Empty for legacy entries and for the coding subagents'
+    # CLI writes, which run in their own OS process with no AgentResult to read
+    # one from - those score 0 on salience rather than being given a fake identity.
+    session: str = ""
     # Principle 6 (explicit vs inferred). These logs are the agent's own
     # observations, not a stated user preference, so "inferred" is the
     # honest default - callers that do have a stated preference set it explicitly.
     provenance: str = "inferred"
+
+
+def _take_session_marker(body: str) -> tuple[str, str]:
+    """Pull the writer's session marker off the top of a block body.
+
+    The marker is the block's FIRST BODY line, not a line above the header: the
+    block split is a lookahead on '## ', so anything written above a header
+    belongs to the previous block. Anchored with `.match()`, so a marker quoted
+    inside a finding is content, not metadata.
+    """
+    match = config.SESSION_MARKER_PATTERN.match(body)
+    if not match:
+        return "", body
+    return match.group(1), body[match.end():]
 
 
 def parse_episodic_md(text: str) -> list[EpisodicRecord]:
@@ -56,6 +81,9 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
         if not block.startswith("## "):
             continue  # stray text before the first header (e.g. a title line) - not a record
         header, _, body = block.partition("\n")
+        # Once, before either header shape is tried: both writers stamp the
+        # marker in the same place, so neither branch below needs to know about it.
+        session, body = _take_session_marker(body)
 
         # user_choices.md shape: '## Run `RUN-ID` SEP DATE TIME' - run id
         # leads instead of trailing, so it needs its own match before falling
@@ -69,7 +97,7 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
                 ).replace(tzinfo=timezone.utc)
             except ValueError:
                 continue  # header shape matched but the timestamp didn't parse - skip, don't crash the batch
-            records.append(EpisodicRecord(timestamp, run_id, body.strip(), block))
+            records.append(EpisodicRecord(timestamp, run_id, body.strip(), block, session))
             continue
 
         # 'DATE TIME SEP TAG...' -> split into at most 4 pieces so a
@@ -84,7 +112,7 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
             ).replace(tzinfo=timezone.utc)
         except ValueError:
             continue  # header shape matched but the timestamp didn't parse - skip, don't crash the batch
-        records.append(EpisodicRecord(timestamp, tag.strip(), body.strip(), block))
+        records.append(EpisodicRecord(timestamp, tag.strip(), body.strip(), block, session))
     return records
 
 
@@ -144,35 +172,30 @@ def f_surprise(record: EpisodicRecord, corpus: Sequence[EpisodicRecord]) -> floa
     return 1.0 - max_sim  # closest prior match sets the floor; distance from it is the surprise
 
 
-def extract_entities(text: str) -> set[str]:
-    # Each alternative in config.ENTITY_PATTERN captures into its own group;
-    # exactly one group is non-None per match, so take whichever one fired.
-    return {next(g for g in match.groups() if g) for match in config.ENTITY_PATTERN.finditer(text)}
-
-
-def build_entity_index(corpus: Sequence[EpisodicRecord]) -> dict[str, float]:
-    """Rolling salience per entity: how often it recurs across the corpus,
-    normalized to [0, 1]. A real store would carry each entity's own accrued
-    importance instead of a mention count - this is the dependency-free
+def build_session_index(corpus: Sequence[EpisodicRecord]) -> dict[str, float]:
+    """Rolling salience per session: how many records that session wrote,
+    normalized to [0, 1]. A session that keeps producing entries is the
+    recurring actor in this log. A real store would carry each session's own
+    accrued importance instead of a record count - this is the dependency-free
     stand-in for that."""
     counts: dict[str, float] = defaultdict(float)
     for record in corpus:
-        for entity in extract_entities(record.content):
-            counts[entity] += 1.0  # mention count is the proxy signal here, not a tracked importance value
+        if record.session:
+            counts[record.session] += 1.0  # record count is the proxy signal here, not a tracked importance value
     if not counts:
         return {}
     peak = max(counts.values())
-    return {entity: count / peak for entity, count in counts.items()}  # scale relative to the most-mentioned entity
+    return {session: count / peak for session, count in counts.items()}  # scale relative to the busiest session
 
 
-def f_entity_salience(
-    record: EpisodicRecord, entity_index: dict[str, float], *, default: float = 0.0
+def f_session_salience(
+    record: EpisodicRecord, session_index: dict[str, float], *, default: float = 0.0
 ) -> float:
-    """Max importance of any entity the record references."""
-    entities = extract_entities(record.content)
-    if not entities:
-        return default  # nothing named in the text - no salience signal to read
-    return max(entity_index.get(entity, default) for entity in entities)  # one salient entity is enough to lift the record
+    """Salience of the session that wrote this record. One session per record,
+    so there is nothing to take a maximum over."""
+    if not record.session:
+        return default  # legacy entry, or an out-of-process CLI write - no identity to score
+    return session_index.get(record.session, default)
 
 
 def f_outcome(
@@ -230,7 +253,7 @@ def passive_decay(
 def composite_importance(
     record: EpisodicRecord,
     corpus: Sequence[EpisodicRecord],
-    entity_index: dict[str, float],
+    session_index: dict[str, float],
     *,
     now: datetime | None = None,
 ) -> float:
@@ -241,7 +264,7 @@ def composite_importance(
         "recency": f_recency(record, now=now),
         "frequency": f_frequency(record, corpus),
         "surprise": f_surprise(record, corpus),
-        "entity": f_entity_salience(record, entity_index),
+        "session": f_session_salience(record, session_index),
         "outcome": f_outcome(record),
     }
     score = sum(config.IMPORTANCE_WEIGHTS[key] * value for key, value in factors.items())

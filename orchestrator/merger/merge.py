@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import artifacts as art
 import config
 import parsing
 import worktrees as wt
@@ -46,7 +47,13 @@ class MergeReport:
     skipped: list[str] = field(default_factory=list)
     conflicts_resolved: list[str] = field(default_factory=list)
     unresolved: list[str] = field(default_factory=list)
-    learnings: list[str] = field(default_factory=list)
+    # (finding, session) pairs. Paired here at the source because the merge
+    # agent's AgentResult never leaves _resolve_conflict — merger/node.py, which
+    # writes these to learnings.md, has no way to recover the session otherwise.
+    # A tuple rather than a parallel `sessions` list: a wave can dispatch the
+    # merge agent more than once, in separate sessions, and the pairing should
+    # be correct by construction rather than an invariant to maintain.
+    learnings: list[tuple[str, str]] = field(default_factory=list)
     cost_usd: float = 0.0
     detail: str = ""
 
@@ -85,8 +92,8 @@ def _resolve_conflict(
     ours: str,
     context_path: str,
     artifacts_dir: str,
-) -> tuple[bool, str, str, float]:
-    """Dispatch the merge agent. Returns (ok, detail, learnings, cost)."""
+) -> tuple[bool, str, str, str, float]:
+    """Dispatch the merge agent. Returns (ok, detail, learnings, session, cost)."""
     logger.warning(
         "[%s] %s conflicts with %s in: %s", AGENT, branch, into, ", ".join(files)
     )
@@ -109,7 +116,11 @@ def _resolve_conflict(
         extra_dirs=(artifacts_dir,),
     )
     if not result.ok:
-        return False, f"the merge agent failed ({result.error_kind}): {result.error_message[:200]}", "", result.cost_usd
+        return False, f"the merge agent failed ({result.error_kind}): {result.error_message[:200]}", "", "", result.cost_usd
+
+    # The identity any learning below is written under, captured here because
+    # `result` does not outlive this function.
+    session = art.session_key(config.AGENTS[AGENT].backend, result.session_id)
 
     parsed = parsing.extract_json(result.text, result.structured)
     payload = parsed.value or {}
@@ -118,7 +129,7 @@ def _resolve_conflict(
 
     if status == "unresolvable":
         reason = parsing.require_str(payload, "unresolvable_reason") or "no reason given"
-        return False, f"the merge agent judged this unresolvable: {reason}", learnings, result.cost_usd
+        return False, f"the merge agent judged this unresolvable: {reason}", learnings, session, result.cost_usd
 
     # A claim of resolution, now checked against the filesystem.
     #
@@ -134,6 +145,7 @@ def _resolve_conflict(
             f"the merge agent reported success but conflict markers remain in: "
             f"{', '.join(with_markers)}",
             learnings,
+            session,
             result.cost_usd,
         )
 
@@ -145,11 +157,12 @@ def _resolve_conflict(
             False,
             f"could not stage the resolved files: {staged.stderr[:200]}",
             learnings,
+            session,
             result.cost_usd,
         )
 
     detail = parsing.require_str(payload, "summary") or "resolved"
-    return True, detail, learnings, result.cost_usd
+    return True, detail, learnings, session, result.cost_usd
 
 
 def merge_wave(
@@ -208,7 +221,7 @@ def merge_wave(
             report.detail = f"merging {branch} failed without conflicts: {result.stderr[:300]}"
             return report
 
-        resolved, detail, learning, cost = _resolve_conflict(
+        resolved, detail, learning, session, cost = _resolve_conflict(
             target_repo=target_repo,
             branch=branch,
             into=into,
@@ -220,7 +233,7 @@ def merge_wave(
         )
         report.cost_usd += cost
         if learning:
-            report.learnings.append(learning)
+            report.learnings.append((learning, session))
 
         if not resolved:
             wt.abort_merge(target_repo)

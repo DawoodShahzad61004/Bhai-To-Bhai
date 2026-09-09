@@ -14,8 +14,8 @@ import config
 from mem_manager import compact_markdown, compact_markdown_file
 from mem_manager.consolidate import refresh_decay, rerank_and_prune
 from mem_manager.importance import (
-    EpisodicRecord, build_entity_index, composite_importance, extract_entities,
-    f_entity_salience, f_frequency, f_outcome, f_recency, f_surprise,
+    EpisodicRecord, build_session_index, composite_importance,
+    f_frequency, f_outcome, f_recency, f_session_salience, f_surprise,
     parse_episodic_md, passive_decay,
 )
 from mem_manager.memory import build_durable_memories, content_id
@@ -122,13 +122,28 @@ def test_surprise_excludes_future_and_simultaneous_records(now):
     assert f_surprise(future, [record, future]) == 0
 
 
-def test_entity_salience_counts_records_not_repeated_mentions(now):
-    records = [EpisodicRecord(now, "a", "`cache.py` `cache.py` `rare.py`"),
-               EpisodicRecord(now, "b", "`cache.py`")]
-    index = build_entity_index(records)
-    assert index["cache.py"] == 1 and index["rare.py"] == .5
-    assert f_entity_salience(records[0], index) == 1
-    assert "T-042" in extract_entities("Fix T-042")
+def test_session_salience_scales_with_how_much_that_session_wrote(now):
+    records = [EpisodicRecord(now, "a", "one", session="claude:s1"),
+               EpisodicRecord(now, "b", "two", session="claude:s1"),
+               EpisodicRecord(now, "c", "three", session="codex:s2")]
+    index = build_session_index(records)
+    assert index["claude:s1"] == 1 and index["codex:s2"] == .5
+    assert f_session_salience(records[0], index) == 1
+    # A legacy or out-of-process write has no identity, so no lift - and it does
+    # not share an "" bucket with every other sessionless record either.
+    assert f_session_salience(EpisodicRecord(now, "d", "legacy"), index) == 0
+    assert "" not in index
+
+
+def test_session_marker_is_read_below_the_header_and_never_above_it():
+    below = "## 2026-09-08 12:00:00Z — planner\n<!-- session:claude:s1 -->\n\nbody"
+    assert parse_episodic_md(below)[0].session == "claude:s1"
+    assert parse_episodic_md(below)[0].content == "body"
+    # The block split is a lookahead on '## ', so a marker written above a
+    # header belongs to the previous block - it must never be read as this
+    # record's identity.
+    above = "<!-- session:claude:s1 -->\n## 2026-09-08 12:00:00Z — planner\n\nbody"
+    assert parse_episodic_md(above)[0].session == ""
 
 
 def test_explicit_choices_get_the_configured_initial_boost(now):
