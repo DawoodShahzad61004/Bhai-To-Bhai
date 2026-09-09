@@ -276,6 +276,34 @@
 
 ---
 
+## ADR-047 · Treat the writing agent's backend session as a memory identity, not entities inferred from its prose
+
+| Field | Detail |
+|---|---|
+| **Decision** | Replace regex-derived text entities in `mem_manager`'s importance calculation with one explicit identity per episodic record: `<backend>:<session_id>` for the agent session that wrote it. Persist that value in an HTML metadata marker immediately below the record header, carry it through parse, merge/consolidation, and full-file rewrite, and omit the factor for legacy or otherwise sessionless records rather than inventing a shared empty identity. |
+| **Date** | 2026-09-09 |
+| **Context** | `ENTITY_PATTERN` made the 0.15 salience factor depend on writing style: a finding containing backticks, PascalCase names, ticket ids, or dotted filenames could outscore the same fact written in plain language. The user clarified that the intended entity is an agent backend's session. The marker also had to survive ADR-045's destructive rewrite and remain invisible to peer agents consuming `learnings.md`. |
+| **Options Considered** | (A) Keep regex entity extraction and adjust its patterns. (B) Derive an identity from agent name or backend only. (C) Stamp the real vendor session id alone. (D) Stamp `<backend>:<session_id>`, parse it as metadata, and score record frequency by that key. For marker placement: write above the header, below it, or in visible prose. |
+| **Chosen Solution** | (D), with `<!-- session:<backend>:<session-id> -->` as the first body line directly below `## ...`. |
+| **Rationale** | A session is explicit provenance rather than an inference from vocabulary. The backend prefix prevents collisions between vendors' independent id spaces. Missing ids remain empty because `backend:` would collapse unrelated sessionless turns into one false identity. Placement below the header is load-bearing: `EPISODIC_BLOCK_SPLIT_PATTERN` splits on a lookahead before `## `, so a marker above a header belongs to the previous block. HTML metadata keeps the file readable, and stripping it from peer findings prevents accidental copying or attempts to resume another agent's session. |
+| **Impact** | `config.py` replaces `ENTITY_PATTERN`/the `entity` weight key with session marker/key configuration and a `session` weight. `importance.py` adds `EpisodicRecord.session`, marker extraction, `build_session_index()`, and `f_session_salience()`; `DurableMemory.session`, merge paths, and `_memories_to_markdown()` preserve it. Requirements, planner, merger, reviewer, and supervisor stamp their learning or choice entries from `AgentResult.session_id`. Short logs where each session wrote one record normalize every present session to `1.0`, so the factor behaves as presence rather than a gradient; and out-of-process coding-agent helper writes remain sessionless because they do not receive the dispatch result (`Bugs.md` #64). Focused September 9 verification passed all 23 targeted session/tag cases, including repeated compaction and peer isolation. |
+
+---
+
+## ADR-048 · Assign file-specific chronological titles after durable-memory merge and pruning
+
+| Field | Detail |
+|---|---|
+| **Decision** | Configure durable-memory title prefixes by filename and rename the final compacted memories chronologically: `learnings.md` entries become `Learning 1`, `Learning 2`, ...; `user_choices.md` entries become `User Choice 1`, `User Choice 2`, ...; files with no configured prefix keep their source tags. Apply the rename after merge/prune, immediately before returning the file result. |
+| **Date** | 2026-09-09 |
+| **Context** | A merged `DurableMemory` previously retained whichever source tag belonged to the keeper record, so the visible title of a consolidated entry was arbitrary provenance from one member of the merged group. The user required stable, file-specific names for the durable output rather than preserving those episodic labels. |
+| **Options Considered** | (A) Keep a source tag from the merge group. (B) Generate one global `Memory N` sequence for every file. (C) Configure a prefix per supported filename and number only the surviving final memories. For numbering order: use ranked return order or chronological `created_at` order. |
+| **Chosen Solution** | (C), numbered by chronological order with stable original-index tie-breaking, while preserving the pipeline's existing ranked return order. |
+| **Rationale** | The title describes the durable file's own record type, not one arbitrary episodic source. Renaming after merge/prune prevents gaps caused by entries that no longer survive. Computing labels from chronological order keeps `Learning 1` older than `Learning 2` even if importance ranking returns them in another order. A filename map in `config.py` keeps the behavior explicit and backward compatible for unconfigured consumers. |
+| **Impact** | `config.DURABLE_MEMORY_TAG_PREFIXES` maps `learnings.md` and `user_choices.md`; `compact_markdown_file()` uses `dataclasses.replace()` to assign final tags without mutating frozen memories. `_memories_to_markdown()` naturally preserves those tags during ADR-045's full-file rewrite. Tests cover both configured files, ranked-versus-chronological order, repeated compaction, and an unconfigured filename retaining its source tag. A later inspection of the exact reported `.bhai-artifacts/.../shared/` files found 28/28 `User Choice N` and 26/26 `Learning N` headers conforming; no code defect was reproduced (`Bugs.md` #65). |
+
+---
+
 ## ADR-018 · Derive waves deterministically and treat each wave as reversible Git integration
 
 | Field | Detail |
