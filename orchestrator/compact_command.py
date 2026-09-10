@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from datetime import timezone
 from pathlib import Path
 from typing import Any
@@ -348,7 +349,20 @@ def compact_command(use_llm: bool = True) -> int:
 
     Compacts the episodic memory artifacts (from config.COMPACT_ARTIFACT_FILES)
     in parallel and reports results.
+
+    Reconfigures stdout/stderr to UTF-8 first, matching artifacts.py's own
+    CLI dispatch: this runs as part of a fresh OS process (`main.py --compact`
+    or a direct caller), so it starts with whatever console codepage Windows
+    handed it — cp1252, typically — rather than the UTF-8 the ✓/✗ status
+    markers below need. Bare cp1252 output dies on them the same way it dies
+    on the em dash Bugs.md #11 already names.
     """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     setup_logging(app_name="compact")
 
     # Get artifact files from config
