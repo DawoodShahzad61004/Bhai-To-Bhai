@@ -245,6 +245,40 @@ SESSION_MARKER_PATTERN = re.compile(
 # UUID- or hex-shaped.
 SESSION_KEY_TEMPLATE = "{backend}:{session_id}"
 
+# `append_user_choices()`'s own replay-dedup sentinel, written directly above
+# each entry's '## Run `ID`' header (so, per the comment above, it lands at
+# the END of the block split BEFORE it once parsed) - captured here purely so
+# a compacted user_choices.md can strip it back off a record's body rather
+# than let it read as literal memory content, and so /compact can re-emit it
+# to keep replay idempotent across a rewrite.
+USER_CHOICES_RUN_MARKER_TEMPLATE = "<!-- run:{run_id} -->"
+USER_CHOICES_RUN_MARKER_PATTERN = re.compile(r"\n[ \t]*<!--[ \t]*run:\S+[ \t]*-->[ \t]*\Z")
+
+# --- Durable-memory metadata round-trip ---------------------------------
+# Session apart, these three are metadata a /compact rewrite would otherwise
+# throw away on the very next pass - _memories_to_markdown()'s output becomes
+# mem_manager's own input the next time this file compacts: provenance
+# (principle 6, explicit vs inferred), last_accessed_at (the decay clock
+# passive_decay() resets on access), and merged_from (how many source events a
+# durable memory represents). Same placement rule as the session marker:
+# directly below the '## ' header, never above it.
+PROVENANCE_MARKER_TEMPLATE = "<!-- provenance:{provenance} -->"
+LAST_ACCESSED_AT_MARKER_TEMPLATE = "<!-- last_accessed_at:{last_accessed_at} -->"
+MERGED_FROM_MARKER_TEMPLATE = "<!-- merged_from:{merged_from} -->"
+# A durable memory's own id, re-stamped so a later /compact recognizes it as
+# the SAME memory rather than re-deriving a fresh one - id derivation
+# (_record_id() in memory.py) is sensitive to the tag, and compact_markdown_
+# file()'s own chronological renumbering (e.g. "T-001" -> "Learning 1")
+# changes the visible tag on the very first pass, which would otherwise make
+# a singleton's id drift on every recompaction even though nothing about the
+# underlying event actually changed.
+DURABLE_ID_MARKER_TEMPLATE = "<!-- id:{id} -->"
+# One pattern for all four - matched repeatedly at position 0 of a shrinking
+# body, same idiom as SESSION_MARKER_PATTERN's .match() use.
+DURABLE_METADATA_MARKER_PATTERN = re.compile(
+    r"^[ \t]*<!--[ \t]*(id|provenance|last_accessed_at|merged_from):(.*?)[ \t]*-->[ \t]*\n?"
+)
+
 # --- Composite importance ----------------------------------------------------
 IMPORTANCE_WEIGHTS = {
     "recency": 0.25,

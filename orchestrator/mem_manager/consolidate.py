@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 from math import floor
 from typing import Sequence
 
@@ -25,16 +25,25 @@ def refresh_decay(
 ) -> list[DurableMemory]:
     """Apply passive_decay to every memory's importance, each from its own
     created_at/last_accessed_at - a memory reinforced by a recent merge
-    decays less than one that was never touched again."""
+    decays less than one that was never touched again.
+
+    Advances last_accessed_at to this maintenance pass's `now`, so a second
+    pass at the same `now` (or any repeat before real time elapses further)
+    finds zero elapsed hours and charges no additional decay - without this,
+    a memory run through maintenance twice would have its untouched
+    created_at-to-now span decayed twice over.
+    """
+    resolved_now = now or datetime.now(timezone.utc)
     return [
         replace(
             memory,
             importance=passive_decay(
                 memory.importance,
                 memory.created_at,
-                now=now,
+                now=resolved_now,
                 last_accessed_at=memory.last_accessed_at,
             ),
+            last_accessed_at=resolved_now,
         )
         for memory in memories
     ]
@@ -58,6 +67,10 @@ def rerank_and_prune(
       too small a corpus for "the bottom prune_fraction" to be a meaningful
       signal yet.
     """
+    effective_fraction = config.PRUNE_BOTTOM_PERCENT if prune_fraction is None else prune_fraction
+    if not (0.0 <= effective_fraction <= 1.0):
+        raise ValueError(f"prune_fraction must be within [0, 1], got {effective_fraction!r}")
+
     indexed = sorted(
         enumerate(memories), key=lambda pair: pair[1].importance, reverse=True
     )
@@ -79,9 +92,7 @@ def rerank_and_prune(
         _log_retained(result)
         return result
 
-    if prune_fraction is None:
-        prune_fraction = config.PRUNE_BOTTOM_PERCENT
-    prune_count = floor(len(indexed) * prune_fraction)
+    prune_count = floor(len(indexed) * effective_fraction)
     if prune_count <= 0:
         _log_retained([memory for _, memory in indexed])
         return [memory for _, memory in indexed]

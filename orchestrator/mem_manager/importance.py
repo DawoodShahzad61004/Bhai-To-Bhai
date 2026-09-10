@@ -50,6 +50,28 @@ class EpisodicRecord:
     # observations, not a stated user preference, so "inferred" is the
     # honest default - callers that do have a stated preference set it explicitly.
     provenance: str = "inferred"
+    # user_choices.md's run id, captured off the header itself for the
+    # "Run `ID`" shape only - empty for every other record. Threaded through
+    # separately from `tag` because /compact's file-level tag renumbering
+    # (see compact.py's DURABLE_MEMORY_TAG_PREFIXES step) overwrites `tag` for
+    # display, and losing this alongside it would make a rewritten
+    # user_choices.md unable to re-emit the '<!-- run:ID -->' sentinel
+    # append_user_choices() needs for idempotent replay.
+    run_id: str = ""
+    # Present only when a prior /compact rewrite stamped a
+    # '<!-- last_accessed_at:... -->' marker on this record; None means "use
+    # this record's own timestamp", the same default build_durable_memories()
+    # already applied before these markers existed.
+    last_accessed_at: datetime | None = None
+    # Present only when a prior /compact rewrite stamped a
+    # '<!-- merged_from:... -->' marker; empty means "no prior lineage to
+    # inherit", so build_durable_memories() falls back to this record's own id.
+    merged_from: tuple[str, ...] = ()
+    # Present only when a prior /compact rewrite stamped a '<!-- id:... -->'
+    # marker; empty means "never compacted before", so build_durable_memories()
+    # derives a fresh id. See config.DURABLE_ID_MARKER_TEMPLATE for why this
+    # can't just be re-derived from the record's current tag every time.
+    id: str = ""
 
 
 def _take_session_marker(body: str) -> tuple[str, str]:
@@ -66,6 +88,59 @@ def _take_session_marker(body: str) -> tuple[str, str]:
     return match.group(1), body[match.end():]
 
 
+def _take_metadata_markers(body: str) -> tuple[dict[str, str], str]:
+    """Pull every durable-metadata marker off the top of a block body (after
+    the session marker, if any), in whatever order they were written.
+
+    Same anchoring rule as `_take_session_marker`: matched repeatedly at
+    position 0 of the shrinking body, so a marker quoted mid-finding is left
+    as content rather than consumed as metadata.
+    """
+    values: dict[str, str] = {}
+    while True:
+        match = config.DURABLE_METADATA_MARKER_PATTERN.match(body)
+        if not match:
+            return values, body
+        values[match.group(1)] = match.group(2)
+        body = body[match.end():]
+
+
+def _parse_marker_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, config.EPISODIC_TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _parse_marker_merged_from(value: str | None) -> tuple[str, ...]:
+    if not value:
+        return ()
+    return tuple(part for part in value.split(",") if part)
+
+
+def _is_record_header(header: str) -> bool:
+    """Whether a '## '-prefixed line is a genuine record boundary.
+
+    Used to tell a real header apart from a nested Markdown heading or a
+    heading-shaped line inside a fenced code block that merely happens to
+    start with '## ' - neither of those parses as either supported header
+    shape, so neither should split the record it actually belongs to.
+    """
+    if config.USER_CHOICES_HEADER_PATTERN.match(header):
+        return True
+    parts = header[3:].strip().split(None, 3)
+    if len(parts) < 4:
+        return False
+    date_str, time_str, _sep, _tag = parts
+    try:
+        datetime.strptime(f"{date_str} {time_str}", config.EPISODIC_TIMESTAMP_FORMAT)
+    except ValueError:
+        return False
+    return True
+
+
 def parse_episodic_md(text: str) -> list[EpisodicRecord]:
     """Split a log on '## ' headers. Header shape is 'DATE TIME SEP TAG' -
     SEP is whatever separator character the log uses (an em dash, a mojibake
@@ -75,15 +150,50 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
     records: list[EpisodicRecord] = []
     # Split right before each '## ' so every chunk keeps its own header +
     # body together; a lookahead split (vs. a plain split) doesn't eat the delimiter.
-    blocks = config.EPISODIC_BLOCK_SPLIT_PATTERN.split(text.strip())
+    raw_blocks = config.EPISODIC_BLOCK_SPLIT_PATTERN.split(text.strip())
+
+    candidates = [
+        raw_block for raw_block in raw_blocks if raw_block.strip().startswith("## ")
+    ]  # drop stray text before the first header (e.g. a title line) - not a record
+    genuine_indices = {
+        i for i, raw_block in enumerate(candidates)
+        if _is_record_header(raw_block.strip().partition("\n")[0])
+    }
+    last_genuine = max(genuine_indices, default=-1)
+
+    # A '## '-prefixed chunk that doesn't parse as either real header shape
+    # isn't a new record. Trailing after the last genuine header, it's a
+    # nested heading, or a heading-shaped line inside a code fence, that the
+    # split treated as a boundary purely because it starts with '## ' - fold
+    # it back onto that final record (re-inserting the single '\n' the split
+    # consumed) instead of silently dropping it, which is what truncated the
+    # body before. Before or between genuine headers, it reads as a
+    # deliberately malformed record attempt sitting between two real ones,
+    # not a continuation of the one before it - the existing "malformed,
+    # skip it" behavior stands there.
+    blocks: list[str] = []
+    for i, raw_block in enumerate(candidates):
+        if i > last_genuine and blocks:
+            blocks[-1] = blocks[-1] + "\n" + raw_block
+            continue
+        if i not in genuine_indices:
+            continue  # malformed header before/between genuine ones - skip it
+        blocks.append(raw_block)
+
     for block in blocks:
         block = block.strip()
-        if not block.startswith("## "):
-            continue  # stray text before the first header (e.g. a title line) - not a record
         header, _, body = block.partition("\n")
         # Once, before either header shape is tried: both writers stamp the
         # marker in the same place, so neither branch below needs to know about it.
         session, body = _take_session_marker(body)
+        # `append_user_choices()`'s '<!-- run:ID -->' sentinel lands at the
+        # END of the block split BEFORE the one it names (see config.py) -
+        # strip it back off rather than let it read as this record's content.
+        body = config.USER_CHOICES_RUN_MARKER_PATTERN.sub("", body)
+        metadata, body = _take_metadata_markers(body)
+        record_id = metadata.get("id", "")
+        last_accessed_at = _parse_marker_timestamp(metadata.get("last_accessed_at"))
+        merged_from = _parse_marker_merged_from(metadata.get("merged_from"))
 
         # user_choices.md shape: '## Run `RUN-ID` SEP DATE TIME' - run id
         # leads instead of trailing, so it needs its own match before falling
@@ -97,7 +207,17 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
                 ).replace(tzinfo=timezone.utc)
             except ValueError:
                 continue  # header shape matched but the timestamp didn't parse - skip, don't crash the batch
-            records.append(EpisodicRecord(timestamp, run_id, body.strip(), block, session))
+            records.append(EpisodicRecord(
+                timestamp, run_id, body.strip(), block, session,
+                # A stated user choice is explicit provenance by construction
+                # (principle 6) - a marker overrides that only if a prior
+                # /compact pass recorded something different for it.
+                provenance=metadata.get("provenance", "explicit"),
+                run_id=run_id,
+                last_accessed_at=last_accessed_at,
+                merged_from=merged_from,
+                id=record_id,
+            ))
             continue
 
         # 'DATE TIME SEP TAG...' -> split into at most 4 pieces so a
@@ -112,7 +232,13 @@ def parse_episodic_md(text: str) -> list[EpisodicRecord]:
             ).replace(tzinfo=timezone.utc)
         except ValueError:
             continue  # header shape matched but the timestamp didn't parse - skip, don't crash the batch
-        records.append(EpisodicRecord(timestamp, tag.strip(), body.strip(), block, session))
+        records.append(EpisodicRecord(
+            timestamp, tag.strip(), body.strip(), block, session,
+            provenance=metadata.get("provenance", "inferred"),
+            last_accessed_at=last_accessed_at,
+            merged_from=merged_from,
+            id=record_id,
+        ))
     return records
 
 

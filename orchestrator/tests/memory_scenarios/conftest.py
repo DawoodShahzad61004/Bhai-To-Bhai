@@ -70,7 +70,7 @@ def offline(monkeypatch, embedder):
     monkeypatch.setattr(dedup_merge, "_default_embedder", lambda: embedder)
     monkeypatch.setattr(dedup_merge, "_default_llm_calls", Mock(
         side_effect=AssertionError("Test attempted to construct a live LLM client")))
-    monkeypatch.setattr(command, "setup_logging", lambda: None)
+    monkeypatch.setattr(command, "setup_logging", lambda *a, **k: None)
     monkeypatch.setattr(config, "ENABLE_PRUNING", False)
     monkeypatch.setattr(config, "MIN_PRUNE_BUDGET", 2000)
     monkeypatch.setattr(config, "PRUNE_BOTTOM_PERCENT", 0.2)

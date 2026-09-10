@@ -373,7 +373,8 @@ def test_copilot_adapter_builds_noninteractive_command(monkeypatch):
     assert argv[argv.index("--model") + 1] == "auto"
     assert argv[argv.index("--add-dir") + 1] == run_dir
     assert argv[argv.index("--output-format") + 1] == "json"
-    assert "--allow-all-tools" in argv
+    assert "--available-tools=ask_user" in argv
+    assert "--deny-tool=write" in argv
     assert "--no-ask-user" in argv
     assert "--resume=previous-session" in argv
     assert "System rules." in argv[argv.index("-p") + 1]

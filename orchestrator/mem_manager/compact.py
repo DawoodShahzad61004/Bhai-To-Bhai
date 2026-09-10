@@ -73,7 +73,11 @@ def compact_markdown(
 
 def compact_markdown_file(path: str | Path, **kwargs) -> list[DurableMemory]:
     path = Path(path)
-    text = path.read_text(encoding="utf-8")
+    # utf-8-sig strips a leading BOM when present and reads plain UTF-8
+    # identically when it's not - a BOM left in by plain "utf-8" attaches to
+    # the first header line and fails header validation, silently dropping
+    # the file's first record.
+    text = path.read_text(encoding="utf-8-sig")
     memories = compact_markdown(text, **kwargs)
     prefix = config.DURABLE_MEMORY_TAG_PREFIXES.get(path.name.lower())
     if not prefix:

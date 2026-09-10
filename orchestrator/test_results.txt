@@ -1,0 +1,447 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-8.4.2, pluggy-1.6.0
+rootdir: C:\Users\LOQ\Desktop\Projects\Bhai-To-Bhai
+configfile: pytest.ini
+plugins: anyio-4.12.1, langsmith-0.12.4
+collected 610 items
+
+tests\memory_scenarios\test_auto_compact.py .............                [  2%]
+tests\memory_scenarios\test_crud.py .................................... [  8%]
+........................................................................ [ 19%]
+...........................                                              [ 24%]
+tests\memory_scenarios\test_merge.py ................................... [ 30%]
+....................                                                     [ 33%]
+tests\memory_scenarios\test_pipeline.py ................................ [ 38%]
+..FFFFF...............F.                                                 [ 42%]
+tests\memory_scenarios\test_safety_contracts.py FFFFF.FFFFFFF.FFFFFFFFFF [ 46%]
+FFFFFFFFF.F                                                              [ 48%]
+tests\memory_scenarios\test_sequences.py ..............                  [ 50%]
+tests\test_diagnostics.py ...............                                [ 52%]
+tests\test_foundation.py ...........F................................... [ 60%]
+.........................                                                [ 64%]
+tests\test_graph.py ..........................                           [ 69%]
+tests\test_local_llm_bridge.py .......                                   [ 70%]
+tests\test_main.py .........................                             [ 74%]
+tests\test_merger.py ..............                                      [ 76%]
+tests\test_planner.py .........................................          [ 83%]
+tests\test_process_trace.py ....                                         [ 83%]
+tests\test_requirements.py ........................                      [ 87%]
+tests\test_reverts.py ........                                           [ 89%]
+tests\test_reviewer.py .......................                           [ 92%]
+tests\test_supervisor.py .............                                   [ 95%]
+tests\test_wave_orchestrator.py ..............................           [100%]
+
+================================== FAILURES ===================================
+_________ test_batch_handles_success_missing_and_empty_independently __________
+tests\memory_scenarios\test_pipeline.py:159: in test_batch_handles_success_missing_and_empty_independently
+    result = asyncio.run(command.compact_files_parallel([good, missing, empty], use_llm=False))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+compact_command.py:262: in compact_files_parallel
+    setup_logging(app_name="compact")
+E   TypeError: offline.<locals>.<lambda>() got an unexpected keyword argument 'app_name'
+_______________________ test_empty_batch_is_successful ________________________
+tests\memory_scenarios\test_pipeline.py:165: in test_empty_batch_is_successful
+    result = asyncio.run(command.compact_files_parallel([], use_llm=False))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+compact_command.py:262: in compact_files_parallel
+    setup_logging(app_name="compact")
+E   TypeError: offline.<locals>.<lambda>() got an unexpected keyword argument 'app_name'
+_________ test_command_uses_configured_temp_files_and_prints_summary __________
+tests\memory_scenarios\test_pipeline.py:173: in test_command_uses_configured_temp_files_and_prints_summary
+    assert command.compact_command(use_llm=False) == 0
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compact_command.py:289: in compact_command
+    setup_logging(app_name="compact")
+E   TypeError: offline.<locals>.<lambda>() got an unexpected keyword argument 'app_name'
+_______ test_command_preflight_missing_file_leaves_all_inputs_untouched _______
+tests\memory_scenarios\test_pipeline.py:182: in test_command_preflight_missing_file_leaves_all_inputs_untouched
+    assert command.compact_command(use_llm=False) == 2
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compact_command.py:289: in compact_command
+    setup_logging(app_name="compact")
+E   TypeError: offline.<locals>.<lambda>() got an unexpected keyword argument 'app_name'
+___________________ test_command_reports_processing_failure ___________________
+tests\memory_scenarios\test_pipeline.py:190: in test_command_reports_processing_failure
+    assert command.compact_command(use_llm=False) == 1
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compact_command.py:289: in compact_command
+    setup_logging(app_name="compact")
+E   TypeError: offline.<locals>.<lambda>() got an unexpected keyword argument 'app_name'
+___________________ test_two_projects_compact_independently ___________________
+tests\memory_scenarios\test_pipeline.py:241: in test_two_projects_compact_independently
+    result = asyncio.run(command.compact_files_parallel(paths, use_llm=False))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\asyncio\base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+compact_command.py:262: in compact_files_parallel
+    setup_logging(app_name="compact")
+E   TypeError: offline.<locals>.<lambda>() got an unexpected keyword argument 'app_name'
+_________ test_explicit_user_choice_provenance_survives_actual_writer _________
+tests\memory_scenarios\test_safety_contracts.py:31: in test_explicit_user_choice_provenance_survives_actual_writer
+    assert result[0].provenance == "explicit", "User-stated choices were downgraded to inferred"
+E   AssertionError: User-stated choices were downgraded to inferred
+E   assert 'inferred' == 'explicit'
+E     
+E     - explicit
+E     + inferred
+________________ test_unmerged_events_keep_separate_identities ________________
+tests\memory_scenarios\test_safety_contracts.py:40: in test_unmerged_events_keep_separate_identities
+    assert result[0].id != result[1].id, "Separate events acquired the same durable ID"
+E   AssertionError: Separate events acquired the same durable ID
+E   assert 'ff3390557335' != 'ff3390557335'
+E    +  where 'ff3390557335' = DurableMemory(id='ff3390557335', content='same', tag='T-001', created_at=datetime.datetime(2026, 9, 7, 12, 0, tzinfo=d...datetime.timezone.utc), importance=0.6115755515057694, provenance='inferred', session='', merged_from=['d25434f86784']).id
+E    +  and   'ff3390557335' = DurableMemory(id='ff3390557335', content='same', tag='T-001', created_at=datetime.datetime(2026, 9, 8, 12, 0, tzinfo=d...12, 0, tzinfo=datetime.timezone.utc), importance=0.45, provenance='inferred', session='', merged_from=['e19423c68510']).id
+________________ test_singleton_dedup_preserves_the_source_id _________________
+tests\memory_scenarios\test_safety_contracts.py:46: in test_singleton_dedup_preserves_the_source_id
+    assert result[0].id == source[0].id, "An unmerged source record changed identity"
+E   AssertionError: An unmerged source record changed identity
+E   assert '6c3437fd7c4b' == 'ddfb75fbe7ce'
+E     
+E     - ddfb75fbe7ce
+E     + 6c3437fd7c4b
+_____ test_markdown_roundtrip_retains_durable_metadata[last_accessed_at] ______
+tests\memory_scenarios\test_safety_contracts.py:56: in test_markdown_roundtrip_retains_durable_metadata
+    assert getattr(reread, field) == getattr(original, field), f"Markdown persistence discarded {field}"
+E   AssertionError: Markdown persistence discarded last_accessed_at
+E   assert datetime.datetime(2026, 8, 9, 12, 0, tzinfo=datetime.timezone.utc) == datetime.datetime(2026, 9, 8, 12, 0, tzinfo=datetime.timezone.utc)
+E    +  where datetime.datetime(2026, 8, 9, 12, 0, tzinfo=datetime.timezone.utc) = getattr(DurableMemory(id='ac9bcc28feda', content='a durable lesson', tag='T-001', created_at=datetime.datetime(2026, 8, 9, 12,...imezone.utc), importance=0.6878177399376193, provenance='inferred', session='claude:abc', merged_from=['ac9bcc28feda']), 'last_accessed_at')
+E    +  and   datetime.datetime(2026, 9, 8, 12, 0, tzinfo=datetime.timezone.utc) = getattr(DurableMemory(id='e1809bae75ec', content='a durable lesson', tag='T-001', created_at=datetime.datetime(2026, 8, 9, 12,...etime.timezone.utc), importance=0.5, provenance='explicit', session='claude:abc', merged_from=['source-a', 'source-b']), 'last_accessed_at')
+________ test_markdown_roundtrip_retains_durable_metadata[provenance] _________
+tests\memory_scenarios\test_safety_contracts.py:56: in test_markdown_roundtrip_retains_durable_metadata
+    assert getattr(reread, field) == getattr(original, field), f"Markdown persistence discarded {field}"
+E   AssertionError: Markdown persistence discarded provenance
+E   assert 'inferred' == 'explicit'
+E     
+E     - explicit
+E     + inferred
+________ test_markdown_roundtrip_retains_durable_metadata[merged_from] ________
+tests\memory_scenarios\test_safety_contracts.py:56: in test_markdown_roundtrip_retains_durable_metadata
+    assert getattr(reread, field) == getattr(original, field), f"Markdown persistence discarded {field}"
+E   AssertionError: Markdown persistence discarded merged_from
+E   assert ['ac9bcc28feda'] == ['source-a', 'source-b']
+E     
+E     At index 0 diff: 'ac9bcc28feda' != 'source-a'
+E     Right contains one more item: 'source-b'
+E     Use -v to get more diff
+__________ test_repeated_file_compaction_retains_merge_source_count ___________
+tests\memory_scenarios\test_safety_contracts.py:65: in test_repeated_file_compaction_retains_merge_source_count
+    assert second["memories"][0]["merged_from_count"] == 2, "Recompaction erased original source lineage"
+E   AssertionError: Recompaction erased original source lineage
+E   assert 1 == 2
+________ test_compacted_learnings_are_visible_to_existing_peer_reader _________
+tests\memory_scenarios\test_safety_contracts.py:74: in test_compacted_learnings_are_visible_to_existing_peer_reader
+    assert "Use a shared transaction." in after, "Compaction wrote headers the peer reader cannot recognize"
+E   AssertionError: Compaction wrote headers the peer reader cannot recognize
+E   assert 'Use a shared transaction.' in ''
+___________________ test_compaction_updates_learnings_stamp ___________________
+tests\memory_scenarios\test_safety_contracts.py:81: in test_compaction_updates_learnings_stamp
+    assert art.read_learnings_stamp(store) == store.learnings.stat().st_size, "Shared change stamp is stale"
+E   AssertionError: Shared change stamp is stale
+E   assert 171 == 53
+E    +  where 171 = <function read_learnings_stamp at 0x000001DCE807C880>(RunArtifacts(run_id='memory-test', root=WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_updates_learni0/store')))
+E    +    where <function read_learnings_stamp at 0x000001DCE807C880> = art.read_learnings_stamp
+E    +  and   53 = os.stat_result(st_mode=33206, st_ino=2814749769204444, st_dev=17176205449626884731, st_nlink=1, st_uid=0, st_gid=0, st_size=53, st_atime=1789036301, st_mtime=1789036301, st_ctime=1789036301).st_size
+E    +    where os.stat_result(st_mode=33206, st_ino=2814749769204444, st_dev=17176205449626884731, st_nlink=1, st_uid=0, st_gid=0, st_size=53, st_atime=1789036301, st_mtime=1789036301, st_ctime=1789036301) = stat()
+E    +      where stat = WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_updates_learni0/store/shared/learnings.md').stat
+E    +        where WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_updates_learni0/store/shared/learnings.md') = RunArtifacts(run_id='memory-test', root=WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_updates_learni0/store')).learnings
+_________ test_compaction_invalidates_offsets_into_rewritten_content __________
+tests\memory_scenarios\test_safety_contracts.py:91: in test_compaction_invalidates_offsets_into_rewritten_content
+    assert cursor is None or cursor <= store.learnings.stat().st_size, "Reader offset points beyond rewritten file"
+E   AssertionError: Reader offset points beyond rewritten file
+E   assert (293 is None or 293 <= 57)
+E    +  where 57 = os.stat_result(st_mode=33206, st_ino=3096224745915109, st_dev=17176205449626884731, st_nlink=1, st_uid=0, st_gid=0, st_size=57, st_atime=1789036301, st_mtime=1789036301, st_ctime=1789036301).st_size
+E    +    where os.stat_result(st_mode=33206, st_ino=3096224745915109, st_dev=17176205449626884731, st_nlink=1, st_uid=0, st_gid=0, st_size=57, st_atime=1789036301, st_mtime=1789036301, st_ctime=1789036301) = stat()
+E    +      where stat = WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_invalidates_of0/store/shared/learnings.md').stat
+E    +        where WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_invalidates_of0/store/shared/learnings.md') = RunArtifacts(run_id='memory-test', root=WindowsPath('C:/Users/LOQ/AppData/Local/Temp/pytest-of-LOQ/pytest-202/test_compaction_invalidates_of0/store')).learnings
+___________ test_choice_ledger_remains_idempotent_after_compaction ____________
+tests\memory_scenarios\test_safety_contracts.py:100: in test_choice_ledger_remains_idempotent_after_compaction
+    assert store.user_choices.read_bytes() == compacted, "Compaction removed the replay-deduplication marker"
+E   AssertionError: Compaction removed the replay-deduplication marker
+E   assert b'## 2026-09-... decision\r\n' == b'## 2026-09-... decision\r\n'
+E     
+E     Use -v to get more diff
+_______ test_choice_run_markers_are_not_attached_to_the_previous_memory _______
+tests\memory_scenarios\test_safety_contracts.py:108: in test_choice_run_markers_are_not_attached_to_the_previous_memory
+    assert "run-two" not in first.content, "Next run's control marker leaked into the previous decision"
+E   AssertionError: Next run's control marker leaked into the previous decision
+E   assert 'run-two' not in 'first decis...:run-two -->'
+E     
+E     'run-two' is contained here:
+E       first decision
+E       
+E       <!-- run:run-two -->
+E     ?          +++++++
+____________ test_partial_write_failure_does_not_destroy_original _____________
+tests\memory_scenarios\test_safety_contracts.py:142: in test_partial_write_failure_does_not_destroy_original
+    assert result["status"] == "error"
+E   AssertionError: assert 'success' == 'error'
+E     
+E     - error
+E     + success
+_ test_unparseable_nonempty_file_is_not_silently_erased[# Imported memory\nUnstructured but valuable evidence] _
+tests\memory_scenarios\test_safety_contracts.py:152: in test_unparseable_nonempty_file_is_not_silently_erased
+    assert path.read_bytes() == original, f"{result['status']}: unrecognized input was erased"
+E   AssertionError: success: unrecognized input was erased
+E   assert b'' == b'# Imported ...able evidence'
+E     
+E     Use -v to get more diff
+_ test_unparseable_nonempty_file_is_not_silently_erased[## malformed\nKeep this evidence] _
+tests\memory_scenarios\test_safety_contracts.py:152: in test_unparseable_nonempty_file_is_not_silently_erased
+    assert path.read_bytes() == original, f"{result['status']}: unrecognized input was erased"
+E   AssertionError: success: unrecognized input was erased
+E   assert b'' == b'## malforme...this evidence'
+E     
+E     Use -v to get more diff
+_ test_nested_markdown_does_not_truncate_memory_content[before\n\n## Supporting details\n\nafter] _
+tests\memory_scenarios\test_safety_contracts.py:159: in test_nested_markdown_does_not_truncate_memory_content
+    assert len(records) == 1 and records[0].content == body, "Non-event heading truncated the memory body"
+E   AssertionError: Non-event heading truncated the memory body
+E   assert (1 == 1 and 'before' == 'before\n\n##...ails\n\nafter'
+E    +  where 1 = len([EpisodicRecord(timestamp=datetime.datetime(2026, 9, 8, 12, 0, tzinfo=datetime.timezone.utc), tag='T-001', content='before', raw='## 2026-09-08 12:00:00Z — T-001\n\nbefore', session='', provenance='inferred')])
+E     
+E     - before
+E     ?       -
+E     + before
+E     - 
+E     - ## Supporting details
+E     - 
+E     - after)
+_ test_nested_markdown_does_not_truncate_memory_content[before\n```markdown\n## Example header\nexample\n```\nafter] _
+tests\memory_scenarios\test_safety_contracts.py:159: in test_nested_markdown_does_not_truncate_memory_content
+    assert len(records) == 1 and records[0].content == body, "Non-event heading truncated the memory body"
+E   AssertionError: Non-event heading truncated the memory body
+E   assert (1 == 1 and 'before\n```markdown' == 'before\n```m...e\n```\nafter'
+E    +  where 1 = len([EpisodicRecord(timestamp=datetime.datetime(2026, 9, 8, 12, 0, tzinfo=datetime.timezone.utc), tag='T-001', content='before\n```markdown', raw='## 2026-09-08 12:00:00Z — T-001\n\nbefore\n```markdown', session='', provenance='inferred')])
+E     
+E       before
+E     - ```markdown
+E     ?            -
+E     + ```markdown
+E     - ## Example header
+E     - example
+E     - ```
+E     - after)
+________________ test_utf8_bom_does_not_drop_the_first_record _________________
+tests\memory_scenarios\test_safety_contracts.py:166: in test_utf8_bom_does_not_drop_the_first_record
+    assert len(result) == 1 and result[0].content == "first evidence"
+E   assert (0 == 1)
+E    +  where 0 = len([])
+______________ test_serializer_converts_offset_timestamp_to_utc _______________
+tests\memory_scenarios\test_safety_contracts.py:172: in test_serializer_converts_offset_timestamp_to_utc
+    assert parse_episodic_md(text)[0].timestamp == now, "A non-UTC clock was labeled Z without conversion"
+E   AssertionError: A non-UTC clock was labeled Z without conversion
+E   assert datetime.datetime(2026, 9, 8, 17, 0, tzinfo=datetime.timezone.utc) == datetime.datetime(2026, 9, 8, 12, 0, tzinfo=datetime.timezone.utc)
+E    +  where datetime.datetime(2026, 9, 8, 17, 0, tzinfo=datetime.timezone.utc) = EpisodicRecord(timestamp=datetime.datetime(2026, 9, 8, 17, 0, tzinfo=datetime.timezone.utc), tag='T-001', content='Use pytest fixtures.', raw='## 2026-09-08 17:00:00Z - T-001\n\nUse pytest fixtures.', session='', provenance='inferred').timestamp
+_____ test_default_llm_initialization_failure_uses_deterministic_fallback _____
+tests\memory_scenarios\test_safety_contracts.py:177: in test_default_llm_initialization_failure_uses_deterministic_fallback
+    result = merge.dedupe_and_merge([memory("same"), memory("same")], embedder=embedder)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mem_manager\services\dedup_merge.py:260: in dedupe_and_merge
+    llm_call, judge_call = _default_llm_calls()
+                           ^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1175: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1179: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1234: in _execute_mock_call
+    raise effect
+E   RuntimeError: provider unavailable
+__________ test_no_llm_setup_when_no_merge_call_is_needed[disabled] ___________
+tests\memory_scenarios\test_safety_contracts.py:192: in test_no_llm_setup_when_no_merge_call_is_needed
+    merge.dedupe_and_merge(source, embedder=embedder, use_llm=True)
+mem_manager\services\dedup_merge.py:260: in dedupe_and_merge
+    llm_call, judge_call = _default_llm_calls()
+                           ^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1175: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1179: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1234: in _execute_mock_call
+    raise effect
+E   AssertionError: No LLM client should be needed
+__________ test_no_llm_setup_when_no_merge_call_is_needed[singleton] __________
+tests\memory_scenarios\test_safety_contracts.py:192: in test_no_llm_setup_when_no_merge_call_is_needed
+    merge.dedupe_and_merge(source, embedder=embedder, use_llm=True)
+mem_manager\services\dedup_merge.py:260: in dedupe_and_merge
+    llm_call, judge_call = _default_llm_calls()
+                           ^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1175: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1179: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1234: in _execute_mock_call
+    raise effect
+E   AssertionError: No LLM client should be needed
+________ test_no_llm_setup_when_no_merge_call_is_needed[no-duplicates] ________
+tests\memory_scenarios\test_safety_contracts.py:192: in test_no_llm_setup_when_no_merge_call_is_needed
+    merge.dedupe_and_merge(source, embedder=embedder, use_llm=True)
+mem_manager\services\dedup_merge.py:260: in dedupe_and_merge
+    llm_call, judge_call = _default_llm_calls()
+                           ^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1175: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1179: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python314\Lib\unittest\mock.py:1234: in _execute_mock_call
+    raise effect
+E   AssertionError: No LLM client should be needed
+______ test_judge_requires_an_unambiguous_faithful_verdict[NOT FAITHFUL] ______
+tests\memory_scenarios\test_safety_contracts.py:200: in test_judge_requires_an_unambiguous_faithful_verdict
+    assert result.content == "one\n---\ntwo", "Ambiguous judge output authorized a merge"
+E   AssertionError: Ambiguous judge output authorized a merge
+E   assert 'invented' == 'one\n---\ntwo'
+E     
+E     + invented
+E     - one
+E     - ---
+E     - two
+_ test_judge_requires_an_unambiguous_faithful_verdict[The word FAITHFUL is insufficient] _
+tests\memory_scenarios\test_safety_contracts.py:200: in test_judge_requires_an_unambiguous_faithful_verdict
+    assert result.content == "one\n---\ntwo", "Ambiguous judge output authorized a merge"
+E   AssertionError: Ambiguous judge output authorized a merge
+E   assert 'invented' == 'one\n---\ntwo'
+E     
+E     + invented
+E     - one
+E     - ---
+E     - two
+______ test_judge_requires_an_unambiguous_faithful_verdict[FAITHFULNESS] ______
+tests\memory_scenarios\test_safety_contracts.py:200: in test_judge_requires_an_unambiguous_faithful_verdict
+    assert result.content == "one\n---\ntwo", "Ambiguous judge output authorized a merge"
+E   AssertionError: Ambiguous judge output authorized a merge
+E   assert 'invented' == 'one\n---\ntwo'
+E     
+E     + invented
+E     - one
+E     - ---
+E     - two
+_____ test_conflicting_near_duplicates_keep_distinct_timestamped_records ______
+tests\memory_scenarios\test_safety_contracts.py:211: in test_conflicting_near_duplicates_keep_distinct_timestamped_records
+    assert len(result) == 2, "Contradictory choices collapsed into one timestamped record"
+E   AssertionError: Contradictory choices collapsed into one timestamped record
+E   assert 1 == 2
+E    +  where 1 = len([DurableMemory(id='24c86ea7b49b', content='Always enable telemetry for this project.\n---\nNever enable telemetry for ....utc), importance=0.6264309160659767, provenance='inferred', session='', merged_from=['519aa30d0c99', 'd7ff03cd4318'])])
+____________ test_same_time_maintenance_does_not_apply_decay_twice ____________
+tests\memory_scenarios\test_safety_contracts.py:219: in test_same_time_maintenance_does_not_apply_decay_twice
+    assert twice[0].importance == pytest.approx(once[0].importance), "Same elapsed time was charged twice"
+E   AssertionError: Same elapsed time was charged twice
+E   assert 0.1184638793410609 == 0.24337612797998584 ± 2.4e-07
+E     
+E     comparison failed
+E     Obtained: 0.1184638793410609
+E     Expected: 0.24337612797998584 ± 2.4e-07
+______ test_invalid_prune_fraction_is_rejected_without_a_deletion[-0.1] _______
+tests\memory_scenarios\test_safety_contracts.py:227: in test_invalid_prune_fraction_is_rejected_without_a_deletion
+    with pytest.raises(ValueError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE <class 'ValueError'>
+_______ test_invalid_prune_fraction_is_rejected_without_a_deletion[1.1] _______
+tests\memory_scenarios\test_safety_contracts.py:227: in test_invalid_prune_fraction_is_rejected_without_a_deletion
+    with pytest.raises(ValueError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE <class 'ValueError'>
+________ test_invalid_prune_fraction_is_rejected_without_a_deletion[2] ________
+tests\memory_scenarios\test_safety_contracts.py:227: in test_invalid_prune_fraction_is_rejected_without_a_deletion
+    with pytest.raises(ValueError):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE <class 'ValueError'>
+_______ test_invalid_prune_fraction_is_rejected_without_a_deletion[inf] _______
+tests\memory_scenarios\test_safety_contracts.py:228: in test_invalid_prune_fraction_is_rejected_without_a_deletion
+    rerank_and_prune(source, prune_fraction=fraction)
+mem_manager\consolidate.py:84: in rerank_and_prune
+    prune_count = floor(len(indexed) * prune_fraction)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   OverflowError: cannot convert float infinity to integer
+_____________ test_copilot_adapter_builds_noninteractive_command ______________
+tests\test_foundation.py:376: in test_copilot_adapter_builds_noninteractive_command
+    assert "--allow-all-tools" in argv
+E   AssertionError: assert '--allow-all-tools' in ['C:\\Users\\LOQ\\AppData\\Roaming\\npm\\copilot.CMD', '-C', 'C:\\Users\\LOQ\\Desktop\\Projects\\Bhai-To-Bhai\\orchestrator', '--output-format', 'json', '--silent', ...]
+------------------------------ Captured log call ------------------------------
+INFO     adapters.base:base.py:336 [copilot-probe] dispatch | transport=direct | backend=copilot | model=auto | deadline=30s
+DEBUG    adapters.copilot:copilot.py:599 [copilot-probe] argv: ['C:\\Users\\LOQ\\AppData\\Roaming\\npm\\copilot.CMD', '-C', 'C:\\Users\\LOQ\\Desktop\\Projects\\Bhai-To-Bhai\\orchestrator', '--output-format', 'json', '--silent', '--no-color', '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--available-tools=ask_user', '--deny-tool=write', '--model', 'auto', '--add-dir', 'C:\\Users\\LOQ\\Desktop\\Projects\\Bhai-To-Bhai\\orchestrator\\orchestrator\\runs', '--resume=previous-session', '-p', '<prompt>']
+DEBUG    adapters.copilot:copilot.py:600 [copilot-probe] prompt:
+System rules.
+
+Return the requested marker.
+DEBUG    adapters.copilot:copilot.py:646 [copilot-probe] stdout:
+{"type":"session","session_id":"copilot-session"}
+{"type":"message","content":"COPILOT_ADAPTER_OK"}
+INFO     adapters.copilot:copilot.py:778 [copilot-probe] copilot done | 0.0s | session=copilot-
+INFO     adapters.copilot:copilot.py:784 [copilot-probe] reply: COPILOT_ADAPTER_OK
+DEBUG    adapters.copilot:copilot.py:785 [copilot-probe] full reply:
+COPILOT_ADAPTER_OK
+INFO     adapters.base:base.py:390 [copilot-probe] ok in 0.0s ($0.0000)
+=========================== short test summary info ===========================
+FAILED tests\memory_scenarios\test_pipeline.py::test_batch_handles_success_missing_and_empty_independently
+FAILED tests\memory_scenarios\test_pipeline.py::test_empty_batch_is_successful
+FAILED tests\memory_scenarios\test_pipeline.py::test_command_uses_configured_temp_files_and_prints_summary
+FAILED tests\memory_scenarios\test_pipeline.py::test_command_preflight_missing_file_leaves_all_inputs_untouched
+FAILED tests\memory_scenarios\test_pipeline.py::test_command_reports_processing_failure
+FAILED tests\memory_scenarios\test_pipeline.py::test_two_projects_compact_independently
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_explicit_user_choice_provenance_survives_actual_writer
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_unmerged_events_keep_separate_identities
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_singleton_dedup_preserves_the_source_id
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_markdown_roundtrip_retains_durable_metadata[last_accessed_at]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_markdown_roundtrip_retains_durable_metadata[provenance]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_markdown_roundtrip_retains_durable_metadata[merged_from]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_repeated_file_compaction_retains_merge_source_count
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_compacted_learnings_are_visible_to_existing_peer_reader
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_compaction_updates_learnings_stamp
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_compaction_invalidates_offsets_into_rewritten_content
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_choice_ledger_remains_idempotent_after_compaction
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_choice_run_markers_are_not_attached_to_the_previous_memory
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_partial_write_failure_does_not_destroy_original
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_unparseable_nonempty_file_is_not_silently_erased[# Imported memory\nUnstructured but valuable evidence]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_unparseable_nonempty_file_is_not_silently_erased[## malformed\nKeep this evidence]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_nested_markdown_does_not_truncate_memory_content[before\n\n## Supporting details\n\nafter]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_nested_markdown_does_not_truncate_memory_content[before\n```markdown\n## Example header\nexample\n```\nafter]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_utf8_bom_does_not_drop_the_first_record
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_serializer_converts_offset_timestamp_to_utc
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_default_llm_initialization_failure_uses_deterministic_fallback
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_no_llm_setup_when_no_merge_call_is_needed[disabled]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_no_llm_setup_when_no_merge_call_is_needed[singleton]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_no_llm_setup_when_no_merge_call_is_needed[no-duplicates]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_judge_requires_an_unambiguous_faithful_verdict[NOT FAITHFUL]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_judge_requires_an_unambiguous_faithful_verdict[The word FAITHFUL is insufficient]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_judge_requires_an_unambiguous_faithful_verdict[FAITHFULNESS]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_conflicting_near_duplicates_keep_distinct_timestamped_records
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_same_time_maintenance_does_not_apply_decay_twice
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_invalid_prune_fraction_is_rejected_without_a_deletion[-0.1]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_invalid_prune_fraction_is_rejected_without_a_deletion[1.1]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_invalid_prune_fraction_is_rejected_without_a_deletion[2]
+FAILED tests\memory_scenarios\test_safety_contracts.py::test_invalid_prune_fraction_is_rejected_without_a_deletion[inf]
+FAILED tests\test_foundation.py::test_copilot_adapter_builds_noninteractive_command
+======================= 39 failed, 571 passed in 53.29s =======================

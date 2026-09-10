@@ -42,6 +42,24 @@ LLMCall = Callable[[list[dict]], "str | None"]
 # affects what gets embedded for grouping.
 _AUTO_FAILURE_PREFIX = re.compile(r"^\[auto\] `.*?` failed \(exit -?\d+\): ")
 
+# Semantically opposite statements ("always enable X" / "never enable X") can
+# score as near-duplicates on embedding similarity alone - that's exactly what
+# makes them dangerous to silently collapse into one merged record. This is a
+# narrow, deterministic guard independent of the embedder: a negation-marker
+# asymmetry between two otherwise-similar texts means they disagree, not that
+# they're saying the same thing twice.
+_NEGATION_MARKERS = re.compile(
+    r"\b(never|not|no|n't|cannot|without|disable[ds]?|avoid|prevent)\b", re.IGNORECASE
+)
+
+
+def _negation_signature(text: str) -> bool:
+    return bool(_NEGATION_MARKERS.search(text))
+
+
+def _looks_contradictory(a: str, b: str) -> bool:
+    return _negation_signature(a) != _negation_signature(b)
+
 
 def _embedding_text(content: str) -> str:
     stripped = _AUTO_FAILURE_PREFIX.sub("", content, count=1)
@@ -72,6 +90,7 @@ def find_near_duplicate_groups(
                 continue
             if all(
                 embedder.cosine_similarity(embeddings[member], embeddings[j]) >= threshold
+                and not _looks_contradictory(memories[member].content, memories[j].content)
                 for member in group
             ):
                 group.append(j)
@@ -108,6 +127,7 @@ def _deterministic_union(group: Sequence[DurableMemory]) -> DurableMemory:
         # blanking it would throw away the identity of the common case, where
         # every member came from the same agent turn.
         session=keeper.session,
+        run_id=keeper.run_id,
         merged_from=[source_id for memory in ordered for source_id in memory.merged_from],
     )
 
@@ -157,10 +177,10 @@ def _judge_accepts(group: Sequence[DurableMemory], merged_text: str, judge_call:
         return False
     if not verdict:
         return False
-    verdict = verdict.strip().upper()
-    if "UNFAITHFUL" in verdict:
-        return False
-    return "FAITHFUL" in verdict
+    # Exact match, not substring: the prompt asks for exactly one word, and
+    # "NOT FAITHFUL"/"FAITHFULNESS"/prose containing the word all contain
+    # "FAITHFUL" as a substring without being the unambiguous verdict it asks for.
+    return verdict.strip().upper() == "FAITHFUL"
 
 
 def merge_group(
@@ -169,13 +189,17 @@ def merge_group(
     llm_call: LLMCall | None = None,
     judge_call: LLMCall | None = None,
 ) -> DurableMemory:
-    base = _deterministic_union(group)
-
     if len(group) <= 1:
         logger.info(
             "[DEDUP_MERGE] singleton group (no near-duplicates) — no merge, no LLM call needed"
         )
-        return base
+        # Unchanged pass-through: _deterministic_union() recomputes id from
+        # content alone, which collides two distinct singleton records that
+        # happen to share content (e.g. same text, different timestamps) and
+        # discards the original source-derived id even when they don't.
+        return group[0]
+
+    base = _deterministic_union(group)
 
     if llm_call is None or not config.MERGE_LLM_ENABLED:
         logger.info(
@@ -255,11 +279,21 @@ def dedupe_and_merge(
     threshold = config.MERGE_SIMILARITY_THRESHOLD if threshold is None else threshold
     groups = find_near_duplicate_groups(memories, embedder, threshold)
 
-    if use_llm:
-        if llm_call is None:
-            llm_call, judge_call = _default_llm_calls()
-    else:
+    if not use_llm:
         llm_call, judge_call = None, None
+    elif llm_call is None and config.MERGE_LLM_ENABLED and any(len(group) > 1 for group in groups):
+        # Build the default LLM/judge clients only when a real merge needs
+        # them - a singleton-only or LLM-disabled batch has no use for a live
+        # client, and constructing one anyway both wastes the call and turns
+        # an unrelated provider outage into a failure for a batch that never
+        # needed the LLM.
+        try:
+            llm_call, judge_call = _default_llm_calls()
+        except Exception:
+            logger.exception(
+                "[DEDUP_MERGE] default LLM client initialization failed — using deterministic union"
+            )
+            llm_call, judge_call = None, None
 
     return [
         merge_group([memories[i] for i in group], llm_call=llm_call, judge_call=judge_call)

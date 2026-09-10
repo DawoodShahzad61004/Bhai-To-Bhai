@@ -35,6 +35,11 @@ class DurableMemory:
     # never-merged record still carries its own id here - this is what lets
     # a conflicting-but-distinct memory be told apart from a genuine merge.
     merged_from: list[str] = field(default_factory=list)
+    # user_choices.md's run id for a choices-shaped record, empty otherwise.
+    # See EpisodicRecord.run_id - carried separately from `tag` so /compact's
+    # file-level tag renumbering doesn't destroy the identity a rewritten
+    # user_choices.md needs to re-emit its replay-dedup sentinel.
+    run_id: str = ""
 
 
 def content_id(text: str) -> str:
@@ -62,18 +67,30 @@ def build_durable_memories(
     memories: list[DurableMemory] = []
     for record in records:
         importance = composite_importance(record, records, session_index, now=now)
-        record_id = _record_id(record)
+        # A prior /compact pass's '<!-- id:... -->' marker wins when present.
+        # Re-deriving via _record_id() every pass would make a singleton's id
+        # drift on the very first recompaction: tag renumbering (see
+        # compact.py's DURABLE_MEMORY_TAG_PREFIXES step) changes the visible
+        # tag, which _record_id() is sensitive to, even though nothing about
+        # the underlying event changed.
+        record_id = record.id or _record_id(record)
         memories.append(
             DurableMemory(
                 id=record_id,
                 content=record.content,
                 tag=record.tag,
                 created_at=record.timestamp,
-                last_accessed_at=record.timestamp,
+                # A prior /compact pass's '<!-- last_accessed_at:... -->'
+                # marker wins when present - otherwise this is a genuinely
+                # fresh record, and its own timestamp is the only access it's had.
+                last_accessed_at=record.last_accessed_at or record.timestamp,
                 importance=importance,
                 provenance=record.provenance,
                 session=record.session,
-                merged_from=[record_id],
+                run_id=record.run_id,
+                # Likewise for merged_from: inherit a prior pass's recorded
+                # lineage, or start fresh as this record's own single source.
+                merged_from=list(record.merged_from) or [record_id],
             )
         )
     return memories

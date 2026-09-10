@@ -314,6 +314,32 @@ def _exclusive_lock(path: Path):
         handle.close()
 
 
+def _maybe_trigger_auto_compact(path: Path) -> None:
+    """Kick off auto-compact on `path` once it is both a configured target
+    and past the trigger threshold.
+
+    Called after every write to `learnings.md`/`user_choices.md`. Both
+    checks here are cheap (a path comparison, a `stat()`) and run
+    unconditionally so the actual decision always reflects live config;
+    `compact_command` - which pulls in `mem_manager`'s heavy optional ML
+    dependencies - is only imported once compaction is actually going to
+    run, the same lazy-import guard `main.py` already uses for `--compact`.
+    Compaction failures are logged, never raised: an opportunistic
+    maintenance pass must not turn a successful append into a failed one.
+    """
+    if not config.ENABLE_PRUNING:
+        return
+    resolved = path.resolve()
+    if not any(resolved == candidate.resolve() for candidate in config.COMPACT_ARTIFACT_FILES):
+        return
+
+    from compact_command import maybe_auto_compact
+
+    result = maybe_auto_compact(path)
+    if result is not None and result["status"] == "error":
+        logger.warning("[AUTO-COMPACT] %s failed: %s", path.name, result["error"])
+
+
 def session_key(backend: str, session_id: str) -> str:
     """`"<backend>:<session_id>"` — the identity a memory record is scored under.
 
@@ -353,6 +379,13 @@ def append_learning(
     entry is byte-identical to what this has always written: the coding
     subagents' CLI writes and the auto-recorded command failures below run in
     their own OS process with no AgentResult to read one from.
+
+    After the lock is released, `_maybe_trigger_auto_compact()` checks
+    whether this file is both a configured `config.COMPACT_ARTIFACT_FILES`
+    target and past `config.MIN_PRUNE_BUDGET` — if so it compacts the file in
+    place under `compact_command`'s own lock on this same path, so this call
+    can still race a peer append against a compaction it just triggered, but
+    never against a torn write: writers exclude writers.
     """
     finding = finding.strip()
     if not finding:
@@ -373,6 +406,7 @@ def append_learning(
         artifacts.learnings_stamp.parent.mkdir(parents=True, exist_ok=True)
         artifacts.learnings_stamp.write_text(str(path.stat().st_size), encoding="utf-8")
     logger.debug("learnings += %s (%d chars)", agent, len(finding))
+    _maybe_trigger_auto_compact(path)
 
 
 def read_learnings_stamp(artifacts: RunArtifacts) -> int:
@@ -463,7 +497,11 @@ def append_user_choices(artifacts: RunArtifacts, run_id: str, content: str) -> N
 
     The run marker makes checkpoint replay idempotent. The approved
     `learnings.md.lock` coordinates this second append-only project file too,
-    avoiding another lock artifact in the flat shared layout.
+    avoiding another lock artifact in the flat shared layout — and is the
+    same lock `_maybe_trigger_auto_compact()` takes to compact this file
+    (`compact_command._lock_target_for()` maps `user_choices.md` onto it for
+    exactly this reason), so a triggered compaction still excludes this
+    function's own writes rather than racing them.
     """
     content = content.strip()
     if not content:
@@ -488,6 +526,7 @@ def append_user_choices(artifacts: RunArtifacts, run_id: str, content: str) -> N
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(header + entry)
     logger.debug("user_choices += %s (%d chars)", run_id, len(content))
+    _maybe_trigger_auto_compact(path)
 
 
 def append_event(artifacts: RunArtifacts, entry: dict[str, Any]) -> None:
