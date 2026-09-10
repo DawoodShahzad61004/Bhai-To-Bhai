@@ -1,0 +1,362 @@
+{
+  "corpus": "s5_pruning_pressure.md",
+  "extractor_version": 1,
+  "source_sha1": "348d94816590f7390e53642e313ffd32370ad606",
+  "denominator": "raw",
+  "record_count": 20,
+  "sentence_count": 20,
+  "keyword_count": 126,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "T-501",
+      "sentence": "The retry ledger now resolved every duplicate dispatch and the wave passed on its first attempt.",
+      "keywords": [
+        "retry",
+        "ledger",
+        "resolved",
+        "every",
+        "duplicate",
+        "dispatch",
+        "wave",
+        "passed",
+        "first",
+        "attempt"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 1,
+      "record_tag": "T-502",
+      "sentence": "Wave acceptance works once the integration branch is fast-forwarded before the reviewer runs.",
+      "keywords": [
+        "wave",
+        "acceptance",
+        "works",
+        "integration",
+        "branch",
+        "fast",
+        "forwarded",
+        "reviewer",
+        "runs"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 2,
+      "record_tag": "T-503",
+      "sentence": "The planner roster fixed its slot count after the validated backend list was passed through.",
+      "keywords": [
+        "planner",
+        "roster",
+        "fixed",
+        "slot",
+        "count",
+        "validated",
+        "backend",
+        "list",
+        "passed"
+      ],
+      "rare": false
+    },
+    {
+      "index": 3,
+      "record_index": 3,
+      "record_tag": "T-504",
+      "sentence": "Checkpoint resume works when the thread identifier is threaded into the configurable mapping.",
+      "keywords": [
+        "checkpoint",
+        "resume",
+        "works",
+        "thread",
+        "identifier",
+        "threaded",
+        "configurable",
+        "mapping"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 4,
+      "record_tag": "T-505",
+      "sentence": "Merge conflict briefing succeeded once both task descriptions were supplied instead of one.",
+      "keywords": [
+        "merge",
+        "conflict",
+        "briefing",
+        "succeeded",
+        "task",
+        "descriptions",
+        "supplied",
+        "instead",
+        "one"
+      ],
+      "rare": false
+    },
+    {
+      "index": 5,
+      "record_index": 5,
+      "record_tag": "T-506",
+      "sentence": "The diagnostic probe resolved a stale credential before any coding task was dispatched.",
+      "keywords": [
+        "diagnostic",
+        "probe",
+        "resolved",
+        "stale",
+        "credential",
+        "coding",
+        "task",
+        "dispatched"
+      ],
+      "rare": false
+    },
+    {
+      "index": 6,
+      "record_index": 6,
+      "record_tag": "T-507",
+      "sentence": "Worktree pruning removed the orphaned registry entry that blocked a second checkout.",
+      "keywords": [
+        "worktree",
+        "pruning",
+        "removed",
+        "orphaned",
+        "registry",
+        "entry",
+        "blocked",
+        "second",
+        "checkout"
+      ],
+      "rare": true
+    },
+    {
+      "index": 7,
+      "record_index": 7,
+      "record_tag": "T-508",
+      "sentence": "The reviewer verdict parser fixed its handling of a trailing comma in the emitted JSON.",
+      "keywords": [
+        "json",
+        "reviewer",
+        "verdict",
+        "parser",
+        "fixed",
+        "handling",
+        "trailing",
+        "comma",
+        "emitted"
+      ],
+      "rare": false
+    },
+    {
+      "index": 8,
+      "record_index": 8,
+      "record_tag": "T-590",
+      "sentence": "The nightly sweep failed with exit 1 and left a traceback in the orchestrator log.",
+      "keywords": [
+        "1",
+        "nightly",
+        "sweep",
+        "failed",
+        "exit",
+        "left",
+        "traceback",
+        "orchestrator",
+        "log"
+      ],
+      "rare": false
+    },
+    {
+      "index": 9,
+      "record_index": 9,
+      "record_tag": "T-590",
+      "sentence": "The nightly sweep failed again with exit 1 and the same traceback appeared in the log.",
+      "keywords": [
+        "1",
+        "nightly",
+        "sweep",
+        "failed",
+        "exit",
+        "traceback",
+        "appeared",
+        "log"
+      ],
+      "rare": false
+    },
+    {
+      "index": 10,
+      "record_index": 10,
+      "record_tag": "T-591",
+      "sentence": "A cleanup hook failed with a permission error while unlinking the scratch directory.",
+      "keywords": [
+        "cleanup",
+        "hook",
+        "failed",
+        "permission",
+        "error",
+        "unlinking",
+        "scratch",
+        "directory"
+      ],
+      "rare": false
+    },
+    {
+      "index": 11,
+      "record_index": 11,
+      "record_tag": "T-591",
+      "sentence": "The cleanup hook failed once more with a permission error on the same scratch directory.",
+      "keywords": [
+        "cleanup",
+        "hook",
+        "failed",
+        "permission",
+        "error",
+        "scratch",
+        "directory"
+      ],
+      "rare": false
+    },
+    {
+      "index": 12,
+      "record_index": 12,
+      "record_tag": "T-592",
+      "sentence": "Telemetry export failed with a socket error and the span buffer was discarded silently.",
+      "keywords": [
+        "telemetry",
+        "export",
+        "failed",
+        "socket",
+        "error",
+        "span",
+        "buffer",
+        "discarded",
+        "silently"
+      ],
+      "rare": false
+    },
+    {
+      "index": 13,
+      "record_index": 13,
+      "record_tag": "T-593",
+      "sentence": "The lockfile audit failed with exit 1 because a transitive pin was not recognized.",
+      "keywords": [
+        "1",
+        "lockfile",
+        "audit",
+        "failed",
+        "exit",
+        "transitive",
+        "pin",
+        "recognized"
+      ],
+      "rare": false
+    },
+    {
+      "index": 14,
+      "record_index": 14,
+      "record_tag": "T-594",
+      "sentence": "A schema migration failed with a constraint error on the archived run table.",
+      "keywords": [
+        "schema",
+        "migration",
+        "failed",
+        "constraint",
+        "error",
+        "archived",
+        "run",
+        "table"
+      ],
+      "rare": false
+    },
+    {
+      "index": 15,
+      "record_index": 15,
+      "record_tag": "T-595",
+      "sentence": "The artifact uploader failed with a checksum error and retried without any backoff.",
+      "keywords": [
+        "artifact",
+        "uploader",
+        "failed",
+        "checksum",
+        "error",
+        "retried",
+        "backoff"
+      ],
+      "rare": false
+    },
+    {
+      "index": 16,
+      "record_index": 16,
+      "record_tag": "T-596",
+      "sentence": "Log rotation failed with exit 1 after the retention window was shortened to one day.",
+      "keywords": [
+        "1",
+        "log",
+        "rotation",
+        "failed",
+        "exit",
+        "retention",
+        "window",
+        "shortened",
+        "one",
+        "day"
+      ],
+      "rare": false
+    },
+    {
+      "index": 17,
+      "record_index": 17,
+      "record_tag": "T-597",
+      "sentence": "The webhook dispatcher failed with a timeout error and dropped the pending notification.",
+      "keywords": [
+        "webhook",
+        "dispatcher",
+        "failed",
+        "timeout",
+        "error",
+        "dropped",
+        "pending",
+        "notification"
+      ],
+      "rare": false
+    },
+    {
+      "index": 18,
+      "record_index": 18,
+      "record_tag": "T-598",
+      "sentence": "A metrics scrape failed with exit 1 when the exporter port was already bound elsewhere.",
+      "keywords": [
+        "1",
+        "metrics",
+        "scrape",
+        "failed",
+        "exit",
+        "exporter",
+        "port",
+        "already",
+        "bound",
+        "elsewhere"
+      ],
+      "rare": false
+    },
+    {
+      "index": 19,
+      "record_index": 19,
+      "record_tag": "T-599",
+      "sentence": "The index rebuild failed with a disk error before the checkpoint table was written.",
+      "keywords": [
+        "index",
+        "rebuild",
+        "failed",
+        "disk",
+        "error",
+        "checkpoint",
+        "table",
+        "written"
+      ],
+      "rare": false
+    }
+  ]
+}

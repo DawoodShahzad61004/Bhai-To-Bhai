@@ -1,0 +1,130 @@
+{
+  "corpus": "s6_user_choices.md",
+  "extractor_version": 1,
+  "source_sha1": "5466df00964d65671692b8e61349ad12da4ff317",
+  "denominator": "raw",
+  "record_count": 8,
+  "sentence_count": 8,
+  "keyword_count": 38,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "RUN-20260901-0801",
+      "sentence": "Chose the Codex backend for both coding slots this wave.",
+      "keywords": [
+        "codex",
+        "chose",
+        "backend",
+        "coding",
+        "slots",
+        "wave"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 1,
+      "record_tag": "RUN-20260901-0902",
+      "sentence": "Chose to keep the planner on the large model tier.",
+      "keywords": [
+        "chose",
+        "keep",
+        "planner",
+        "large",
+        "model",
+        "tier"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 2,
+      "record_tag": "RUN-20260902-1003",
+      "sentence": "Chose to skip the supervisor replan and accept the wave.",
+      "keywords": [
+        "chose",
+        "skip",
+        "supervisor",
+        "replan",
+        "accept",
+        "wave"
+      ],
+      "rare": false
+    },
+    {
+      "index": 3,
+      "record_index": 3,
+      "record_tag": "RUN-20260902-1104",
+      "sentence": "Chose Gemini as the reviewer for the integration task.",
+      "keywords": [
+        "gemini",
+        "chose",
+        "reviewer",
+        "integration",
+        "task"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 4,
+      "record_tag": "RUN-20260903-1205",
+      "sentence": "Chose to raise the per-turn deadline to nine hundred seconds.",
+      "keywords": [
+        "chose",
+        "raise",
+        "per",
+        "turn",
+        "deadline",
+        "nine",
+        "hundred",
+        "seconds"
+      ],
+      "rare": false
+    },
+    {
+      "index": 5,
+      "record_index": 5,
+      "record_tag": "RUN-20260903-1306",
+      "sentence": "Chose the sibling artifact store over an in-repository one.",
+      "keywords": [
+        "chose",
+        "sibling",
+        "artifact",
+        "store",
+        "repository",
+        "one"
+      ],
+      "rare": false
+    },
+    {
+      "index": 6,
+      "record_index": 6,
+      "record_tag": "RUN-20260904-1407",
+      "sentence": "Chose to disable auto-compaction for this run only.",
+      "keywords": [
+        "chose",
+        "disable",
+        "auto",
+        "compaction",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 7,
+      "record_index": 7,
+      "record_tag": "RUN-20260904-1508",
+      "sentence": "Chose to rerun the diagnostic before dispatching any task.",
+      "keywords": [
+        "chose",
+        "rerun",
+        "diagnostic",
+        "dispatching",
+        "task"
+      ],
+      "rare": false
+    }
+  ]
+}

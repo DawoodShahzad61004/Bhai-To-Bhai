@@ -1,0 +1,242 @@
+{
+  "corpus": "s4_contradictions.md",
+  "extractor_version": 1,
+  "source_sha1": "9c16605ec5b2e7b8c5a36f92e3e3861908742460",
+  "denominator": "raw",
+  "record_count": 14,
+  "sentence_count": 14,
+  "keyword_count": 47,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "T-401",
+      "sentence": "Always enable the writer lock before appending to the shared learnings file.",
+      "keywords": [
+        "always",
+        "enable",
+        "writer",
+        "lock",
+        "appending",
+        "shared",
+        "learnings",
+        "file"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 1,
+      "record_tag": "T-401",
+      "sentence": "Never enable the writer lock before appending to the shared learnings file.",
+      "keywords": [
+        "never",
+        "enable",
+        "writer",
+        "lock",
+        "appending",
+        "shared",
+        "learnings",
+        "file"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 2,
+      "record_tag": "T-402",
+      "sentence": "Always pass the sandbox flag when dispatching a coding agent turn.",
+      "keywords": [
+        "always",
+        "pass",
+        "sandbox",
+        "flag",
+        "dispatching",
+        "coding",
+        "agent",
+        "turn"
+      ],
+      "rare": false
+    },
+    {
+      "index": 3,
+      "record_index": 3,
+      "record_tag": "T-402",
+      "sentence": "Never pass the sandbox flag when dispatching a coding agent turn.",
+      "keywords": [
+        "never",
+        "pass",
+        "sandbox",
+        "flag",
+        "dispatching",
+        "coding",
+        "agent",
+        "turn"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 4,
+      "record_tag": "T-403",
+      "sentence": "The reviewer should reset integration to the wave base before replaying merges.",
+      "keywords": [
+        "reviewer",
+        "reset",
+        "integration",
+        "wave",
+        "base",
+        "replaying",
+        "merges"
+      ],
+      "rare": false
+    },
+    {
+      "index": 5,
+      "record_index": 5,
+      "record_tag": "T-403",
+      "sentence": "The reviewer should not reset integration to the wave base before replaying merges.",
+      "keywords": [
+        "reviewer",
+        "reset",
+        "integration",
+        "wave",
+        "base",
+        "replaying",
+        "merges"
+      ],
+      "rare": false
+    },
+    {
+      "index": 6,
+      "record_index": 6,
+      "record_tag": "T-404",
+      "sentence": "Prune the worktree registry after every accepted wave.",
+      "keywords": [
+        "prune",
+        "worktree",
+        "registry",
+        "every",
+        "accepted",
+        "wave"
+      ],
+      "rare": false
+    },
+    {
+      "index": 7,
+      "record_index": 7,
+      "record_tag": "T-404",
+      "sentence": "Avoid pruning the worktree registry after every accepted wave.",
+      "keywords": [
+        "avoid",
+        "pruning",
+        "worktree",
+        "registry",
+        "every",
+        "accepted",
+        "wave"
+      ],
+      "rare": false
+    },
+    {
+      "index": 8,
+      "record_index": 8,
+      "record_tag": "T-405",
+      "sentence": "Enable write-ahead logging on the checkpoint database for concurrent readers.",
+      "keywords": [
+        "enable",
+        "write",
+        "ahead",
+        "logging",
+        "checkpoint",
+        "database",
+        "concurrent",
+        "readers"
+      ],
+      "rare": false
+    },
+    {
+      "index": 9,
+      "record_index": 9,
+      "record_tag": "T-405",
+      "sentence": "Disable write-ahead logging on the checkpoint database for concurrent readers.",
+      "keywords": [
+        "disable",
+        "write",
+        "ahead",
+        "logging",
+        "checkpoint",
+        "database",
+        "concurrent",
+        "readers"
+      ],
+      "rare": false
+    },
+    {
+      "index": 10,
+      "record_index": 10,
+      "record_tag": "T-406",
+      "sentence": "Persist the vendor session file so a later turn can resume the same rollout.",
+      "keywords": [
+        "persist",
+        "vendor",
+        "session",
+        "file",
+        "later",
+        "turn",
+        "resume",
+        "rollout"
+      ],
+      "rare": false
+    },
+    {
+      "index": 11,
+      "record_index": 11,
+      "record_tag": "T-406",
+      "sentence": "Do not persist the vendor session file so a later turn can resume the same rollout.",
+      "keywords": [
+        "persist",
+        "vendor",
+        "session",
+        "file",
+        "later",
+        "turn",
+        "resume",
+        "rollout"
+      ],
+      "rare": false
+    },
+    {
+      "index": 12,
+      "record_index": 12,
+      "record_tag": "T-407",
+      "sentence": "Never pass the ephemeral flag when a resumable session is required.",
+      "keywords": [
+        "never",
+        "pass",
+        "ephemeral",
+        "flag",
+        "resumable",
+        "session",
+        "required"
+      ],
+      "rare": false
+    },
+    {
+      "index": 13,
+      "record_index": 13,
+      "record_tag": "T-407",
+      "sentence": "Never pass the ephemeral flag when a resumable rollout is required.",
+      "keywords": [
+        "never",
+        "pass",
+        "ephemeral",
+        "flag",
+        "resumable",
+        "rollout",
+        "required"
+      ],
+      "rare": false
+    }
+  ]
+}

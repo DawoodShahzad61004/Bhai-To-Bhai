@@ -1,0 +1,504 @@
+{
+  "_comment": [
+    "Every scenario's declared expectation, in one reviewable place. The tests",
+    "read this file rather than hard-coding numbers, so a corpus's intent and",
+    "the assertion made about it cannot drift apart.",
+    "",
+    "as_filename matters: compact_markdown_file only renumbers tags for",
+    "learnings.md and user_choices.md, and only it reads utf-8-sig. The runner",
+    "copies each corpus to a correctly-named temp file before compacting.",
+    "",
+    "expect applies to every arm; expect_by_embedder carries what differs",
+    "between them. Both quality AND savings are declared everywhere: recall",
+    "alone is maximized by not compacting, savings alone by deleting",
+    "everything, and only the pair is a claim worth making.",
+    "",
+    "The noop arm is compact_command.NoOpEmbedder, the production",
+    "everything-is-unique class. It is the literal what-if-we-did-not-merge",
+    "control that makes the other arms' numbers interpretable.",
+    "",
+    "lane says what a scenario is for. conservation scenarios cannot lose",
+    "anything offline and assert recall of exactly 1.0. lossy scenarios are the",
+    "two places offline compaction genuinely destroys information - pruning and",
+    "silently dropped malformed input - and they assert the exact records and",
+    "keywords that were lost, not a tolerance band.",
+    "",
+    "expected_source_records counts every '## '-led block the file visibly",
+    "contains; expected_parsed_records counts what parse_episodic_md actually",
+    "ingests. They differ only in S7, and the difference is the point: a block",
+    "can be DROPPED (invalid header between genuine records) or FOLDED into the",
+    "record above it (invalid header after the last genuine one). Deriving one",
+    "from the other would hide the second case."
+  ],
+  "scenarios": [
+    {
+      "id": "S1",
+      "file": "s1_verbatim_duplicates.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "verbatim duplicates collapse with zero information loss",
+      "expected_source_records": 12,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "ENABLE_PRUNING": false,
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6
+      },
+      "embedders": [
+        "lexical",
+        "exact",
+        "noop"
+      ],
+      "expect": {
+        "type_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 4,
+          "tokens_freed_pct_min": 0.25
+        },
+        "exact": {
+          "records_out": 4,
+          "tokens_freed_pct_min": 0.25
+        },
+        "noop": {
+          "records_out": 12,
+          "tokens_freed_max": -1
+        }
+      },
+      "notes": [
+        "No rare keywords exist by construction: every sentence appears three",
+        "times, so none occurs in exactly one. rare_recall is reported as null,",
+        "not as a fictitious 1.0.",
+        "The noop arm is the control - refusing to merge turns a real saving",
+        "into a loss, which is exactly the cost of the metadata markers."
+      ],
+      "lane": "conservation",
+      "expected_parsed_records": 12
+    },
+    {
+      "id": "S2",
+      "file": "s2_paraphrase_clusters.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "paraphrases of one symptom merge without losing a distinct fact",
+      "expected_source_records": 15,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "ENABLE_PRUNING": false,
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6
+      },
+      "embedders": [
+        "lexical",
+        "exact",
+        "noop"
+      ],
+      "expect": {
+        "type_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 5,
+          "tokens_freed_max": -1
+        },
+        "exact": {
+          "records_out": 15,
+          "tokens_freed_max": -1
+        },
+        "noop": {
+          "records_out": 15,
+          "tokens_freed_max": -1
+        }
+      },
+      "notes": [
+        "Recall must be 1.0 under BOTH arms: the offline merge is a verbatim",
+        "join, so anything below 1.0 here is a defect rather than a quality",
+        "trade-off. The finding is the merge yield between the arms."
+      ],
+      "lane": "conservation",
+      "expected_parsed_records": 15
+    },
+    {
+      "id": "S3",
+      "file": "s3_unique_dense.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "nothing merges, so compaction only adds metadata overhead",
+      "expected_source_records": 15,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "ENABLE_PRUNING": false,
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6
+      },
+      "embedders": [
+        "lexical",
+        "exact",
+        "noop"
+      ],
+      "expect": {
+        "type_recall_min": 1.0,
+        "rare_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 15,
+          "tokens_freed_max": -1
+        },
+        "exact": {
+          "records_out": 15,
+          "tokens_freed_max": -1
+        },
+        "noop": {
+          "records_out": 15,
+          "tokens_freed_max": -1
+        }
+      },
+      "notes": [
+        "The file gets BIGGER. Asserting that sign is the strongest guard",
+        "available against a regression that deletes records to look efficient,",
+        "and it is Bugs.md #52 expressed as a measured number."
+      ],
+      "lane": "conservation",
+      "expected_parsed_records": 15
+    },
+    {
+      "id": "S4",
+      "file": "s4_contradictions.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "a statement and its negation are never folded into one memory",
+      "expected_source_records": 14,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "ENABLE_PRUNING": false,
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6
+      },
+      "embedders": [
+        "lexical",
+        "exact",
+        "noop"
+      ],
+      "expect": {
+        "type_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 13,
+          "tokens_freed_max": -1
+        },
+        "exact": {
+          "records_out": 14,
+          "tokens_freed_max": -1
+        },
+        "noop": {
+          "records_out": 14,
+          "tokens_freed_max": -1
+        }
+      },
+      "contradiction_tags": [
+        "T-401",
+        "T-402",
+        "T-403",
+        "T-404",
+        "T-405",
+        "T-406"
+      ],
+      "both_negated_control_tags": [
+        "T-407"
+      ],
+      "notes": [
+        "Six asymmetric pairs stay apart. The seventh is a CONTROL: both halves",
+        "carry a negation marker, so the guard - which tests marker ASYMMETRY -",
+        "does not fire, and they merge. That is the guard's blind spot, asserted",
+        "as real behaviour rather than hidden behind an xfail."
+      ],
+      "lane": "conservation",
+      "expected_parsed_records": 14
+    },
+    {
+      "id": "S5",
+      "lane": "lossy",
+      "file": "s5_pruning_pressure.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "pruning drops the bottom of the ranking, and some of it survives nowhere else",
+      "expected_source_records": 20,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6,
+        "ENABLE_PRUNING": true
+      },
+      "embedders": [
+        "lexical",
+        "noop"
+      ],
+      "expect": {
+        "injected_max": 0,
+        "type_recall_min": 0.8
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 15
+        },
+        "noop": {
+          "records_out": 16
+        }
+      },
+      "expected_after_merge": {
+        "lexical": 18,
+        "noop": 20
+      },
+      "expected_pruned_source_tags": {
+        "lexical": [
+          "T-590",
+          "T-591",
+          "T-598"
+        ],
+        "noop": [
+          "T-590",
+          "T-591"
+        ]
+      },
+      "notes": [
+        "The only scenario where pruning actually fires. The gate is",
+        "sum(len(m.content)) >= MIN_PRUNE_BUDGET on POST-MERGE content",
+        "characters, which is the likeliest way a pruning scenario quietly does",
+        "nothing - so pruning_applied is asserted explicitly rather than assumed",
+        "from the config.",
+        "",
+        "The headline is prune_collateral, not a recall-versus-fraction curve.",
+        "Pruning drops floor(n x fraction) records BY RANK, so a curve over the",
+        "fraction is a step function fully determined by the importance ordering:",
+        "it measures whether we deleted what we said we would, not quality.",
+        "Collateral separates a good prune (the facts live on elsewhere) from a",
+        "bad one (they existed only there).",
+        "",
+        "type_recall_min is a loose guard against a regression that suddenly",
+        "destroys far more; the EXACT assertions are the pruned tags and counts."
+      ],
+      "expected_parsed_records": 20
+    },
+    {
+      "id": "S6",
+      "file": "s6_user_choices.md",
+      "as_filename": "user_choices.md",
+      "hypothesis": "the user_choices shape round-trips with explicit provenance intact",
+      "expected_source_records": 8,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "ENABLE_PRUNING": false,
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6
+      },
+      "embedders": [
+        "lexical",
+        "exact",
+        "noop"
+      ],
+      "expect": {
+        "type_recall_min": 1.0,
+        "rare_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 8,
+          "tokens_freed_max": -1
+        },
+        "exact": {
+          "records_out": 8,
+          "tokens_freed_max": -1
+        },
+        "noop": {
+          "records_out": 8,
+          "tokens_freed_max": -1
+        }
+      },
+      "expected_provenance": "explicit",
+      "expected_tag_prefix": "User Choice",
+      "notes": [
+        "Tags are renumbered to 'User Choice N' on the first pass, so recall",
+        "must stay 1.0 - a tag is not content, and renumbering must cost",
+        "exactly zero keywords."
+      ],
+      "lane": "conservation",
+      "expected_parsed_records": 8
+    },
+    {
+      "id": "S7",
+      "lane": "lossy",
+      "file": "s7_adversarial.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "malformed input is dropped silently, and only the raw denominator can see it",
+      "expected_source_records": 9,
+      "expected_dropped_tags": [
+        "T-702"
+      ],
+      "expected_folded_tags": [
+        "Appendix on retention"
+      ],
+      "expected_phantom_tags": [
+        "EXAMPLE"
+      ],
+      "denominator": "raw",
+      "headline_embedder": "lexical",
+      "config": {
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6,
+        "ENABLE_PRUNING": false
+      },
+      "embedders": [
+        "lexical"
+      ],
+      "expect": {
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 7,
+          "tokens_freed_max": -1
+        }
+      },
+      "notes": [
+        "Three different fates, decided purely by position, all measured here.",
+        "",
+        "DROPPED: T-702 has an unparseable timestamp and sits BETWEEN two",
+        "genuine records, so it is discarded with no error. Its keywords are the",
+        "exact loss this scenario reports.",
+        "",
+        "FOLDED: the trailing '## Appendix on retention' is not a valid header",
+        "but follows the last genuine record, so it is appended to that record's",
+        "body. Nothing is lost.",
+        "",
+        "PHANTOM: the '## <valid timestamp> - EXAMPLE' line lives inside a",
+        "fenced code block, but the block split is textual rather than",
+        "markdown-aware, so a documentation example is promoted into a real",
+        "memory record. No content is lost, but a record is invented.",
+        "",
+        "The file also carries a leading BOM, which is why the runner goes",
+        "through compact_markdown_file - only the file API reads utf-8-sig, and",
+        "a BOM read as plain utf-8 costs the first record outright.",
+        "",
+        "denominator is raw, and that is the entire point: scored on parsed,",
+        "this corpus reports a flawless 1.0 while having silently lost a record,",
+        "because the dropped record leaves the denominator along with the",
+        "numerator."
+      ],
+      "expected_parsed_records": 7
+    },
+    {
+      "id": "S8",
+      "lane": "generations",
+      "file": "s8_generations.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "repeated compaction reaches a fixed point instead of eroding",
+      "expected_source_records": 10,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6,
+        "ENABLE_PRUNING": false
+      },
+      "embedders": [
+        "lexical"
+      ],
+      "generations": 5,
+      "expect": {
+        "type_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 7,
+          "tokens_freed_max": -1
+        }
+      },
+      "notes": [
+        "Recall is measured against GENERATION ZERO every time, never against",
+        "the previous generation: erosion of two percent per pass looks harmless",
+        "next to its predecessor and ruinous next to the source.",
+        "",
+        "The fixed point exists only because build_durable_memories honours a",
+        "prior pass's '<!-- id: -->' marker. Without it a singleton's id would",
+        "drift on every recompaction - compact_markdown_file renames tags on the",
+        "first pass, and _record_id is sensitive to the tag. Nothing else in the",
+        "suite guards that end to end."
+      ],
+      "expected_parsed_records": 10
+    },
+    {
+      "id": "S9",
+      "file": "s9_auto_prefix.md",
+      "as_filename": "learnings.md",
+      "hypothesis": "a shared auto-failure prefix does not pull unrelated failures together",
+      "expected_source_records": 8,
+      "expected_dropped_tags": [],
+      "denominator": "parsed",
+      "headline_embedder": "lexical",
+      "config": {
+        "ENABLE_PRUNING": false,
+        "MIN_PRUNE_BUDGET": 1000,
+        "PRUNE_BOTTOM_PERCENT": 0.2,
+        "MERGE_SIMILARITY_THRESHOLD": 0.6
+      },
+      "embedders": [
+        "lexical",
+        "exact",
+        "noop"
+      ],
+      "expect": {
+        "type_recall_min": 1.0,
+        "rare_recall_min": 1.0,
+        "injected_max": 0
+      },
+      "expect_by_embedder": {
+        "lexical": {
+          "records_out": 8,
+          "tokens_freed_max": -1
+        },
+        "exact": {
+          "records_out": 8,
+          "tokens_freed_max": -1
+        },
+        "noop": {
+          "records_out": 8,
+          "tokens_freed_max": -1
+        }
+      },
+      "notes": [
+        "Every record shares the exact prefix artifacts.run_shared_command()",
+        "writes. _embedding_text strips it before embedding; with the prefix",
+        "left in, max pairwise cosine is 0.625 and these eight unrelated",
+        "failures WOULD merge at the 0.60 threshold. The corpus is calibrated",
+        "so that strip is load-bearing."
+      ],
+      "lane": "conservation",
+      "expected_parsed_records": 8
+    }
+  ]
+}

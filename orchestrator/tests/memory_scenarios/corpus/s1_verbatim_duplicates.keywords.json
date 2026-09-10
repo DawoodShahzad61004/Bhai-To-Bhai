@@ -1,0 +1,638 @@
+{
+  "corpus": "s1_verbatim_duplicates.md",
+  "extractor_version": 1,
+  "source_sha1": "55212640872e1cbb866c9da389101cec0e1c24f3",
+  "denominator": "raw",
+  "record_count": 12,
+  "sentence_count": 36,
+  "keyword_count": 88,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "T-101",
+      "sentence": "The `npm ci` step failed with exit 1 because package-lock.json had drifted out of sync with package.json.",
+      "keywords": [
+        "npm ci",
+        "package-lock.json",
+        "package.json",
+        "1",
+        "npm",
+        "step",
+        "failed",
+        "exit",
+        "package",
+        "lock",
+        "json",
+        "drifted",
+        "sync"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 0,
+      "record_tag": "T-101",
+      "sentence": "Regenerating the lockfile via `npm install --package-lock-only` resolved it.",
+      "keywords": [
+        "npm install --package-lock-only",
+        "--package-lock-only",
+        "regenerating",
+        "lockfile",
+        "via",
+        "npm",
+        "install",
+        "package",
+        "lock",
+        "resolved"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 0,
+      "record_tag": "T-101",
+      "sentence": "Never hand-edit a lockfile to silence that mismatch.",
+      "keywords": [
+        "never",
+        "hand",
+        "edit",
+        "lockfile",
+        "silence",
+        "mismatch"
+      ],
+      "rare": false
+    },
+    {
+      "index": 3,
+      "record_index": 1,
+      "record_tag": "T-102",
+      "sentence": "Pytest collection aborted under `--strict-markers` when a suite used an undeclared marker.",
+      "keywords": [
+        "--strict-markers",
+        "pytest",
+        "collection",
+        "aborted",
+        "strict",
+        "markers",
+        "suite",
+        "undeclared",
+        "marker"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 1,
+      "record_tag": "T-102",
+      "sentence": "Declaring it in the pytest.ini `markers` section fixed the run.",
+      "keywords": [
+        "markers",
+        "pytest.ini",
+        "declaring",
+        "pytest",
+        "ini",
+        "section",
+        "fixed",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 5,
+      "record_index": 1,
+      "record_tag": "T-102",
+      "sentence": "A collection error is not a test failure and surfaces before any test executes.",
+      "keywords": [
+        "collection",
+        "error",
+        "test",
+        "failure",
+        "surfaces",
+        "executes"
+      ],
+      "rare": false
+    },
+    {
+      "index": 6,
+      "record_index": 2,
+      "record_tag": "T-103",
+      "sentence": "The Codex adapter reported an empty thread_id on every turn launched with `--ephemeral`.",
+      "keywords": [
+        "--ephemeral",
+        "thread_id",
+        "codex",
+        "adapter",
+        "reported",
+        "empty",
+        "thread",
+        "every",
+        "turn",
+        "launched",
+        "ephemeral"
+      ],
+      "rare": false
+    },
+    {
+      "index": 7,
+      "record_index": 2,
+      "record_tag": "T-103",
+      "sentence": "Resume then died with a no rollout found error.",
+      "keywords": [
+        "resume",
+        "died",
+        "rollout",
+        "found",
+        "error"
+      ],
+      "rare": false
+    },
+    {
+      "index": 8,
+      "record_index": 2,
+      "record_tag": "T-103",
+      "sentence": "Drop that flag whenever a resumable session is required.",
+      "keywords": [
+        "drop",
+        "flag",
+        "whenever",
+        "resumable",
+        "session",
+        "required"
+      ],
+      "rare": false
+    },
+    {
+      "index": 9,
+      "record_index": 3,
+      "record_tag": "T-104",
+      "sentence": "Worktree cleanup left stale git index locks behind after a hard kill on Windows.",
+      "keywords": [
+        "windows",
+        "worktree",
+        "cleanup",
+        "left",
+        "stale",
+        "git",
+        "index",
+        "locks",
+        "behind",
+        "hard",
+        "kill"
+      ],
+      "rare": false
+    },
+    {
+      "index": 10,
+      "record_index": 3,
+      "record_tag": "T-104",
+      "sentence": "Pruning the `.git/worktrees` entries unblocked the following run.",
+      "keywords": [
+        ".git/worktrees",
+        "pruning",
+        "git",
+        "worktrees",
+        "entries",
+        "unblocked",
+        "following",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 11,
+      "record_index": 3,
+      "record_tag": "T-104",
+      "sentence": "Prefer `git worktree prune` over deleting those directories by hand.",
+      "keywords": [
+        "git worktree prune",
+        "prefer",
+        "git",
+        "worktree",
+        "prune",
+        "deleting",
+        "directories",
+        "hand"
+      ],
+      "rare": false
+    },
+    {
+      "index": 12,
+      "record_index": 4,
+      "record_tag": "T-101",
+      "sentence": "The `npm ci` step failed with exit 1 because package-lock.json had drifted out of sync with package.json.",
+      "keywords": [
+        "npm ci",
+        "package-lock.json",
+        "package.json",
+        "1",
+        "npm",
+        "step",
+        "failed",
+        "exit",
+        "package",
+        "lock",
+        "json",
+        "drifted",
+        "sync"
+      ],
+      "rare": false
+    },
+    {
+      "index": 13,
+      "record_index": 4,
+      "record_tag": "T-101",
+      "sentence": "Regenerating the lockfile via `npm install --package-lock-only` resolved it.",
+      "keywords": [
+        "npm install --package-lock-only",
+        "--package-lock-only",
+        "regenerating",
+        "lockfile",
+        "via",
+        "npm",
+        "install",
+        "package",
+        "lock",
+        "resolved"
+      ],
+      "rare": false
+    },
+    {
+      "index": 14,
+      "record_index": 4,
+      "record_tag": "T-101",
+      "sentence": "Never hand-edit a lockfile to silence that mismatch.",
+      "keywords": [
+        "never",
+        "hand",
+        "edit",
+        "lockfile",
+        "silence",
+        "mismatch"
+      ],
+      "rare": false
+    },
+    {
+      "index": 15,
+      "record_index": 5,
+      "record_tag": "T-102",
+      "sentence": "Pytest collection aborted under `--strict-markers` when a suite used an undeclared marker.",
+      "keywords": [
+        "--strict-markers",
+        "pytest",
+        "collection",
+        "aborted",
+        "strict",
+        "markers",
+        "suite",
+        "undeclared",
+        "marker"
+      ],
+      "rare": false
+    },
+    {
+      "index": 16,
+      "record_index": 5,
+      "record_tag": "T-102",
+      "sentence": "Declaring it in the pytest.ini `markers` section fixed the run.",
+      "keywords": [
+        "markers",
+        "pytest.ini",
+        "declaring",
+        "pytest",
+        "ini",
+        "section",
+        "fixed",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 17,
+      "record_index": 5,
+      "record_tag": "T-102",
+      "sentence": "A collection error is not a test failure and surfaces before any test executes.",
+      "keywords": [
+        "collection",
+        "error",
+        "test",
+        "failure",
+        "surfaces",
+        "executes"
+      ],
+      "rare": false
+    },
+    {
+      "index": 18,
+      "record_index": 6,
+      "record_tag": "T-103",
+      "sentence": "The Codex adapter reported an empty thread_id on every turn launched with `--ephemeral`.",
+      "keywords": [
+        "--ephemeral",
+        "thread_id",
+        "codex",
+        "adapter",
+        "reported",
+        "empty",
+        "thread",
+        "every",
+        "turn",
+        "launched",
+        "ephemeral"
+      ],
+      "rare": false
+    },
+    {
+      "index": 19,
+      "record_index": 6,
+      "record_tag": "T-103",
+      "sentence": "Resume then died with a no rollout found error.",
+      "keywords": [
+        "resume",
+        "died",
+        "rollout",
+        "found",
+        "error"
+      ],
+      "rare": false
+    },
+    {
+      "index": 20,
+      "record_index": 6,
+      "record_tag": "T-103",
+      "sentence": "Drop that flag whenever a resumable session is required.",
+      "keywords": [
+        "drop",
+        "flag",
+        "whenever",
+        "resumable",
+        "session",
+        "required"
+      ],
+      "rare": false
+    },
+    {
+      "index": 21,
+      "record_index": 7,
+      "record_tag": "T-104",
+      "sentence": "Worktree cleanup left stale git index locks behind after a hard kill on Windows.",
+      "keywords": [
+        "windows",
+        "worktree",
+        "cleanup",
+        "left",
+        "stale",
+        "git",
+        "index",
+        "locks",
+        "behind",
+        "hard",
+        "kill"
+      ],
+      "rare": false
+    },
+    {
+      "index": 22,
+      "record_index": 7,
+      "record_tag": "T-104",
+      "sentence": "Pruning the `.git/worktrees` entries unblocked the following run.",
+      "keywords": [
+        ".git/worktrees",
+        "pruning",
+        "git",
+        "worktrees",
+        "entries",
+        "unblocked",
+        "following",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 23,
+      "record_index": 7,
+      "record_tag": "T-104",
+      "sentence": "Prefer `git worktree prune` over deleting those directories by hand.",
+      "keywords": [
+        "git worktree prune",
+        "prefer",
+        "git",
+        "worktree",
+        "prune",
+        "deleting",
+        "directories",
+        "hand"
+      ],
+      "rare": false
+    },
+    {
+      "index": 24,
+      "record_index": 8,
+      "record_tag": "T-101",
+      "sentence": "The `npm ci` step failed with exit 1 because package-lock.json had drifted out of sync with package.json.",
+      "keywords": [
+        "npm ci",
+        "package-lock.json",
+        "package.json",
+        "1",
+        "npm",
+        "step",
+        "failed",
+        "exit",
+        "package",
+        "lock",
+        "json",
+        "drifted",
+        "sync"
+      ],
+      "rare": false
+    },
+    {
+      "index": 25,
+      "record_index": 8,
+      "record_tag": "T-101",
+      "sentence": "Regenerating the lockfile via `npm install --package-lock-only` resolved it.",
+      "keywords": [
+        "npm install --package-lock-only",
+        "--package-lock-only",
+        "regenerating",
+        "lockfile",
+        "via",
+        "npm",
+        "install",
+        "package",
+        "lock",
+        "resolved"
+      ],
+      "rare": false
+    },
+    {
+      "index": 26,
+      "record_index": 8,
+      "record_tag": "T-101",
+      "sentence": "Never hand-edit a lockfile to silence that mismatch.",
+      "keywords": [
+        "never",
+        "hand",
+        "edit",
+        "lockfile",
+        "silence",
+        "mismatch"
+      ],
+      "rare": false
+    },
+    {
+      "index": 27,
+      "record_index": 9,
+      "record_tag": "T-102",
+      "sentence": "Pytest collection aborted under `--strict-markers` when a suite used an undeclared marker.",
+      "keywords": [
+        "--strict-markers",
+        "pytest",
+        "collection",
+        "aborted",
+        "strict",
+        "markers",
+        "suite",
+        "undeclared",
+        "marker"
+      ],
+      "rare": false
+    },
+    {
+      "index": 28,
+      "record_index": 9,
+      "record_tag": "T-102",
+      "sentence": "Declaring it in the pytest.ini `markers` section fixed the run.",
+      "keywords": [
+        "markers",
+        "pytest.ini",
+        "declaring",
+        "pytest",
+        "ini",
+        "section",
+        "fixed",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 29,
+      "record_index": 9,
+      "record_tag": "T-102",
+      "sentence": "A collection error is not a test failure and surfaces before any test executes.",
+      "keywords": [
+        "collection",
+        "error",
+        "test",
+        "failure",
+        "surfaces",
+        "executes"
+      ],
+      "rare": false
+    },
+    {
+      "index": 30,
+      "record_index": 10,
+      "record_tag": "T-103",
+      "sentence": "The Codex adapter reported an empty thread_id on every turn launched with `--ephemeral`.",
+      "keywords": [
+        "--ephemeral",
+        "thread_id",
+        "codex",
+        "adapter",
+        "reported",
+        "empty",
+        "thread",
+        "every",
+        "turn",
+        "launched",
+        "ephemeral"
+      ],
+      "rare": false
+    },
+    {
+      "index": 31,
+      "record_index": 10,
+      "record_tag": "T-103",
+      "sentence": "Resume then died with a no rollout found error.",
+      "keywords": [
+        "resume",
+        "died",
+        "rollout",
+        "found",
+        "error"
+      ],
+      "rare": false
+    },
+    {
+      "index": 32,
+      "record_index": 10,
+      "record_tag": "T-103",
+      "sentence": "Drop that flag whenever a resumable session is required.",
+      "keywords": [
+        "drop",
+        "flag",
+        "whenever",
+        "resumable",
+        "session",
+        "required"
+      ],
+      "rare": false
+    },
+    {
+      "index": 33,
+      "record_index": 11,
+      "record_tag": "T-104",
+      "sentence": "Worktree cleanup left stale git index locks behind after a hard kill on Windows.",
+      "keywords": [
+        "windows",
+        "worktree",
+        "cleanup",
+        "left",
+        "stale",
+        "git",
+        "index",
+        "locks",
+        "behind",
+        "hard",
+        "kill"
+      ],
+      "rare": false
+    },
+    {
+      "index": 34,
+      "record_index": 11,
+      "record_tag": "T-104",
+      "sentence": "Pruning the `.git/worktrees` entries unblocked the following run.",
+      "keywords": [
+        ".git/worktrees",
+        "pruning",
+        "git",
+        "worktrees",
+        "entries",
+        "unblocked",
+        "following",
+        "run"
+      ],
+      "rare": false
+    },
+    {
+      "index": 35,
+      "record_index": 11,
+      "record_tag": "T-104",
+      "sentence": "Prefer `git worktree prune` over deleting those directories by hand.",
+      "keywords": [
+        "git worktree prune",
+        "prefer",
+        "git",
+        "worktree",
+        "prune",
+        "deleting",
+        "directories",
+        "hand"
+      ],
+      "rare": false
+    }
+  ]
+}

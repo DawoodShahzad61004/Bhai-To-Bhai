@@ -86,3 +86,37 @@ def store(tmp_path):
     result = art.RunArtifacts(run_id="memory-test", root=tmp_path / "store")
     result.shared_dir.mkdir(parents=True)
     return result
+
+
+# --- compaction-quality measurement ------------------------------------------
+# Fixtures for the keyword-recall and token-savings suite. Nothing above this
+# line changes: the autouse `offline` fixture in particular is what makes the
+# live-LLM lane structurally unreachable from pytest, and every test below
+# depends on that.
+
+
+@pytest.fixture(scope="session")
+def token_counter():
+    # Pinned to the regex counter rather than resolved automatically. If it
+    # were "auto", the day somebody installs tiktoken every token assertion in
+    # this suite would silently start measuring a different quantity.
+    import quality_tokens
+
+    return quality_tokens.resolve_token_counter("regex")
+
+
+@pytest.fixture(scope="session")
+def quality_results():
+    """Collects one row per scenario arm, for the recorded report.
+
+    Session-scoped and written out at teardown, so a single run of the suite
+    leaves the measurement behind as an artifact rather than only as a pass or
+    a fail. The report lands under temp/, which is already gitignored.
+    """
+    rows = []
+    yield rows
+    import quality_report
+
+    directory = quality_report.write(rows)
+    if directory is not None:
+        print(f"[mem-quality] recorded {len(rows)} measurement(s) -> {directory}")

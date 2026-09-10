@@ -1,0 +1,320 @@
+{
+  "corpus": "s2_paraphrase_clusters.md",
+  "extractor_version": 1,
+  "source_sha1": "eeb0e2578bd69b2f0f0d9e9c5b556269a3c139c3",
+  "denominator": "raw",
+  "record_count": 15,
+  "sentence_count": 15,
+  "keyword_count": 68,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "T-301",
+      "sentence": "The `npm ci` install failed with exit 1 because package-lock.json had drifted out of sync with package.json.",
+      "keywords": [
+        "npm ci",
+        "package-lock.json",
+        "package.json",
+        "1",
+        "npm",
+        "install",
+        "failed",
+        "exit",
+        "package",
+        "lock",
+        "json",
+        "drifted",
+        "sync"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 1,
+      "record_tag": "T-302",
+      "sentence": "Pytest collection aborted because an undeclared marker was used while strict marker checking was enabled.",
+      "keywords": [
+        "pytest",
+        "collection",
+        "aborted",
+        "undeclared",
+        "marker",
+        "strict",
+        "checking",
+        "enabled"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 2,
+      "record_tag": "T-303",
+      "sentence": "The Codex adapter returned an empty thread identifier, so resuming that rollout later became impossible.",
+      "keywords": [
+        "codex",
+        "adapter",
+        "returned",
+        "empty",
+        "thread",
+        "identifier",
+        "resuming",
+        "rollout",
+        "later",
+        "became",
+        "impossible"
+      ],
+      "rare": false
+    },
+    {
+      "index": 3,
+      "record_index": 3,
+      "record_tag": "T-304",
+      "sentence": "Stale git index locks remained in the worktree after a hard kill on Windows, blocking every later checkout.",
+      "keywords": [
+        "windows",
+        "stale",
+        "git",
+        "index",
+        "locks",
+        "remained",
+        "worktree",
+        "hard",
+        "kill",
+        "blocking",
+        "every",
+        "later",
+        "checkout"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 4,
+      "record_tag": "T-305",
+      "sentence": "Groq reports its remaining budget through rate limit response headers, which the adaptive cooldown floor reads.",
+      "keywords": [
+        "groq",
+        "reports",
+        "remaining",
+        "budget",
+        "rate",
+        "limit",
+        "response",
+        "headers",
+        "adaptive",
+        "cooldown",
+        "floor",
+        "reads"
+      ],
+      "rare": false
+    },
+    {
+      "index": 5,
+      "record_index": 5,
+      "record_tag": "T-301",
+      "sentence": "Running `npm ci` failed with exit 1 since package-lock.json was drifted out of sync with package.json.",
+      "keywords": [
+        "npm ci",
+        "package-lock.json",
+        "package.json",
+        "1",
+        "running",
+        "npm",
+        "failed",
+        "exit",
+        "since",
+        "package",
+        "lock",
+        "json",
+        "drifted",
+        "sync"
+      ],
+      "rare": false
+    },
+    {
+      "index": 6,
+      "record_index": 6,
+      "record_tag": "T-302",
+      "sentence": "Pytest collection aborted when an undeclared marker was used and strict marker checking was enabled.",
+      "keywords": [
+        "pytest",
+        "collection",
+        "aborted",
+        "undeclared",
+        "marker",
+        "strict",
+        "checking",
+        "enabled"
+      ],
+      "rare": false
+    },
+    {
+      "index": 7,
+      "record_index": 7,
+      "record_tag": "T-303",
+      "sentence": "Codex adapter turns returned an empty thread identifier, so resuming that rollout afterwards became impossible.",
+      "keywords": [
+        "codex",
+        "adapter",
+        "turns",
+        "returned",
+        "empty",
+        "thread",
+        "identifier",
+        "resuming",
+        "rollout",
+        "afterwards",
+        "became",
+        "impossible"
+      ],
+      "rare": false
+    },
+    {
+      "index": 8,
+      "record_index": 8,
+      "record_tag": "T-304",
+      "sentence": "After a hard kill on Windows, stale git index locks remained in the worktree and blocked every later checkout.",
+      "keywords": [
+        "windows",
+        "hard",
+        "kill",
+        "stale",
+        "git",
+        "index",
+        "locks",
+        "remained",
+        "worktree",
+        "blocked",
+        "every",
+        "later",
+        "checkout"
+      ],
+      "rare": false
+    },
+    {
+      "index": 9,
+      "record_index": 9,
+      "record_tag": "T-305",
+      "sentence": "The remaining Groq budget arrives through rate limit response headers, which the adaptive cooldown floor reads.",
+      "keywords": [
+        "groq",
+        "remaining",
+        "budget",
+        "arrives",
+        "rate",
+        "limit",
+        "response",
+        "headers",
+        "adaptive",
+        "cooldown",
+        "floor",
+        "reads"
+      ],
+      "rare": false
+    },
+    {
+      "index": 10,
+      "record_index": 10,
+      "record_tag": "T-301",
+      "sentence": "An `npm ci` step failed with exit 1 when package-lock.json drifted out of sync with package.json.",
+      "keywords": [
+        "npm ci",
+        "package-lock.json",
+        "package.json",
+        "1",
+        "npm",
+        "step",
+        "failed",
+        "exit",
+        "package",
+        "lock",
+        "json",
+        "drifted",
+        "sync"
+      ],
+      "rare": false
+    },
+    {
+      "index": 11,
+      "record_index": 11,
+      "record_tag": "T-302",
+      "sentence": "Collection in pytest aborted since an undeclared marker was used with strict marker checking enabled.",
+      "keywords": [
+        "collection",
+        "pytest",
+        "aborted",
+        "since",
+        "undeclared",
+        "marker",
+        "strict",
+        "checking",
+        "enabled"
+      ],
+      "rare": false
+    },
+    {
+      "index": 12,
+      "record_index": 12,
+      "record_tag": "T-303",
+      "sentence": "An empty thread identifier came back from the Codex adapter, so resuming that rollout became impossible.",
+      "keywords": [
+        "codex",
+        "empty",
+        "thread",
+        "identifier",
+        "came",
+        "back",
+        "adapter",
+        "resuming",
+        "rollout",
+        "became",
+        "impossible"
+      ],
+      "rare": false
+    },
+    {
+      "index": 13,
+      "record_index": 13,
+      "record_tag": "T-304",
+      "sentence": "Windows hard kills left stale git index locks in the worktree, which blocked every later checkout.",
+      "keywords": [
+        "windows",
+        "hard",
+        "kills",
+        "left",
+        "stale",
+        "git",
+        "index",
+        "locks",
+        "worktree",
+        "blocked",
+        "every",
+        "later",
+        "checkout"
+      ],
+      "rare": false
+    },
+    {
+      "index": 14,
+      "record_index": 14,
+      "record_tag": "T-305",
+      "sentence": "Rate limit response headers carry the remaining Groq budget that the adaptive cooldown floor reads.",
+      "keywords": [
+        "groq",
+        "rate",
+        "limit",
+        "response",
+        "headers",
+        "carry",
+        "remaining",
+        "budget",
+        "adaptive",
+        "cooldown",
+        "floor",
+        "reads"
+      ],
+      "rare": false
+    }
+  ]
+}

@@ -1,0 +1,175 @@
+{
+  "corpus": "s7_adversarial.md",
+  "extractor_version": 1,
+  "source_sha1": "643ff26df215d0c764c84eb1dc950e20daa9e80c",
+  "denominator": "raw",
+  "record_count": 9,
+  "sentence_count": 11,
+  "keyword_count": 56,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "T-701",
+      "sentence": "A leading byte order mark attaches to the first header unless the reader opens the file as utf-8-sig.",
+      "keywords": [
+        "8",
+        "leading",
+        "byte",
+        "order",
+        "mark",
+        "attaches",
+        "first",
+        "header",
+        "unless",
+        "reader",
+        "opens",
+        "file",
+        "utf",
+        "sig"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 1,
+      "record_tag": "T-702",
+      "sentence": "This record names quarantine as its unique subject and vanishes silently.",
+      "keywords": [
+        "record",
+        "names",
+        "quarantine",
+        "unique",
+        "subject",
+        "vanishes",
+        "silently"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 2,
+      "record_tag": "T-703",
+      "sentence": "Unicode survives the round trip: 日本語, اردو, an emoji 🧠, and a combining acute é.",
+      "keywords": [
+        "日本語",
+        "unicode",
+        "survives",
+        "round",
+        "trip",
+        "اردو",
+        "emoji",
+        "combining",
+        "acute"
+      ],
+      "rare": true
+    },
+    {
+      "index": 3,
+      "record_index": 3,
+      "record_tag": "T-704",
+      "sentence": "The sample below is documentation, not a record boundary.",
+      "keywords": [
+        "sample",
+        "documentation",
+        "record",
+        "boundary"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 4,
+      "record_tag": "EXAMPLE",
+      "sentence": "midfence = shibboleth(42)",
+      "keywords": [
+        "42",
+        "midfence",
+        "shibboleth"
+      ],
+      "rare": true
+    },
+    {
+      "index": 5,
+      "record_index": 5,
+      "record_tag": "T-705",
+      "sentence": "Nested headings stay content.",
+      "keywords": [
+        "nested",
+        "headings",
+        "stay",
+        "content"
+      ],
+      "rare": true
+    },
+    {
+      "index": 6,
+      "record_index": 5,
+      "record_tag": "T-705",
+      "sentence": "A subheading about telemetry",
+      "keywords": [
+        "subheading",
+        "telemetry"
+      ],
+      "rare": false
+    },
+    {
+      "index": 7,
+      "record_index": 5,
+      "record_tag": "T-705",
+      "sentence": "The subheading above is not a record header.",
+      "keywords": [
+        "subheading",
+        "record",
+        "header"
+      ],
+      "rare": false
+    },
+    {
+      "index": 8,
+      "record_index": 6,
+      "record_tag": "T-706",
+      "sentence": "```\ndef only_a_fence(argument):\n    return argument.rstrip()\n```",
+      "keywords": [
+        "only_a_fence",
+        "def",
+        "fence",
+        "argument",
+        "return",
+        "rstrip"
+      ],
+      "rare": true
+    },
+    {
+      "index": 9,
+      "record_index": 7,
+      "record_tag": "T-707",
+      "sentence": "The trailing pseudo-header below is folded into this record instead of being discarded.",
+      "keywords": [
+        "trailing",
+        "pseudo",
+        "header",
+        "folded",
+        "record",
+        "instead",
+        "discarded"
+      ],
+      "rare": false
+    },
+    {
+      "index": 10,
+      "record_index": 8,
+      "record_tag": "Appendix on retention",
+      "sentence": "This trailing text mentions palimpsest and is folded into the record above it.",
+      "keywords": [
+        "trailing",
+        "text",
+        "mentions",
+        "palimpsest",
+        "folded",
+        "record"
+      ],
+      "rare": false
+    }
+  ]
+}

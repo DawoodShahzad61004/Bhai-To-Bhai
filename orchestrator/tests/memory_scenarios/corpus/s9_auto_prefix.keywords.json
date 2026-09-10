@@ -1,0 +1,169 @@
+{
+  "corpus": "s9_auto_prefix.md",
+  "extractor_version": 1,
+  "source_sha1": "4a85941ece835d60aa094407a18aedad7d576e2b",
+  "denominator": "raw",
+  "record_count": 8,
+  "sentence_count": 8,
+  "keyword_count": 37,
+  "sentences": [
+    {
+      "index": 0,
+      "record_index": 0,
+      "record_tag": "T-900",
+      "sentence": "[auto] `npm test` failed (exit 1): module federation plugin missing.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "module",
+        "federation",
+        "plugin",
+        "missing"
+      ],
+      "rare": false
+    },
+    {
+      "index": 1,
+      "record_index": 1,
+      "record_tag": "T-901",
+      "sentence": "[auto] `npm test` failed (exit 1): snapshot file older than component.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "snapshot",
+        "file",
+        "older",
+        "component"
+      ],
+      "rare": false
+    },
+    {
+      "index": 2,
+      "record_index": 2,
+      "record_tag": "T-902",
+      "sentence": "[auto] `npm test` failed (exit 1): coverage threshold below eighty percent.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "coverage",
+        "threshold",
+        "eighty",
+        "percent"
+      ],
+      "rare": false
+    },
+    {
+      "index": 3,
+      "record_index": 3,
+      "record_tag": "T-903",
+      "sentence": "[auto] `npm test` failed (exit 1): worker pool exhausted early.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "worker",
+        "pool",
+        "exhausted",
+        "early"
+      ],
+      "rare": false
+    },
+    {
+      "index": 4,
+      "record_index": 4,
+      "record_tag": "T-904",
+      "sentence": "[auto] `npm test` failed (exit 1): jsdom environment unavailable.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "jsdom",
+        "environment",
+        "unavailable"
+      ],
+      "rare": false
+    },
+    {
+      "index": 5,
+      "record_index": 5,
+      "record_tag": "T-905",
+      "sentence": "[auto] `npm test` failed (exit 1): transform ignored node modules.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "transform",
+        "ignored",
+        "node",
+        "modules"
+      ],
+      "rare": false
+    },
+    {
+      "index": 6,
+      "record_index": 6,
+      "record_tag": "T-906",
+      "sentence": "[auto] `npm test` failed (exit 1): reporter wrote no junit output.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "reporter",
+        "wrote",
+        "junit",
+        "output"
+      ],
+      "rare": false
+    },
+    {
+      "index": 7,
+      "record_index": 7,
+      "record_tag": "T-907",
+      "sentence": "[auto] `npm test` failed (exit 1): watchman crawl timed out.",
+      "keywords": [
+        "npm test",
+        "1",
+        "auto",
+        "npm",
+        "test",
+        "failed",
+        "exit",
+        "watchman",
+        "crawl",
+        "timed"
+      ],
+      "rare": false
+    }
+  ]
+}
