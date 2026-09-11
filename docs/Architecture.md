@@ -171,7 +171,7 @@ Supervisor replans are bounded by `MAX_REPLAN_ROUNDS`. Exhaustion records `bound
 
 | Module | Responsibility |
 |---|---|
-| `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult`, the closed error taxonomy, adapter selection, the non-raising boundary used by every node, a scrubbed UTF-8 subprocess environment (`subprocess_env()`), and `run_with_deadline()`, which terminates the complete Windows CLI process tree on timeout. |
+| `orchestrator/adapters/base.py` | Defines `AgentRequest`, normalized `AgentResult` (including `tokens_input`/`tokens_output`, populated per-backend from whatever each CLI actually reports — `Decisions.md` ADR-051), the closed error taxonomy, adapter selection, the non-raising boundary used by every node, a scrubbed UTF-8 subprocess environment (`subprocess_env()`), and `run_with_deadline()`, which terminates the complete Windows CLI process tree on timeout. |
 | `orchestrator/adapters/claude.py` | Runs Claude Code through stdin with JSON output, tool/budget controls, wall-clock timeout, telemetry, and vendor session resume (sessions are persisted rather than suppressed on cold start, so `--resume` has something to resume). |
 | `orchestrator/adapters/codex.py` | Runs `codex exec` through stdin with workspace sandboxing and a dedicated final-answer file; reads errors from the end of stderr, and parses `--json` events for a resumable thread id. |
 | `orchestrator/adapters/copilot.py` | Runs GitHub Copilot CLI non-interactively through `copilot -p`, maps shared abstract tool requests to Copilot's concrete allow/deny model, preserves stderr-only authentication or service failures as classified `AgentResult` errors, and can request one same-session JSON-only repair turn when the first reply ignored a structured-output contract. |
@@ -220,15 +220,17 @@ The pipeline is entirely independent of the six-stage production graph — `mem_
 | Rework rounds | 3 per wave |
 | Replan rounds | 2 per run |
 | Wave cap | 20 |
-| Mechanical stages | Gemini CLI `gemini-3.1-flash-lite`: requirements, wave orchestrator, merger. |
-| Planning / judgment stages | Codex CLI default: planner, reviewer, supervisor |
+| Mechanical stages | Gemini CLI `gemini-3.1-flash-lite`: wave orchestrator, merger. |
+| Requirements | Claude Haiku |
+| Planning / judgment stages | Codex CLI default: planner, supervisor |
+| Reviewer | Claude Sonnet |
 | Coding agent finish guard | enabled (continuation-nudge loop for prose-only replies) |
 | Codex sandbox / approval policy | `CODEX_SANDBOX="danger-full-access"`, `CODEX_APPROVAL_POLICY="untrusted"` — named `config.py` constants (each documented in-comment with its full option set), threaded through `adapters/codex.py::run_codex()` as `--sandbox <value>` / `-c approval_policy=<value>`, so `direct:codex`, `direct:ollama`, and `direct:local_llm` all inherit the same permission surface. |
 | Coding roster menus | Small: `backend="ollama"` `model="qwen3.5:4b"` (read-only/advisory only; not for file I/O). Medium: `backend="ollama"` `model="gpt-oss:20b-cloud"` or `model="nemotron-3-nano:30b-cloud"`, `backend="local_llm"` `QuantTrio/Qwen3.6-27B-AWQ`, `backend="ollama"` `model="gemma4:31b-cloud"`, `backend="copilot"` `model="auto"`. Expert: `backend="codex"` `model=""` (CLI default). |
 | Fallback coding subagent A / B | Codex CLI default / Codex CLI default |
 | Agent backend diagnostics | disabled by default (`ENABLE_AGENT_DIAGNOSTICS=False`); bounded concurrency `AGENT_DIAGNOSTIC_MAX_PARALLEL=3` when enabled |
 
-The roster is configurable per stage. The Aug 24 checked-in configuration had shifted back toward Claude/Gemini from the Aug 20 all-Codex-judgment roster; the Aug 28 afternoon session moved the planner back to Codex CLI default alongside reviewer and supervisor, so all three judgment/planning roles shared one backend. Commit `7436c8c` then moved requirements from Claude Haiku to Gemini `gemini-3.1-flash-lite` and kept planner/reviewer/supervisor on Codex CLI default; it also activated the Local LLM and Copilot medium-model entries while commenting out Claude Haiku. Coding slots retain independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides plus legacy shared fallbacks. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier, but the underlying transport may still be one shared harness when that is what preserves the required file/shell/session behavior.
+The roster is configurable per stage. The Aug 24 checked-in configuration had shifted back toward Claude/Gemini from the Aug 20 all-Codex-judgment roster; the Aug 28 afternoon session moved the planner back to Codex CLI default alongside reviewer and supervisor, so all three judgment/planning roles shared one backend. Commit `7436c8c` then moved requirements from Claude Haiku to Gemini `gemini-3.1-flash-lite` and kept planner/reviewer/supervisor on Codex CLI default; it also activated the Local LLM and Copilot medium-model entries while commenting out Claude Haiku. Commit `240bf82` (2026-09-11) reset this again: requirements moved back to Claude Haiku and reviewer moved to Claude Sonnet (off Codex), with Claude Haiku re-enabled in the medium-model menu; wave orchestrator and merger stayed on Gemini, and planner and supervisor stayed on Codex. Coding slots retain independent `CODING_AGENT_A_*` and `CODING_AGENT_B_*` overrides plus legacy shared fallbacks. The architectural rule remains: moving data and invoking deterministic operations uses the smaller tier; making correctness judgments uses the larger tier, but the underlying transport may still be one shared harness when that is what preserves the required file/shell/session behavior.
 
 Any role's `backend` may be set to `"ollama"` with a locally-hosted model as `model`, which `adapters/ollama.py` runs through the Codex harness (ADR-028). This was exercised on 2026-08-11 as a zero-marginal-cost fallback during a Claude weekly rate-limit exhaustion. It is reliable for single-shot structured-output stages (requirements, planning-shaped JSON) but not yet proven reliable for coding-agent dispatch itself - see `Bugs.md` #40-#41 and `Research.md` topics 32-33. There is deliberately no per-harness switch for it: a short-lived `OLLAMA_HARNESS` option that could route through Claude Code instead of Codex was removed the same day it failed in production, since Claude Code's `--model` flag has no mechanism for accepting an arbitrary local model tag (`Bugs.md` #39).
 
@@ -272,6 +274,16 @@ Known open findings are tracked in `docs/Bugs.md` #26-#28, #32-#33, #38, #40-#43
 The runtime dependency list is intentionally small. Agents are external subprocesses, so the project does not need model SDKs. `pymongo` exists for the standalone preflight probe, not for pipeline storage.
 
 ## Changelog
+
+### 2026-09-11 - End-to-end token/cost accounting added across every backend; a missing critical-fact-retention test added; agent roster and prune-budget retuned
+
+A missing `mem_manager` test coverage gap was closed first: `test_critical_fact_retention.py` plus a synthetic 20-entry `corpus/test_learnings.md` fixture confirm that a short, critical instruction embedded inside a much larger file survives real pruning with a wide importance margin (`Research.md` topic 65) — previously only whole-record loss under pruning/malformed-input pressure was covered (topics 59/62/63).
+
+Commit `240bf82` reset the agent roster (requirements back to Claude Haiku, reviewer to Claude Sonnet, Claude Haiku re-enabled in the medium-model menu; wave orchestrator/merger stayed on Gemini, planner/supervisor stayed on Codex — see the Configuration and Model Tiers table above) and commit `3f4f7aa` raised `config.MIN_PRUNE_BUDGET` from 1,000 to 2,000.
+
+Commit `ea52146` ("Enhance token tracking across orchestrator components") closed a gap where `AgentResult` had no token fields at all and `cost_usd` was populated for exactly one of seven configured backend categories. Added `tokens_input`/`tokens_output` to `AgentResult`, parsed from each CLI's actual reported usage (Claude's `usage` object; Codex's previously-unread `turn.completed.usage` event, which also covers Ollama and Local LLM Server via the shared `run_codex()` harness; Gemini's already-captured `stats` block); `cost_usd` stays `$0.00` wherever a vendor reports no price, by explicit design rather than an invented estimate (`Decisions.md` ADR-051). Threaded through `state.py`'s running totals, every pipeline node's events, `TaskOutcome`, and `MergeReport`; `main.py`'s final report gained a per-agent/per-backend "Cost by agent" table. Fixed two related gaps found in the same pass: `requirements/node.py`/`planner/node.py`'s `_failure()` helpers were dropping a triggering call's already-incurred cost/tokens on failure exits (`Bugs.md` #70), and Copilot's token data — initially reported as 0/0 — turned out to be nested inside a `session.usage_checkpoint` event rather than under any key named `usage`, confirmed and fixed against a live CLI probe (`Bugs.md` #69, #71; `Research.md` topic 64).
+
+---
 
 ### 2026-09-10 - `/compact` made self-triggering with a lockless read path; all remaining `mem_manager` safety-contract gaps closed; a 224-test quality-benchmark suite added; a third Windows console-encoding crash fixed
 
