@@ -152,6 +152,8 @@ def _finish(
     stated: list[str],
     unasked: list[str],
     cost: float,
+    tokens_input: int = 0,
+    tokens_output: int = 0,
     session: str = "",
 ) -> dict:
     """Write both artifacts and return the state update. Shared by both nodes.
@@ -182,10 +184,13 @@ def _finish(
     entry = event(
         "requirements_ready",
         agent=AGENT,
+        backend=config.AGENTS[AGENT].backend,
         questions_asked=len(qa),
         questions_unasked=len(unasked),
         context_chars=len(context_md),
         cost_usd=round(cost, 4),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
     )
     art.append_event(artifacts, entry)
     logger.info(
@@ -200,17 +205,47 @@ def _finish(
         "user_choices_path": str(artifacts.user_choices),
         "context": context_md,
         "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+        "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
         "events": [entry],
     }
 
 
-def _failure(message: str, *, kind: str) -> dict:
-    """Stop the run with a stated reason rather than a plausible empty result."""
+def _failure(
+    state: PipelineState,
+    message: str,
+    *,
+    kind: str,
+    cost: float = 0.0,
+    tokens_input: int = 0,
+    tokens_output: int = 0,
+) -> dict:
+    """Stop the run with a stated reason rather than a plausible empty result.
+
+    `cost`/`tokens_*` are the triggering call's own consumption where one
+    happened — a call can fail, or succeed and then be judged unusable, after
+    already spending real tokens and money, and that spend is real regardless
+    of what the pipeline does with the reply.
+    """
     logger.error("[%s] %s", AGENT, message)
     return {
         "status": "failed",
         "stop_reason": message,
-        "events": [event("requirements_failed", agent=AGENT, error_kind=kind, detail=message)],
+        "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+        "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
+        "events": [
+            event(
+                "requirements_failed",
+                agent=AGENT,
+                backend=config.AGENTS[AGENT].backend,
+                error_kind=kind,
+                detail=message,
+                cost_usd=round(cost, 4),
+                tokens_input=tokens_input,
+                tokens_output=tokens_output,
+            )
+        ],
     }
 
 
@@ -248,15 +283,23 @@ def requirements_survey_node(state: PipelineState) -> dict:
     )
     if not survey.ok:
         return _failure(
+            state,
             f"The requirements agent failed to survey the project. {survey.error_message}",
             kind=survey.error_kind,
+            cost=survey.cost_usd,
+            tokens_input=survey.tokens_input,
+            tokens_output=survey.tokens_output,
         )
 
     parsed = parsing.extract_json(survey.text, survey.structured)
     if not parsed.ok:
         return _failure(
+            state,
             f"The requirements agent's survey could not be read: {parsed.error}",
             kind="unparseable",
+            cost=survey.cost_usd,
+            tokens_input=survey.tokens_input,
+            tokens_output=survey.tokens_output,
         )
     payload = parsed.value or {}
 
@@ -273,12 +316,17 @@ def requirements_survey_node(state: PipelineState) -> dict:
             "survey_choices": stated,
             "survey_session": survey.session_id,
             "total_cost_usd": state.get("total_cost_usd", 0.0) + survey.cost_usd,
+            "total_tokens_input": state.get("total_tokens_input", 0) + survey.tokens_input,
+            "total_tokens_output": state.get("total_tokens_output", 0) + survey.tokens_output,
             "events": [
                 event(
                     "requirements_questions",
                     agent=AGENT,
+                    backend=config.AGENTS[AGENT].backend,
                     count=len(questions),
                     cost_usd=round(survey.cost_usd, 4),
+                    tokens_input=survey.tokens_input,
+                    tokens_output=survey.tokens_output,
                 )
             ],
         }
@@ -297,6 +345,8 @@ def requirements_survey_node(state: PipelineState) -> dict:
         stated=stated,
         unasked=questions,
         cost=survey.cost_usd,
+        tokens_input=survey.tokens_input,
+        tokens_output=survey.tokens_output,
         session=art.session_key(config.AGENTS[AGENT].backend, survey.session_id),
     )
 
@@ -374,6 +424,8 @@ def requirements_clarify_node(state: PipelineState) -> dict:
         stated=stated,
         unasked=[],
         cost=final.cost_usd,
+        tokens_input=final.tokens_input,
+        tokens_output=final.tokens_output,
         # The finalise call *resumes* the survey session, and on failure the
         # branches above keep the survey draft - so when finalise reports no id
         # of its own, the survey's is still the truthful identity of what is

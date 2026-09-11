@@ -68,7 +68,14 @@ class TaskOutcome:
     changed_files: list[str] = field(default_factory=list)
     # For the reviewer's rework loop, which must reach this same agent.
     session_id: str = ""
+    # Which vendor/model actually did this task, so a per-backend breakdown can
+    # attribute cost/tokens correctly — coding_agents (planner/waves.py) can
+    # differ per task, so this is not inferable from config alone.
+    backend: str = ""
+    model: str = ""
     cost_usd: float = 0.0
+    tokens_input: int = 0
+    tokens_output: int = 0
     error_kind: str = ""
     error_message: str = ""
 
@@ -84,7 +91,11 @@ class TaskOutcome:
             "worktree": self.worktree,
             "commit": self.commit,
             "session_id": self.session_id,
+            "backend": self.backend,
+            "model": self.model,
             "cost_usd": round(self.cost_usd, 4),
+            "tokens_input": self.tokens_input,
+            "tokens_output": self.tokens_output,
             "error_kind": self.error_kind,
             "error_message": self.error_message,
         }
@@ -157,7 +168,7 @@ def run_task(
     previous attempt forward instead, written into the fresh prompt itself.
     """
     task_id = task["task_id"]
-    outcome = TaskOutcome(task_id=task_id, ok=False)
+    outcome = TaskOutcome(task_id=task_id, ok=False, backend=agent.backend, model=agent.model)
 
     if config.USE_GIT_WORKTREES:
         worktree, git_result = wt.create(
@@ -217,6 +228,8 @@ def run_task(
 
     outcome.session_id = result.session_id
     outcome.cost_usd = result.cost_usd
+    outcome.tokens_input = result.tokens_input
+    outcome.tokens_output = result.tokens_output
 
     # Commit whatever is in the worktree either way. A failed turn may still have
     # written half a file, and that half is the thing a rework starts from.

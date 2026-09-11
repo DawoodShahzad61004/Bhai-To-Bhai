@@ -388,7 +388,7 @@ def test_copilot_json_parser_preserves_session_and_last_reply():
             '{"type":"message","content":[{"type":"text","text":"final"}]}',
         ]
     )
-    assert _parse_json_lines(stdout) == ("final", "abc-123", "")
+    assert _parse_json_lines(stdout) == ("final", "abc-123", "", (0, 0))
 
 
 def test_copilot_json_parser_reads_nested_final_assistant_message():
@@ -400,7 +400,7 @@ def test_copilot_json_parser_reads_nested_final_assistant_message():
             '{"type":"result","sessionId":"session-123","exitCode":0}',
         ]
     )
-    assert _parse_json_lines(stdout) == ("final reply", "session-123", "")
+    assert _parse_json_lines(stdout) == ("final reply", "session-123", "", (0, 0))
 
 
 def test_copilot_stderr_only_failure_is_not_reported_as_no_output(monkeypatch):

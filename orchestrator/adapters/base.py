@@ -94,6 +94,13 @@ class AgentResult:
     # session id but no cost at any price, which is the mixed-measurement state
     # ADR-006 argues for on principle.
     cost_usd: float = 0.0
+    # Consumption the vendor itself reported for this turn. Cache-creation and
+    # cache-read tokens (Claude) count as input: they were still generated or
+    # read on this call, even though Anthropic prices them differently from a
+    # fresh input token. A vendor that reports nothing leaves both at 0 rather
+    # than a guessed figure — same "measured absence" rule as cost_usd above.
+    tokens_input: int = 0
+    tokens_output: int = 0
     turns: int = 0
     duration_seconds: float = 0.0
     # The vendor's own resumable session id. Load-bearing for the reviewer's
@@ -105,7 +112,11 @@ class AgentResult:
     def summary(self) -> str:
         """One line for a report or an event, whichever way the turn went."""
         if self.ok:
-            return f"ok in {self.duration_seconds:.1f}s (${self.cost_usd:.4f})"
+            tokens = self.tokens_input + self.tokens_output
+            return (
+                f"ok in {self.duration_seconds:.1f}s (${self.cost_usd:.4f}, "
+                f"{tokens} tok in={self.tokens_input}/out={self.tokens_output})"
+            )
         return f"{self.error_kind}: {self.error_message[:200]}"
 
 

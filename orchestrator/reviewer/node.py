@@ -173,6 +173,8 @@ def reviewer_node(state: PipelineState) -> dict:
         extra_dirs=(str(artifacts.shared_dir),),
     )
     cost = result.cost_usd
+    tokens_input = result.tokens_input
+    tokens_output = result.tokens_output
 
     if not result.ok:
         message = f"The review agent failed. {result.error_message}"
@@ -181,6 +183,8 @@ def reviewer_node(state: PipelineState) -> dict:
             "status": "failed",
             "stop_reason": message,
             "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+            "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+            "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
             "events": [event("review_failed", agent=AGENT, error_kind=result.error_kind, detail=message)],
         }
 
@@ -199,6 +203,8 @@ def reviewer_node(state: PipelineState) -> dict:
             "status": "failed",
             "stop_reason": message,
             "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+            "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+            "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
             "events": [event("review_failed", agent=AGENT, error_kind="unparseable", detail=message)],
         }
     payload = parsed.value or {}
@@ -242,12 +248,15 @@ def reviewer_node(state: PipelineState) -> dict:
     entry = event(
         "review_verdict",
         agent=AGENT,
+        backend=config.AGENTS[AGENT].backend,
         wave=wave_index,
         attempt=attempt,
         verdict=verdict,
         tasks_kept=kept,
         tasks_reworked=len(task_verdicts) - kept,
         cost_usd=round(cost, 4),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
     )
     art.append_event(artifacts, entry)
 
@@ -263,6 +272,8 @@ def reviewer_node(state: PipelineState) -> dict:
             }
         ],
         "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+        "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
         "events": [entry],
     }
 

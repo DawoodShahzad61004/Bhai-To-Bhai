@@ -55,6 +55,8 @@ class MergeReport:
     # be correct by construction rather than an invariant to maintain.
     learnings: list[tuple[str, str]] = field(default_factory=list)
     cost_usd: float = 0.0
+    tokens_input: int = 0
+    tokens_output: int = 0
     detail: str = ""
 
     def summary(self) -> str:
@@ -92,8 +94,11 @@ def _resolve_conflict(
     ours: str,
     context_path: str,
     artifacts_dir: str,
-) -> tuple[bool, str, str, str, float]:
-    """Dispatch the merge agent. Returns (ok, detail, learnings, session, cost)."""
+) -> tuple[bool, str, str, str, float, int, int]:
+    """Dispatch the merge agent.
+
+    Returns (ok, detail, learnings, session, cost, tokens_input, tokens_output).
+    """
     logger.warning(
         "[%s] %s conflicts with %s in: %s", AGENT, branch, into, ", ".join(files)
     )
@@ -116,7 +121,15 @@ def _resolve_conflict(
         extra_dirs=(artifacts_dir,),
     )
     if not result.ok:
-        return False, f"the merge agent failed ({result.error_kind}): {result.error_message[:200]}", "", "", result.cost_usd
+        return (
+            False,
+            f"the merge agent failed ({result.error_kind}): {result.error_message[:200]}",
+            "",
+            "",
+            result.cost_usd,
+            result.tokens_input,
+            result.tokens_output,
+        )
 
     # The identity any learning below is written under, captured here because
     # `result` does not outlive this function.
@@ -129,7 +142,15 @@ def _resolve_conflict(
 
     if status == "unresolvable":
         reason = parsing.require_str(payload, "unresolvable_reason") or "no reason given"
-        return False, f"the merge agent judged this unresolvable: {reason}", learnings, session, result.cost_usd
+        return (
+            False,
+            f"the merge agent judged this unresolvable: {reason}",
+            learnings,
+            session,
+            result.cost_usd,
+            result.tokens_input,
+            result.tokens_output,
+        )
 
     # A claim of resolution, now checked against the filesystem.
     #
@@ -147,6 +168,8 @@ def _resolve_conflict(
             learnings,
             session,
             result.cost_usd,
+            result.tokens_input,
+            result.tokens_output,
         )
 
     # Staging is the pipeline's job: the brief tells the agent to edit the files
@@ -159,10 +182,12 @@ def _resolve_conflict(
             learnings,
             session,
             result.cost_usd,
+            result.tokens_input,
+            result.tokens_output,
         )
 
     detail = parsing.require_str(payload, "summary") or "resolved"
-    return True, detail, learnings, session, result.cost_usd
+    return True, detail, learnings, session, result.cost_usd, result.tokens_input, result.tokens_output
 
 
 def merge_wave(
@@ -221,7 +246,7 @@ def merge_wave(
             report.detail = f"merging {branch} failed without conflicts: {result.stderr[:300]}"
             return report
 
-        resolved, detail, learning, session, cost = _resolve_conflict(
+        resolved, detail, learning, session, cost, tokens_input, tokens_output = _resolve_conflict(
             target_repo=target_repo,
             branch=branch,
             into=into,
@@ -232,6 +257,8 @@ def merge_wave(
             artifacts_dir=artifacts_dir,
         )
         report.cost_usd += cost
+        report.tokens_input += tokens_input
+        report.tokens_output += tokens_output
         if learning:
             report.learnings.append((learning, session))
 

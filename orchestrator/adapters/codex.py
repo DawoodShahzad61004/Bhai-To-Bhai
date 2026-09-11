@@ -91,6 +91,35 @@ def _codex_failure(stdout: str) -> str:
     return fallback
 
 
+def _turn_usage(stdout: str) -> tuple[int, int]:
+    """(input, output) tokens from the `turn.completed` JSONL event.
+
+    `--json` is where these figures live — see this module's docstring. Codex
+    never emits a price alongside them (measured, not assumed), so there is no
+    cost figure to pair this with. A turn resumed across several continuation
+    attempts (`run_agent`'s nudge loop) each fires its own `turn.completed`;
+    the caller sums per-attempt usage rather than this function guessing which
+    one is final, so the last event wins here — matching one call's own usage.
+    """
+    input_tokens = 0
+    output_tokens = 0
+    for line in stdout.splitlines():
+        line = line.strip().lstrip("﻿")
+        if not line.startswith("{"):
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if payload.get("type") != "turn.completed":
+            continue
+        usage = payload.get("usage")
+        if isinstance(usage, dict):
+            input_tokens = int(usage.get("input_tokens") or 0)
+            output_tokens = int(usage.get("output_tokens") or 0)
+    return input_tokens, output_tokens
+
+
 def _thread_id(stdout: str) -> str:
     """The resumable session id for this turn, from codex's JSONL events.
 
@@ -304,6 +333,7 @@ def run_codex(
             # its deadline has almost certainly already reported its id. Keeping
             # it is what lets the retry resume the agent that was part-way through
             # rather than brief a fresh one on work it cannot see.
+            timeout_input, timeout_output = _turn_usage(exc.stdout or "")
             return AgentResult(
                 ok=False,
                 error_kind="timeout",
@@ -313,6 +343,8 @@ def run_codex(
                 ),
                 duration_seconds=time.perf_counter() - started,
                 session_id=_thread_id(exc.stdout or ""),
+                tokens_input=timeout_input,
+                tokens_output=timeout_output,
             )
 
         elapsed = time.perf_counter() - started
@@ -326,6 +358,7 @@ def run_codex(
         # nothing may still have a resumable session behind it, and the rework
         # loop is exactly the caller that wants it.
         session_id = _thread_id(stdout)
+        tokens_input, tokens_output = _turn_usage(stdout)
 
         try:
             with open(last_message, "r", encoding="utf-8") as handle_in:
@@ -346,6 +379,8 @@ def run_codex(
                 error_message=reason,
                 duration_seconds=elapsed,
                 session_id=session_id,
+                tokens_input=tokens_input,
+                tokens_output=tokens_output,
             )
         if not text:
             return AgentResult(
@@ -357,18 +392,29 @@ def run_codex(
                 ),
                 duration_seconds=elapsed,
                 session_id=session_id,
+                tokens_input=tokens_input,
+                tokens_output=tokens_output,
             )
 
         logger.info(
-            "[%s] %s done | %.1fs | session=%s",
+            "[%s] %s done | %.1fs | %d+%d tok | session=%s",
             tag,
             backend_label.lower(),
             elapsed,
+            tokens_input,
+            tokens_output,
             session_id[:8] or "-",
         )
         logger.info("[%s] reply: %s", tag, text[:_CONSOLE_EXCERPT])
         logger.debug("[%s] full reply:\n%s", tag, _debug_block(text))
-        return AgentResult(ok=True, text=text, duration_seconds=elapsed, session_id=session_id)
+        return AgentResult(
+            ok=True,
+            text=text,
+            duration_seconds=elapsed,
+            session_id=session_id,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+        )
     finally:
         try:
             os.unlink(last_message)

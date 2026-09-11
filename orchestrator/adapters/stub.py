@@ -112,6 +112,8 @@ def run(
         error_kind=result.error_kind,
         error_message=result.error_message,
         cost_usd=result.cost_usd,
+        tokens_input=result.tokens_input,
+        tokens_output=result.tokens_output,
         turns=result.turns,
         duration_seconds=time.perf_counter() - started,
         session_id=result.session_id or f"stub-{tag}",

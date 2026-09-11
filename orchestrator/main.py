@@ -17,6 +17,7 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 # The package uses bare imports (`from config import ...`), matching how it
 # resolves at run time. This makes that true when main.py is run as a script from
@@ -209,6 +210,68 @@ def ask(questions: list[str], understanding: str) -> list[str]:
     return answers
 
 
+# wave_orchestrator's own AgentSpec (config.AGENTS["wave_orchestrator"]) never
+# makes an LLM call of its own — it only dispatches coding subagents, each on
+# whatever backend the plan's roster assigned it. These event kinds carry a
+# per-wave *rollup* of those coding subagents' own cost/tokens, not spend of
+# wave_orchestrator's own; that spend is attributed per task below instead, so
+# counting these events too would double it.
+_WAVE_ROLLUP_EVENT_KINDS = {"wave_started", "wave_finished", "wave_failed"}
+
+
+def _agent_breakdown(final: dict) -> list[dict]:
+    """Per-agent, per-backend cost and token totals for this run.
+
+    Sourced from what is already threaded through state: the audit event every
+    pipeline stage (requirements/planner/merger/reviewer/supervisor) emits for
+    its own call(s), plus each coding subagent's own per-task record in
+    `wave_results` — a wave can dispatch a different backend per task, so that
+    spend is attributed there rather than folded into one "wave_orchestrator"
+    row.
+    """
+    rows: dict[str, dict[str, Any]] = {}
+
+    def bump(key: str, *, backend: str, cost: float, tokens_input: int, tokens_output: int) -> None:
+        row = rows.setdefault(
+            key, {"backend": backend, "cost_usd": 0.0, "tokens_input": 0, "tokens_output": 0}
+        )
+        row["cost_usd"] += cost
+        row["tokens_input"] += tokens_input
+        row["tokens_output"] += tokens_output
+        if backend and not row["backend"]:
+            row["backend"] = backend
+
+    for entry in final.get("events") or []:
+        agent = entry.get("agent")
+        if not agent or entry.get("kind") in _WAVE_ROLLUP_EVENT_KINDS:
+            continue
+        bump(
+            agent,
+            backend=entry.get("backend", ""),
+            cost=entry.get("cost_usd", 0.0) or 0.0,
+            tokens_input=entry.get("tokens_input", 0) or 0,
+            tokens_output=entry.get("tokens_output", 0) or 0,
+        )
+
+    for wave in final.get("wave_results") or []:
+        for task in wave.get("tasks") or []:
+            backend = task.get("backend") or "?"
+            model = task.get("model") or ""
+            key = f"coding ({backend}/{model})" if model else f"coding ({backend})"
+            bump(
+                key,
+                backend=backend,
+                cost=task.get("cost_usd", 0.0) or 0.0,
+                tokens_input=task.get("tokens_input", 0) or 0,
+                tokens_output=task.get("tokens_output", 0) or 0,
+            )
+
+    return sorted(
+        ({"agent": name, **data} for name, data in rows.items()),
+        key=lambda row: row["agent"],
+    )
+
+
 def report(final: dict, log_file: Path, artifacts_dir: Path) -> int:
     """Print the outcome. Returns the process exit code.
 
@@ -221,6 +284,8 @@ def report(final: dict, log_file: Path, artifacts_dir: Path) -> int:
     status = final.get("status", "unknown")
     reason = final.get("stop_reason", "")
     cost = final.get("total_cost_usd", 0.0)
+    tokens_input = final.get("total_tokens_input", 0)
+    tokens_output = final.get("total_tokens_output", 0)
 
     merged = [r for r in final.get("wave_results") or [] if r.get("merged")]
     changed: set[str] = set()
@@ -236,10 +301,22 @@ def report(final: dict, log_file: Path, artifacts_dir: Path) -> int:
     print(f"  waves merged     {len(merged)} of {len(final.get('waves') or [])}")
     print(f"  files changed    {len(changed)}")
     print(f"  cost             ${cost:.4f}")
+    print(f"  tokens           {tokens_input} in / {tokens_output} out")
     if final.get("integration_branch"):
         print(f"  branch           {final['integration_branch']}")
     print(f"  artifacts        {artifacts_dir}")
     print(f"  log              {log_file}")
+
+    breakdown = _agent_breakdown(final)
+    if breakdown:
+        print("\n  Cost by agent:")
+        for row in breakdown:
+            backend = row["backend"] or "-"
+            print(
+                f"    {row['agent']:<28} {backend:<16} "
+                f"{row['tokens_input']:>8} in / {row['tokens_output']:>8} out tok"
+                f"   ${row['cost_usd']:.4f}"
+            )
 
     if changed:
         print("\n  Changed files:")

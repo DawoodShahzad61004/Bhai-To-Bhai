@@ -220,6 +220,8 @@ class PipelineState(TypedDict):
     # confused by whoever reads the log.
     stop_reason: NotRequired[str]
     total_cost_usd: NotRequired[float]
+    total_tokens_input: NotRequired[int]
+    total_tokens_output: NotRequired[int]
 
 
 def initial_state(
@@ -244,6 +246,8 @@ def initial_state(
         events=[],
         status="running",
         total_cost_usd=0.0,
+        total_tokens_input=0,
+        total_tokens_output=0,
     )
 
 

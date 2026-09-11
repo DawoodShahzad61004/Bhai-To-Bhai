@@ -206,6 +206,39 @@ def _int_from_nested(value: Any, names: tuple[str, ...]) -> int:
     return 0
 
 
+_PROMPT_TOKEN_KEYS = (
+    "promptTokenCount",
+    "prompt_token_count",
+    "promptTokens",
+    "prompt_tokens",
+    "inputTokens",
+    "input_tokens",
+)
+_OUTPUT_TOKEN_KEYS = (
+    "candidatesTokenCount",
+    "candidates_token_count",
+    "candidatesTokens",
+    "candidates_tokens",
+    "outputTokens",
+    "output_tokens",
+    "completionTokens",
+    "completion_tokens",
+)
+
+
+def _token_usage(stats: dict[str, Any]) -> tuple[int, int]:
+    """Best-effort (input, output) tokens from the `result` event's `stats`.
+
+    The CLI documents this block only as "usage metadata", not a fixed schema,
+    so this searches known key spellings at any depth rather than assuming one
+    exact shape. Unmatched means 0, not a guess.
+    """
+    return (
+        _int_from_nested(stats, _PROMPT_TOKEN_KEYS),
+        _int_from_nested(stats, _OUTPUT_TOKEN_KEYS),
+    )
+
+
 def _parse_stream(stdout: str) -> tuple[str, str, str, dict[str, Any], str]:
     """Return ``(text, session_id, status, stats, fatal_error)`` from JSONL.
 
@@ -379,6 +412,7 @@ def run(
 
     text, session_id, result_status, stats, stream_error = _parse_stream(stdout)
     turns = _int_from_nested(stats, ("turns", "num_turns", "turn_count"))
+    tokens_input, tokens_output = _token_usage(stats)
 
     if completed.returncode != 0 or result_status == "error":
         reason = stream_error or stderr or text or f"gemini exited {completed.returncode}"
@@ -393,6 +427,8 @@ def run(
             duration_seconds=elapsed,
             turns=turns,
             session_id=session_id,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
         )
 
     if stream_error:
@@ -412,14 +448,18 @@ def run(
             duration_seconds=elapsed,
             turns=turns,
             session_id=session_id,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
         )
 
     structured = _parse_json_object(text) if json_schema is not None else None
     logger.info(
-        "[%s] gemini done | %.1fs | %d turn(s) | session=%s",
+        "[%s] gemini done | %.1fs | %d turn(s) | %d+%d tok | session=%s",
         tag,
         elapsed,
         turns,
+        tokens_input,
+        tokens_output,
         session_id[:8] or "-",
     )
     logger.info("[%s] reply: %s", tag, text[:_CONSOLE_EXCERPT])
@@ -429,6 +469,8 @@ def run(
         text=text,
         structured=structured,
         duration_seconds=elapsed,
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
         turns=turns,
         session_id=session_id,
     )

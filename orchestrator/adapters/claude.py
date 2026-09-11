@@ -90,6 +90,26 @@ def _build_argv(
     return argv
 
 
+def _token_usage(envelope: dict[str, Any]) -> tuple[int, int]:
+    """(input, output) tokens from the CLI's `usage` object.
+
+    Mirrors the Anthropic Messages API usage shape: cache-creation and
+    cache-read tokens are real consumption on this turn — the model still
+    generated or read them — so they count as input alongside the uncached
+    figure, even though Anthropic prices them differently.
+    """
+    usage = envelope.get("usage")
+    if not isinstance(usage, dict):
+        return 0, 0
+    input_tokens = (
+        int(usage.get("input_tokens") or 0)
+        + int(usage.get("cache_creation_input_tokens") or 0)
+        + int(usage.get("cache_read_input_tokens") or 0)
+    )
+    output_tokens = int(usage.get("output_tokens") or 0)
+    return input_tokens, output_tokens
+
+
 def _parse_envelope(stdout: str) -> dict[str, Any] | None:
     """The result object, tolerating anything the CLI printed around it."""
     stdout = stdout.strip()
@@ -191,11 +211,14 @@ def run(
             duration_seconds=elapsed,
         )
 
+    tokens_input, tokens_output = _token_usage(envelope)
     result = AgentResult(
         ok=not envelope.get("is_error", False) and envelope.get("subtype") == "success",
         text=(envelope.get("result") or "").strip(),
         structured=envelope.get("structured_output"),
         cost_usd=float(envelope.get("total_cost_usd") or 0.0),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
         turns=int(envelope.get("num_turns") or 0),
         duration_seconds=elapsed,
         session_id=envelope.get("session_id") or "",
@@ -226,11 +249,13 @@ def run(
         return result
 
     logger.info(
-        "[%s] claude done | %.1fs | %d turn(s) | $%.4f | session=%s",
+        "[%s] claude done | %.1fs | %d turn(s) | $%.4f | %d+%d tok | session=%s",
         tag,
         elapsed,
         result.turns,
         result.cost_usd,
+        result.tokens_input,
+        result.tokens_output,
         result.session_id[:8] or "-",
     )
     logger.info("[%s] reply: %s", tag, result.text[:_CONSOLE_EXCERPT])

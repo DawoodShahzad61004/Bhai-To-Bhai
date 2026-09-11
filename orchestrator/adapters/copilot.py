@@ -385,8 +385,80 @@ def _prompt_requests_json_object(prompt: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
-def _parse_json_lines(stdout: str) -> tuple[str, str, str]:
-    """Return (text, session_id, error) from Copilot JSONL-ish output.
+_USAGE_KEYS = ("usage", "token_usage", "tokenUsage", "tokens")
+_INPUT_TOKEN_KEYS = ("input_tokens", "inputTokens", "prompt_tokens", "promptTokens")
+_OUTPUT_TOKEN_KEYS = ("output_tokens", "outputTokens", "completion_tokens", "completionTokens")
+
+
+def _find_token_usage(value: Any) -> tuple[int, int]:
+    """Best-effort (input, output) tokens from a Copilot CLI JSONL record.
+
+    Copilot CLI does not document a stable usage schema in local help, and no
+    fixture or prior run in this project shows one. This looks for the same
+    kind of usage object other vendor CLIs expose under any of several likely
+    key names; if the CLI never emits one, both figures stay 0 rather than a
+    guess \u2014 a real limitation of the CLI's own output, not of this parser.
+    """
+    if isinstance(value, dict):
+        for key in _USAGE_KEYS:
+            usage = value.get(key)
+            if isinstance(usage, dict):
+                input_tokens = next(
+                    (int(usage[k]) for k in _INPUT_TOKEN_KEYS if isinstance(usage.get(k), (int, float))),
+                    0,
+                )
+                output_tokens = next(
+                    (int(usage[k]) for k in _OUTPUT_TOKEN_KEYS if isinstance(usage.get(k), (int, float))),
+                    0,
+                )
+                if input_tokens or output_tokens:
+                    return input_tokens, output_tokens
+        for nested in value.values():
+            found = _find_token_usage(nested)
+            if found != (0, 0):
+                return found
+    elif isinstance(value, list):
+        for nested in value:
+            found = _find_token_usage(nested)
+            if found != (0, 0):
+                return found
+    return 0, 0
+
+
+def _checkpoint_input_tokens(payload: dict[str, Any]) -> int:
+    """Prompt-side tokens from one `session.usage_checkpoint` event.
+
+    Confirmed live against Copilot CLI 1.0.83: this event's
+    ``data.promptCacheBreakState[].models.<model>`` carries a `prompt_tokens`
+    figure per model used in the call, plus separate `cache_read`/`cache_write`
+    breakdown fields. `prompt_tokens` alone is used here — in the probed sample
+    it already sat within 3 tokens of `cache_write` on a cold (cache_read=0)
+    turn, meaning it reads as the call's total rather than a figure to add
+    cache tokens on top of; summing `cache_write` in as well would very likely
+    double-count. There is no completion/output token field anywhere in this
+    event — Copilot's own billing unit here is `premiumRequests`, not tokens —
+    so the output half is left at 0 rather than guessed.
+    """
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return 0
+    total = 0
+    for state in data.get("promptCacheBreakState") or []:
+        if not isinstance(state, dict):
+            continue
+        models = state.get("models")
+        if not isinstance(models, dict):
+            continue
+        for model_stats in models.values():
+            if isinstance(model_stats, dict) and isinstance(
+                model_stats.get("prompt_tokens"), (int, float)
+            ):
+                total += int(model_stats["prompt_tokens"])
+    return total
+
+
+def _parse_json_lines(stdout: str) -> tuple[str, str, str, tuple[int, int]]:
+    """Return (text, session_id, error, tokens) from Copilot JSONL-ish output.
 
     The CLI documents JSONL but not a stable event schema in local help. This
     parser therefore reads structured records conservatively, preferring common
@@ -396,6 +468,7 @@ def _parse_json_lines(stdout: str) -> tuple[str, str, str]:
     session_id = ""
     error = ""
     parsed_any = False
+    tokens = (0, 0)
 
     for raw_line in stdout.splitlines():
         line = raw_line.strip().lstrip("\ufeff")
@@ -411,6 +484,21 @@ def _parse_json_lines(stdout: str) -> tuple[str, str, str]:
 
         if not session_id:
             session_id = _find_session_id(payload)
+
+        if str(payload.get("type") or "").lower() == "session.usage_checkpoint":
+            # The authoritative figure when present: real prompt-token counts
+            # from Copilot's own accounting, not a guessed key match. The last
+            # checkpoint in the stream wins — a turn with more than one (e.g.
+            # tool calls between model calls) has each later checkpoint report
+            # the call's own prompt including everything before it, so the
+            # last one is the call's true total rather than a sum of parts.
+            checkpoint_input = _checkpoint_input_tokens(payload)
+            if checkpoint_input:
+                tokens = (checkpoint_input, tokens[1])
+        else:
+            found_tokens = _find_token_usage(payload)
+            if found_tokens != (0, 0):
+                tokens = found_tokens
 
         error = error or _error_message(payload)
 
@@ -428,8 +516,8 @@ def _parse_json_lines(stdout: str) -> tuple[str, str, str]:
                 text = candidate
 
     if not parsed_any:
-        return stdout.strip(), "", ""
-    return text.strip(), session_id, error.strip()
+        return stdout.strip(), "", "", (0, 0)
+    return text.strip(), session_id, error.strip(), tokens
 
 
 def _build_argv(
@@ -476,7 +564,7 @@ def _repair_structured_reply(
     required_keys: tuple[str, ...],
     previous_text: str,
     extra_dirs: tuple[str, ...],
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, tuple[int, int]]:
     """Ask the same Copilot session to re-emit its answer as JSON only.
 
     Copilot CLI's ``--output-format json`` controls the CLI event stream, not
@@ -558,13 +646,13 @@ def _repair_structured_reply(
         _debug_block(stdout.strip()),
     )
 
-    text, repaired_session_id, error = _parse_json_lines(stdout)
+    text, repaired_session_id, error, tokens = _parse_json_lines(stdout)
     if completed.returncode != 0:
         reason = error or text or stderr[-300:] or f"copilot exited {completed.returncode}"
-        return "", repaired_session_id or session_id, reason
+        return "", repaired_session_id or session_id, reason, tokens
     if error:
-        return "", repaired_session_id or session_id, error
-    return text.strip(), repaired_session_id or session_id, ""
+        return "", repaired_session_id or session_id, error, tokens
+    return text.strip(), repaired_session_id or session_id, "", tokens
 
 
 def run(
@@ -625,7 +713,7 @@ def run(
             duration_seconds=time.perf_counter() - started,
         )
     except subprocess.TimeoutExpired as exc:
-        text, session_id, _ = _parse_json_lines(exc.stdout or "")
+        text, session_id, _, tokens = _parse_json_lines(exc.stdout or "")
         return AgentResult(
             ok=False,
             error_kind="timeout",
@@ -636,6 +724,8 @@ def run(
             text=text,
             duration_seconds=time.perf_counter() - started,
             session_id=session_id,
+            tokens_input=tokens[0],
+            tokens_output=tokens[1],
         )
 
     elapsed = time.perf_counter() - started
@@ -645,7 +735,7 @@ def run(
         logger.debug("[%s] stderr:\n%s", tag, _debug_block(stderr))
     logger.debug("[%s] stdout:\n%s", tag, _debug_block(stdout.strip()))
 
-    text, session_id, error = _parse_json_lines(stdout)
+    text, session_id, error, tokens = _parse_json_lines(stdout)
 
     # ``--output-format json`` makes Copilot emit JSONL events; it does NOT
     # guarantee that the assistant's final message follows our requested JSON
@@ -680,7 +770,7 @@ def run(
             structured_problem,
         )
         try:
-            repaired_text, repaired_session_id, repair_error = _repair_structured_reply(
+            repaired_text, repaired_session_id, repair_error, repair_tokens = _repair_structured_reply(
                 spec=spec,
                 cwd=cwd,
                 tag=tag,
@@ -702,7 +792,12 @@ def run(
                 text=text,
                 duration_seconds=time.perf_counter() - started,
                 session_id=session_id,
+                tokens_input=tokens[0],
+                tokens_output=tokens[1],
             )
+        # The repair is a second turn on top of the substantive one: its tokens
+        # are additional consumption, not a replacement for it.
+        tokens = (tokens[0] + repair_tokens[0], tokens[1] + repair_tokens[1])
         if repair_error:
             return AgentResult(
                 ok=False,
@@ -714,6 +809,8 @@ def run(
                 text=text,
                 duration_seconds=time.perf_counter() - started,
                 session_id=repaired_session_id or session_id,
+                tokens_input=tokens[0],
+                tokens_output=tokens[1],
             )
         if repaired_text:
             text = repaired_text
@@ -732,6 +829,8 @@ def run(
             error_message=reason,
             duration_seconds=elapsed,
             session_id=session_id,
+            tokens_input=tokens[0],
+            tokens_output=tokens[1],
         )
     if error:
         return AgentResult(
@@ -740,6 +839,8 @@ def run(
             error_message=error,
             duration_seconds=elapsed,
             session_id=session_id,
+            tokens_input=tokens[0],
+            tokens_output=tokens[1],
         )
     if structured_output_required and text and structured_problem:
         return AgentResult(
@@ -753,6 +854,8 @@ def run(
             text=text,
             duration_seconds=time.perf_counter() - started,
             session_id=session_id,
+            tokens_input=tokens[0],
+            tokens_output=tokens[1],
         )
 
     if not text:
@@ -763,6 +866,8 @@ def run(
                 error_message=stderr,
                 duration_seconds=elapsed,
                 session_id=session_id,
+                tokens_input=tokens[0],
+                tokens_output=tokens[1],
             )
         return AgentResult(
             ok=False,
@@ -773,17 +878,28 @@ def run(
             ),
             duration_seconds=elapsed,
             session_id=session_id,
+            tokens_input=tokens[0],
+            tokens_output=tokens[1],
         )
 
     logger.info(
-        "[%s] copilot done | %.1fs | session=%s",
+        "[%s] copilot done | %.1fs | %d+%d tok | session=%s",
         tag,
         elapsed,
+        tokens[0],
+        tokens[1],
         session_id[:8] or "-",
     )
     logger.info("[%s] reply: %s", tag, text[:_CONSOLE_EXCERPT])
     logger.debug("[%s] full reply:\n%s", tag, _debug_block(text))
-    return AgentResult(ok=True, text=text, duration_seconds=elapsed, session_id=session_id)
+    return AgentResult(
+        ok=True,
+        text=text,
+        duration_seconds=elapsed,
+        session_id=session_id,
+        tokens_input=tokens[0],
+        tokens_output=tokens[1],
+    )
 
 
 register_backend("direct:copilot", run)

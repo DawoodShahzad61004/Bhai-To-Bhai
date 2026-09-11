@@ -297,6 +297,8 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
     succeeded = [outcome for outcome in outcomes if outcome.ok]
     failed = [outcome for outcome in outcomes if not outcome.ok]
     cost = sum(outcome.cost_usd for outcome in outcomes)
+    tokens_input = sum(outcome.tokens_input for outcome in outcomes)
+    tokens_output = sum(outcome.tokens_output for outcome in outcomes)
 
     for outcome in outcomes:
         logger.info("[%s] %s", AGENT, outcome.evidence())
@@ -317,6 +319,8 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
         succeeded=len(succeeded),
         failed=len(failed),
         cost_usd=round(cost, 4),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
     )
     art.append_event(artifacts, entry)
 
@@ -335,6 +339,8 @@ def wave_orchestrator_node(state: PipelineState) -> dict:
             for outcome in outcomes
         ],
         "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+        "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
         "events": [entry],
         # Consumed. Leaving it set would make the next wave think it was a rework.
         "review_verdict": None,

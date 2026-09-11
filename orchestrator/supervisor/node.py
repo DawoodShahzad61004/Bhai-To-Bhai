@@ -128,6 +128,10 @@ def supervisor_node(state: PipelineState) -> dict:
     )
     cost = result.cost_usd
     running_cost = state.get("total_cost_usd", 0.0) + cost
+    tokens_input = result.tokens_input
+    tokens_output = result.tokens_output
+    running_tokens_input = state.get("total_tokens_input", 0) + tokens_input
+    running_tokens_output = state.get("total_tokens_output", 0) + tokens_output
 
     if not result.ok:
         message = f"The supervising agent failed. {result.error_message}"
@@ -136,6 +140,8 @@ def supervisor_node(state: PipelineState) -> dict:
             "status": "failed",
             "stop_reason": message,
             "total_cost_usd": running_cost,
+            "total_tokens_input": running_tokens_input,
+            "total_tokens_output": running_tokens_output,
             "events": [event("supervision_failed", agent=AGENT, error_kind=result.error_kind, detail=message)],
         }
 
@@ -160,6 +166,8 @@ def supervisor_node(state: PipelineState) -> dict:
             "status": "failed",
             "stop_reason": message,
             "total_cost_usd": running_cost,
+            "total_tokens_input": running_tokens_input,
+            "total_tokens_output": running_tokens_output,
             "events": [event("supervision_failed", agent=AGENT, error_kind="unparseable", detail=message)],
         }
 
@@ -172,16 +180,21 @@ def supervisor_node(state: PipelineState) -> dict:
     entry = event(
         "supervisor_verdict",
         agent=AGENT,
+        backend=config.AGENTS[AGENT].backend,
         verdict=verdict,
         attempt=replan_count,
         unmet=len(parsing.string_list(payload, "unmet")),
         cost_usd=round(cost, 4),
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
     )
     art.append_event(artifacts, entry)
 
     update: dict = {
         "supervisor_verdict": verdict,
         "total_cost_usd": running_cost,
+        "total_tokens_input": running_tokens_input,
+        "total_tokens_output": running_tokens_output,
         "events": [entry],
     }
 

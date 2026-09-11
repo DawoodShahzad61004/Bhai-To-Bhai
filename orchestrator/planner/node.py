@@ -58,12 +58,41 @@ def _ollama_file_write_warning_applies() -> bool:
     )
 
 
-def _failure(message: str, *, kind: str) -> dict:
+def _failure(
+    state: PipelineState,
+    message: str,
+    *,
+    kind: str,
+    cost: float = 0.0,
+    tokens_input: int = 0,
+    tokens_output: int = 0,
+) -> dict:
+    """Stop the run with a stated reason.
+
+    `cost`/`tokens_*` are the triggering call's own consumption, where one
+    happened — a reply judged unusable after a successful, paid-for call still
+    spent real tokens and money, and that spend must not vanish from the
+    ledger just because the pipeline could not use the reply.
+    """
     logger.error("[%s] %s", AGENT, message)
     return {
         "status": "failed",
         "stop_reason": message,
-        "events": [event("plan_failed", agent=AGENT, error_kind=kind, detail=message)],
+        "total_cost_usd": state.get("total_cost_usd", 0.0) + cost,
+        "total_tokens_input": state.get("total_tokens_input", 0) + tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + tokens_output,
+        "events": [
+            event(
+                "plan_failed",
+                agent=AGENT,
+                backend=config.AGENTS[AGENT].backend,
+                error_kind=kind,
+                detail=message,
+                cost_usd=round(cost, 4),
+                tokens_input=tokens_input,
+                tokens_output=tokens_output,
+            )
+        ],
     }
 
 
@@ -100,7 +129,12 @@ def planner_node(state: PipelineState) -> dict:
     )
     if not result.ok:
         return _failure(
-            f"The planning agent failed. {result.error_message}", kind=result.error_kind
+            state,
+            f"The planning agent failed. {result.error_message}",
+            kind=result.error_kind,
+            cost=result.cost_usd,
+            tokens_input=result.tokens_input,
+            tokens_output=result.tokens_output,
         )
 
     # The identity every learning below is written under - mem_manager scores a
@@ -110,16 +144,24 @@ def planner_node(state: PipelineState) -> dict:
     parsed = parsing.extract_json(result.text, result.structured)
     if not parsed.ok:
         return _failure(
+            state,
             f"The planning agent's reply could not be read: {parsed.error}",
             kind="unparseable",
+            cost=result.cost_usd,
+            tokens_input=result.tokens_input,
+            tokens_output=result.tokens_output,
         )
     payload = parsed.value or {}
 
     raw_tasks = parsing.require_list(payload, "tasks")
     if raw_tasks is None:
         return _failure(
+            state,
             "The plan has no 'tasks' list. Nothing can be dispatched from it.",
             kind="invalid_plan",
+            cost=result.cost_usd,
+            tokens_input=result.tokens_input,
+            tokens_output=result.tokens_output,
         )
 
     tasks, problems = normalise_tasks(raw_tasks)
@@ -138,7 +180,12 @@ def planner_node(state: PipelineState) -> dict:
     schedule = assign_waves(tasks)
     if not schedule.ok:
         return _failure(
-            f"The plan cannot be scheduled: {schedule.error}", kind="invalid_plan"
+            state,
+            f"The plan cannot be scheduled: {schedule.error}",
+            kind="invalid_plan",
+            cost=result.cost_usd,
+            tokens_input=result.tokens_input,
+            tokens_output=result.tokens_output,
         )
 
     scheduled_tasks = schedule.tasks or []
@@ -146,9 +193,13 @@ def planner_node(state: PipelineState) -> dict:
 
     if len(waves) > config.MAX_WAVES:
         return _failure(
+            state,
             f"The plan needs {len(waves)} waves and MAX_WAVES is {config.MAX_WAVES}. "
             "Either the decomposition is too granular or the bound is too low.",
             kind="bounded",
+            cost=result.cost_usd,
+            tokens_input=result.tokens_input,
+            tokens_output=result.tokens_output,
         )
 
     coding_agents, agent_problems = normalise_coding_agents(
@@ -192,11 +243,14 @@ def planner_node(state: PipelineState) -> dict:
     entry = event(
         "plan_ready",
         agent=AGENT,
+        backend=config.AGENTS[AGENT].backend,
         tasks=len(scheduled_tasks),
         waves=len(waves),
         discarded=len(problems),
         replan_round=replan_count,
         cost_usd=round(result.cost_usd, 4),
+        tokens_input=result.tokens_input,
+        tokens_output=result.tokens_output,
     )
     art.append_event(artifacts, entry)
     logger.info(
@@ -218,6 +272,8 @@ def planner_node(state: PipelineState) -> dict:
         "rework_count": 0,
         "wave_base_sha": "",
         "total_cost_usd": state.get("total_cost_usd", 0.0) + result.cost_usd,
+        "total_tokens_input": state.get("total_tokens_input", 0) + result.tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + result.tokens_output,
         "events": [entry],
     }
 

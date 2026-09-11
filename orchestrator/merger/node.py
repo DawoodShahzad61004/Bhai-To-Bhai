@@ -16,6 +16,7 @@ the uncommon one.
 from __future__ import annotations
 
 import artifacts as art
+import config
 import worktrees as wt
 from logging_config import get_logger
 from merger.merge import merge_wave
@@ -65,12 +66,15 @@ def merger_node(state: PipelineState) -> dict:
     entry = event(
         "wave_merged" if report.ok else "merge_failed",
         agent=AGENT,
+        backend=config.AGENTS[AGENT].backend,
         wave=wave_index,
         merged=report.merged,
         skipped=report.skipped,
         conflicts_resolved=report.conflicts_resolved,
         unresolved=report.unresolved,
         cost_usd=round(report.cost_usd, 4),
+        tokens_input=report.tokens_input,
+        tokens_output=report.tokens_output,
     )
     art.append_event(artifacts, entry)
 
@@ -92,6 +96,8 @@ def merger_node(state: PipelineState) -> dict:
         "merge_report": report.detail,
         "integration_branch": into,
         "total_cost_usd": state.get("total_cost_usd", 0.0) + report.cost_usd,
+        "total_tokens_input": state.get("total_tokens_input", 0) + report.tokens_input,
+        "total_tokens_output": state.get("total_tokens_output", 0) + report.tokens_output,
         "events": [entry],
     }
 
