@@ -107,12 +107,12 @@ class AgentSpec:
 
 AGENTS = {
     # ── Smaller model: mechanical / dispatch work ────────────────────────────
-    "requirements": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
+    "requirements": AgentSpec(backend="claude", model="haiku", deadline_seconds=900,),
     "wave_orchestrator": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     "merger": AgentSpec(backend="gemini", model="gemini-3.1-flash-lite", deadline_seconds=900,),
     # ── Stronger model: judgment work ────────────────────────────────────────
     "planner": AgentSpec(backend="codex", model="", deadline_seconds=600,),
-    "reviewer": AgentSpec(backend="codex", model="", deadline_seconds=600,),
+    "reviewer": AgentSpec(backend="claude", model="sonnet", deadline_seconds=600,),
     "supervisor": AgentSpec(backend="codex", model="", deadline_seconds=600,),
 }
 
@@ -140,7 +140,7 @@ MEDIUM_MODELS = [
     # ("nemotron-3-nano:30b-cloud", "ollama"),
     ("QuantTrio/Qwen3.6-27B-AWQ", "local_llm"),
     # ("gemma4:31b-cloud", "ollama"),
-    # ("haiku", "claude"),
+    ("haiku", "claude"),
     ("auto", "copilot"),
 ]
 
@@ -289,7 +289,7 @@ MERGE_VALIDATION_ENABLED = True
 # --- Consolidation / pruning ---------------------------------------------------
 PRUNE_BOTTOM_PERCENT = 0.20
 ENABLE_PRUNING = True
-MIN_PRUNE_BUDGET = 1_000
+MIN_PRUNE_BUDGET = 2_000
 
 # Final durable-memory tags, numbered chronologically within each file.
 # Files not listed here retain their source entry tags.
