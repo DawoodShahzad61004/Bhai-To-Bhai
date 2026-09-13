@@ -1,4 +1,4 @@
-# Bhai-To-Bhai
+# ForkMux: Multi-Agent Coding Orchestration
 
 An open-source orchestration controller that coordinates existing coding-agent CLIs to take a software task from requirements through implementation, merge, review, and final verification in an external Git repository.
 

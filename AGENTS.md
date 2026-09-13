@@ -1,4 +1,4 @@
-# Bhai-To-Bhai — Project Instructions
+# ForkMux — Project Instructions
 
 Your global instruction file (`~/.claude/CLAUDE.md` for Claude Code, `~/.codex/AGENTS.md` for Codex) applies here in full and is **not** repeated below. In one line each:
 

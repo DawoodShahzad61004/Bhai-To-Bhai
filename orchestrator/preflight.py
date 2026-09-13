@@ -289,8 +289,8 @@ def main(argv: list[str] | None = None) -> int:
         timeout=args.timeout,
     )
 
-    print("Bhai-To-Bhai preflight")
-    print("=" * 24)
+    print("ForkMux preflight")
+    print("=" * 17)
     for result in results:
         status = "PASS" if result.passed else "FAIL"
         print(f"[{status}] {result.name}: {result.detail}")

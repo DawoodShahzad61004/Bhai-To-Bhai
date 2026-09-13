@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 LLMCall = Callable[[list[dict]], "str | None"]
 
-# Matches the literal prefix `run_shared_command()` in the Bhai-To-Bhai
+# Matches the literal prefix `run_shared_command()` in the ForkMux
 # orchestrator (orchestrator/artifacts.py) writes onto every auto-recorded
 # test/command failure: `[auto] `<command>` failed (exit <code>): <symptom>`.
 # That prefix is identical across unrelated failures (same command, same exit

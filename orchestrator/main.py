@@ -151,8 +151,8 @@ def diagnostics_gate_passed() -> bool:
     try:
         report = diagnostics.run_configured_diagnostics()
     except ValueError as exc:
-        print("Bhai-To-Bhai agent diagnostics")
-        print("=" * 31)
+        print("ForkMux agent diagnostics")
+        print("=" * 25)
         print(f"[FAIL] configuration: {exc}")
         print("Run aborted before pipeline startup.")
         return False

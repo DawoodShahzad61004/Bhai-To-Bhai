@@ -435,7 +435,7 @@ def run_configured_diagnostics() -> DiagnosticReport:
 
 
 def render_human(report: DiagnosticReport) -> str:
-    lines = ["Bhai-To-Bhai agent diagnostics", "=" * 31]
+    lines = ["ForkMux agent diagnostics", "=" * 25]
     for result in report.results:
         target = result.target
         status = "PASS" if result.passed else "FAIL"
@@ -488,8 +488,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.json:
             print(json.dumps({"passed": False, "configuration_error": str(exc)}, indent=2))
         else:
-            print("Bhai-To-Bhai agent diagnostics")
-            print("=" * 31)
+            print("ForkMux agent diagnostics")
+            print("=" * 25)
             print(f"[FAIL] configuration: {exc}")
         return 1
 

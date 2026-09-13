@@ -1,6 +1,6 @@
 # Build Guide
 
-Phased implementation order for Bhai-To-Bhai, written 2026-08-04. This replaces the build guidance produced on 2026-08-03 that was never saved into the repository (`Status.md`, 2026-08-03, final bullets). It records the two things that entry flagged as missing everywhere: **the phased build order** and **the concrete v0 acceptance test**.
+Phased implementation order for ForkMux, written 2026-08-04. This replaces the build guidance produced on 2026-08-03 that was never saved into the repository (`Status.md`, 2026-08-03, final bullets). It records the two things that entry flagged as missing everywhere: **the phased build order** and **the concrete v0 acceptance test**.
 
 Nothing here overrides `Decisions.md`. Where a stage exists because of an ADR, the ADR is cited and remains authoritative.
 
